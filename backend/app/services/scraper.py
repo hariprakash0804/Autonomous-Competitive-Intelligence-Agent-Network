@@ -60,7 +60,7 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
     return False, None
 
 
-async def scrape_url_async(url: str, timeout: float = 15.0) -> Dict[str, Any]:
+async def scrape_url_async(url: str, timeout: float = 5.0) -> Dict[str, Any]:
     """
     Asynchronously fetches a URL using httpx and extracts clean text.
     Flags is_stale=True if HTTP fails or content appears to be a JS shell.
@@ -97,9 +97,9 @@ async def scrape_url_async(url: str, timeout: float = 15.0) -> Dict[str, Any]:
     }
 
 
-def scrape_url(url: str, timeout: float = 15.0) -> Dict[str, Any]:
+def scrape_url(url: str, timeout: float = 5.0) -> Dict[str, Any]:
     """
-    Synchronous wrapper for scrape_url_async.
+    Synchronous wrapper for scrape_url_async with fast 5s timeout guard.
     """
     headers = {"User-Agent": DEFAULT_USER_AGENT}
     try:

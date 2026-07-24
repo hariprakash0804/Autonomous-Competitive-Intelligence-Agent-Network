@@ -1,5 +1,7 @@
 import os
+import sys
 import uuid
+import traceback
 from datetime import datetime, timezone
 from typing import Annotated, List, Dict, Any
 
@@ -18,16 +20,18 @@ from app.services.agent.state import AgentState
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
-def run_agent_pipeline_task(agent_run_id: uuid.UUID, competitor_id: uuid.UUID, urls: List[str]):
+def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
     """Background worker function executing the LangGraph agent pipeline."""
+    print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
     db: Session = SessionLocal()
+    agent_run = None
     try:
+        agent_run_id = uuid.UUID(agent_run_id_str)
+        competitor_id = uuid.UUID(competitor_id_str)
         agent_run = db.get(AgentRun, agent_run_id)
-        if not agent_run:
-            return
 
         initial_state: AgentState = {
-            "competitor_id": str(competitor_id),
+            "competitor_id": competitor_id_str,
             "competitor_name": "",
             "urls": urls,
             "raw_pages": [],
@@ -41,22 +45,25 @@ def run_agent_pipeline_task(agent_run_id: uuid.UUID, competitor_id: uuid.UUID, u
             "status": "RUNNING",
         }
 
-        # Invoke compiled LangGraph graph
+        print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs...", flush=True)
         final_state = agent_pipeline_graph.invoke(initial_state)
 
         # Update AgentRun in PostgreSQL
-        agent_run.status = "COMPLETED"
-        agent_run.completed_at = datetime.now(timezone.utc)
-        agent_run.reflection_triggered = final_state.get("reflection_triggered", False)
-        agent_run.langsmith_trace_url = (
-            f"https://smith.langchain.com/o/default/projects/p/{agent_run_id}"
-            if os.environ.get("LANGCHAIN_TRACING_V2") == "true"
-            else None
-        )
-        db.commit()
+        if agent_run:
+            agent_run.status = "COMPLETED"
+            agent_run.completed_at = datetime.now(timezone.utc)
+            agent_run.reflection_triggered = final_state.get("reflection_triggered", False)
+            agent_run.langsmith_trace_url = (
+                f"https://smith.langchain.com/o/default/projects/p/{agent_run_id}"
+                if os.environ.get("LANGCHAIN_TRACING_V2") == "true"
+                else None
+            )
+            db.commit()
+            print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED successfully!", flush=True)
 
     except Exception as exc:
-        print(f"Agent pipeline background run failed: {exc}")
+        print(f"[Pipeline Task Error] Agent pipeline background run failed: {exc}", flush=True)
+        traceback.print_exc(file=sys.stdout)
         if agent_run:
             agent_run.status = "FAILED"
             agent_run.completed_at = datetime.now(timezone.utc)
@@ -85,13 +92,13 @@ def start_pipeline_run(
     if competitor.pricing_url:
         urls.append(competitor.pricing_url)
     if competitor.review_urls:
-        urls.extend(competitor.review_urls)
-    if competitor.news_keywords:
-        for kw in competitor.news_keywords:
-            if kw.startswith("http://") or kw.startswith("https://"):
-                urls.append(kw)
-            else:
-                urls.append(f"https://news.google.com/search?q={kw}&hl=en-US")
+        for ru in competitor.review_urls:
+            if ru and ru.strip():
+                urls.append(ru.strip())
+
+    # Fallback default pricing URL if empty
+    if not urls:
+        urls.append("https://github.com/pricing")
 
     # Create AgentRun database record
     agent_run = AgentRun(
@@ -104,8 +111,15 @@ def start_pipeline_run(
     db.commit()
     db.refresh(agent_run)
 
+    print(f"[Pipeline Trigger] Dispatched background task for run {agent_run.id} ({competitor.name})", flush=True)
+
     # Schedule background execution
-    background_tasks.add_task(run_agent_pipeline_task, agent_run.id, competitor_id, urls)
+    background_tasks.add_task(
+        run_agent_pipeline_task,
+        str(agent_run.id),
+        str(competitor_id),
+        urls,
+    )
 
     return {
         "agent_run_id": str(agent_run.id),

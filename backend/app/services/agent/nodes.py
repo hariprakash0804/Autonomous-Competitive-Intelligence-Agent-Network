@@ -39,7 +39,7 @@ def researcher_node(state: AgentState) -> AgentState:
         if competitor:
             state["competitor_name"] = competitor.name
 
-        # Parallel scraping to reduce node runtime from 15s to <3s
+        # Parallel scraping using ThreadPoolExecutor
         if urls:
             with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
                 raw_pages = list(executor.map(scrape_url, urls))
@@ -83,15 +83,15 @@ def researcher_node(state: AgentState) -> AgentState:
 def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge:
-    If any page is_stale and retry_count < 1, loop back to Researcher node once.
-    Otherwise proceed to Change-Detector node immediately.
+    If any page is_stale and retry_count < 2, loop back to Researcher node for a retry pass.
+    Otherwise proceed to Change-Detector node.
     """
     has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
 
-    if has_stale and state["retry_count"] < 1:
+    if has_stale and state.get("retry_count", 0) < 2:
         return "Researcher"
 
-    if has_stale and state["retry_count"] >= 1:
+    if has_stale and state.get("retry_count", 0) >= 2:
         state["is_incomplete"] = True
 
     return "Change-Detector"

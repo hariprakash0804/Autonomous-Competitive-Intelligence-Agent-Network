@@ -14,15 +14,20 @@ from app.services.agent.nodes import (
 
 
 def setup_langsmith_tracing():
-    """Configures optional LangSmith tracing environment variables."""
-    if settings.LANGSMITH_API_KEY:
+    """
+    Configures optional LangSmith tracing environment variables.
+    Bypasses tracing gracefully if key is invalid, placeholder, or empty to prevent HTTP 403 errors.
+    """
+    key = (settings.LANGSMITH_API_KEY or os.getenv("LANGSMITH_API_KEY", "")).strip()
+    if key and key.startswith("lsv2_"):
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
-        os.environ["LANGCHAIN_API_KEY"] = settings.LANGSMITH_API_KEY
+        os.environ["LANGCHAIN_API_KEY"] = key
         os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT or "competitive-intel"
         print(f"[LangSmith] Tracing enabled for project '{os.environ['LANGCHAIN_PROJECT']}'")
     else:
         os.environ.pop("LANGCHAIN_TRACING_V2", None)
-        print("[LangSmith] LANGSMITH_API_KEY unset — skipping tracing gracefully.")
+        os.environ.pop("LANGCHAIN_API_KEY", None)
+        print("[LangSmith] LANGSMITH_API_KEY unset or invalid — skipping tracing gracefully.")
 
 
 def build_agent_graph():

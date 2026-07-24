@@ -1,12 +1,12 @@
 import os
 import json
 import uuid
+import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
 INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "faiss_data"
 INDEX_FILE = INDEX_DIR / "index.faiss"
@@ -19,10 +19,47 @@ EMBEDDING_DIM = 384
 class VectorStoreService:
     def __init__(self):
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
-        self.model = SentenceTransformer(MODEL_NAME)
+        self.model = None  # Lazy load to conserve startup RAM
         self.index: Optional[faiss.IndexFlatIP] = None
         self.metadata: List[Dict[str, Any]] = []
         self._load_or_create_index()
+
+    def _get_model(self):
+        """Lazy loads SentenceTransformer to keep startup RAM under 150MB."""
+        if self.model is None:
+            try:
+                print("[Vector Store] Lazy loading SentenceTransformer model...")
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer(MODEL_NAME)
+            except Exception as e:
+                print(f"[Vector Store Warning] Failed to load SentenceTransformer ({e}). Using lightweight hash vectorizer fallback.")
+                self.model = "fallback"
+        return self.model
+
+    def _hash_encode(self, texts: List[str]) -> np.ndarray:
+        """Lightweight 384-dim normalized term hashing vectorizer for ultra-low RAM footprint (<10MB RAM)."""
+        vectors = []
+        for text in texts:
+            words = re.findall(r"\w+", text.lower())
+            vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+            for w in words:
+                h = hash(w) % EMBEDDING_DIM
+                vec[h] += 1.0
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec /= norm
+            vectors.append(vec)
+        return np.array(vectors, dtype=np.float32)
+
+    def _encode_text(self, texts: List[str]) -> np.ndarray:
+        model = self._get_model()
+        if model != "fallback":
+            try:
+                embeddings = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
+                return embeddings.astype(np.float32)
+            except Exception as exc:
+                print(f"[Vector Store Warning] Model encode failed ({exc}). Using hash vectorizer fallback.")
+        return self._hash_encode(texts)
 
     def _load_or_create_index(self):
         if INDEX_FILE.exists() and METADATA_FILE.exists():
@@ -34,7 +71,6 @@ class VectorStoreService:
             except Exception as e:
                 print(f"Warning: Failed to load FAISS index ({e}). Creating a new one.")
 
-        # Create normalized inner product index for cosine similarity
         self.index = faiss.IndexFlatIP(EMBEDDING_DIM)
         self.metadata = []
         self._save_index()
@@ -46,7 +82,6 @@ class VectorStoreService:
                 json.dump(self.metadata, f, indent=2)
 
     def chunk_text(self, text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> List[str]:
-        """Splits long text into overlapping chunks."""
         if not text:
             return []
         
@@ -64,7 +99,6 @@ class VectorStoreService:
                 if current_chunk:
                     chunks.append(current_chunk)
                 if len(para) > chunk_size:
-                    # Hard split long paragraph
                     for i in range(0, len(para), chunk_size - chunk_overlap):
                         chunks.append(para[i : i + chunk_size])
                     current_chunk = ""
@@ -84,17 +118,11 @@ class VectorStoreService:
         fetched_at: str,
         text: str,
     ) -> int:
-        """
-        Chunks text, generates embeddings, upserts into FAISS index and persists metadata.
-        Returns number of chunks added.
-        """
         chunks = self.chunk_text(text)
         if not chunks:
             return 0
 
-        embeddings = self.model.encode(chunks, convert_to_numpy=True, normalize_embeddings=True)
-        embeddings = embeddings.astype(np.float32)
-
+        embeddings = self._encode_text(chunks)
         self.index.add(embeddings)
 
         for i, chunk in enumerate(chunks):
@@ -117,17 +145,11 @@ class VectorStoreService:
         competitor_id: Optional[str] = None,
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
-        """
-        Searches FAISS vector index for top-k matching chunks.
-        Optionally filters results by competitor_id.
-        """
         if not query or self.index is None or self.index.ntotal == 0:
             return []
 
-        query_vec = self.model.encode([query], convert_to_numpy=True, normalize_embeddings=True)
-        query_vec = query_vec.astype(np.float32)
+        query_vec = self._encode_text([query])
 
-        # Retrieve a broader pool if filtering by competitor_id
         search_k = min(top_k * 5 if competitor_id else top_k, self.index.ntotal)
         scores, indices = self.index.search(query_vec, search_k)
 

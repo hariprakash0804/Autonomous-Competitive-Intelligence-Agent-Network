@@ -33,7 +33,6 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
     agent_run = None
     try:
         agent_run_id = uuid.UUID(agent_run_id_str)
-        competitor_id = uuid.UUID(competitor_id_str)
         agent_run = db.get(AgentRun, agent_run_id)
 
         initial_state: AgentState = {

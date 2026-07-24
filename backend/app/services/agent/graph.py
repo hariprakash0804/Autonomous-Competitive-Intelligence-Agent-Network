@@ -87,3 +87,18 @@ def build_agent_graph():
 
 # Global compiled pipeline graph instance
 agent_pipeline_graph = build_agent_graph()
+
+
+def invoke_pipeline_graph(initial_state: AgentState, recursion_limit: int = 6) -> AgentState:
+    """
+    Safely executes the LangGraph agent pipeline:
+    1. Enforces recursion_limit safety net (default: 6 steps max).
+    2. Wraps invocation in a try...finally block.
+    3. Guarantees flush_langsmith_tracers() runs so UI traces never get stuck in RUNNING status.
+    """
+    config = {"recursion_limit": recursion_limit}
+    try:
+        final_state = agent_pipeline_graph.invoke(initial_state, config=config)
+        return final_state
+    finally:
+        flush_langsmith_tracers()

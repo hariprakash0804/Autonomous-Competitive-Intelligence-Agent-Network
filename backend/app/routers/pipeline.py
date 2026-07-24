@@ -15,15 +15,15 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.competitor import Competitor
 from app.models.agent_run import AgentRun
-from app.services.agent.graph import agent_pipeline_graph, flush_langsmith_tracers
+from app.services.agent.graph import invoke_pipeline_graph, flush_langsmith_tracers
 from app.services.agent.state import AgentState
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
 def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
-    """Helper worker to execute graph invoke inside thread pool."""
-    return agent_pipeline_graph.invoke(initial_state)
+    """Helper worker to execute graph invoke inside thread pool with recursion safety net."""
+    return invoke_pipeline_graph(initial_state, recursion_limit=6)
 
 
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
@@ -50,7 +50,7 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
             "status": "RUNNING",
         }
 
-        print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs...", flush=True)
+        print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
 
         # Run pipeline with a 90s hard timeout guard to account for LLM generation & rate-limiting delays
         with ThreadPoolExecutor(max_workers=1) as executor:
@@ -65,9 +65,6 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     db.commit()
                 return
-
-        # Flush pending telemetry events to LangSmith dashboard immediately
-        flush_langsmith_tracers()
 
         # Update AgentRun in PostgreSQL
         if agent_run:

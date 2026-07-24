@@ -6,9 +6,9 @@ from openai import OpenAI, RateLimitError, APIError
 from app.config import settings
 
 # Primary and Fallback active OpenRouter free models
-PRIMARY_FREE_MODEL = "openai/gpt-oss-120b:free"
-FALLBACK_FREE_MODEL = "google/gemma-4-31b-it:free"
-ALTERNATIVE_FREE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+PRIMARY_FREE_MODEL = "google/gemma-4-31b-it:free"
+FALLBACK_FREE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
+ALTERNATIVE_FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
 # Proactive rate-limiting: minimum delay between LLM requests (3 seconds = max 20 requests/minute)
 MIN_REQUEST_INTERVAL_SECONDS = 3.0
@@ -60,6 +60,7 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
+                max_tokens=700,
             )
             model_served = getattr(response, "model", model)
             content = response.choices[0].message.content or ""

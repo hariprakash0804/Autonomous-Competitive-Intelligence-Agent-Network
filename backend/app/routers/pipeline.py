@@ -27,7 +27,7 @@ def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
 
 
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
-    """Background worker function executing the LangGraph agent pipeline with a 45-second timeout guard."""
+    """Background worker function executing the LangGraph agent pipeline with a 90-second timeout guard."""
     print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
     db: Session = SessionLocal()
     agent_run = None
@@ -52,13 +52,13 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
 
         print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs...", flush=True)
 
-        # Run pipeline with a strict 45s hard timeout guard to prevent infinite hanging runs
+        # Run pipeline with a 90s hard timeout guard to account for LLM generation & rate-limiting delays
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_execute_graph_with_timeout, initial_state)
             try:
-                final_state = future.result(timeout=45.0)
+                final_state = future.result(timeout=90.0)
             except TimeoutError:
-                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after 45s hard limit!", flush=True)
+                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after 90s hard limit!", flush=True)
                 final_state = {"reflection_triggered": False}
                 if agent_run:
                     agent_run.status = "FAILED"

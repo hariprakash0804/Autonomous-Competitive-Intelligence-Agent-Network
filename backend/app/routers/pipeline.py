@@ -3,6 +3,7 @@ import sys
 import uuid
 import traceback
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from typing import Annotated, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
@@ -20,8 +21,13 @@ from app.services.agent.state import AgentState
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
+def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
+    """Helper worker to execute graph invoke inside thread pool."""
+    return agent_pipeline_graph.invoke(initial_state)
+
+
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
-    """Background worker function executing the LangGraph agent pipeline."""
+    """Background worker function executing the LangGraph agent pipeline with a 45-second timeout guard."""
     print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
     db: Session = SessionLocal()
     agent_run = None
@@ -46,7 +52,20 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
         }
 
         print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs...", flush=True)
-        final_state = agent_pipeline_graph.invoke(initial_state)
+
+        # Run pipeline with a strict 45s hard timeout guard to prevent infinite hanging runs
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_execute_graph_with_timeout, initial_state)
+            try:
+                final_state = future.result(timeout=45.0)
+            except TimeoutError:
+                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after 45s hard limit!", flush=True)
+                final_state = {"reflection_triggered": False}
+                if agent_run:
+                    agent_run.status = "FAILED"
+                    agent_run.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+                return
 
         # Update AgentRun in PostgreSQL
         if agent_run:

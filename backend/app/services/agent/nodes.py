@@ -78,15 +78,15 @@ def researcher_node(state: AgentState) -> AgentState:
 def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge:
-    If any page is_stale and retry_count < 2, loop back to Researcher node.
-    Otherwise proceed to Change-Detector node.
+    If any page is_stale and retry_count < 1, loop back to Researcher node once.
+    Otherwise proceed to Change-Detector node immediately.
     """
     has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
 
-    if has_stale and state["retry_count"] < 2:
+    if has_stale and state["retry_count"] < 1:
         return "Researcher"
 
-    if has_stale and state["retry_count"] >= 2:
+    if has_stale and state["retry_count"] >= 1:
         state["is_incomplete"] = True
 
     return "Change-Detector"

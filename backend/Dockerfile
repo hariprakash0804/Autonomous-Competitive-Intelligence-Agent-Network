@@ -4,12 +4,6 @@ WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
 # Upgrade pip and install lightweight CPU-only PyTorch
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu

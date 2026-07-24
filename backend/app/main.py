@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.database import engine, Base
+import app.models  # Ensures all SQLAlchemy models register with Base.metadata
 from app.routers import auth, competitors, snapshots, reports, chat, pipeline
 
 app = FastAPI(
@@ -10,6 +12,18 @@ app = FastAPI(
     description="Autonomous multi-agent system for competitive intelligence gathering and analysis",
     version="0.1.0",
 )
+
+
+@app.on_event("startup")
+def on_startup():
+    """Ensures PostgreSQL database tables exist automatically on container startup."""
+    try:
+        print("[Startup] Ensuring PostgreSQL database tables exist...")
+        Base.metadata.create_all(bind=engine)
+        print("[Startup] Database tables verified/created successfully.")
+    except Exception as exc:
+        print(f"[Startup Warning] Automatic table creation error: {exc}")
+
 
 # Static files directory for rendered HTML reports
 static_dir = Path(__file__).resolve().parent.parent / "static"

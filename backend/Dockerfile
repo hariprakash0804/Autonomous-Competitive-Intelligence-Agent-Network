@@ -16,14 +16,16 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY backend/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend codebase
+# Copy backend codebase and Alembic migrations
 COPY backend/app ./app
 COPY backend/scripts ./scripts
 COPY backend/static ./static
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./alembic.ini
 
 # Create data directories for persistence
 RUN mkdir -p /app/faiss_data /app/static/reports
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head || true; uvicorn app.main:app --host 0.0.0.0 --port 8000"]

@@ -15,7 +15,7 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.competitor import Competitor
 from app.models.agent_run import AgentRun
-from app.services.agent.graph import agent_pipeline_graph
+from app.services.agent.graph import agent_pipeline_graph, flush_langsmith_tracers
 from app.services.agent.state import AgentState
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -66,6 +66,9 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
                     db.commit()
                 return
 
+        # Flush pending telemetry events to LangSmith dashboard immediately
+        flush_langsmith_tracers()
+
         # Update AgentRun in PostgreSQL
         if agent_run:
             agent_run.status = "COMPLETED"
@@ -87,6 +90,7 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
             agent_run.completed_at = datetime.now(timezone.utc)
             db.commit()
     finally:
+        flush_langsmith_tracers()
         db.close()
 
 

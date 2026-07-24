@@ -37,6 +37,17 @@ def setup_langsmith_tracing():
         print("[LangSmith] LANGSMITH_API_KEY unset or invalid — skipping tracing gracefully.")
 
 
+def flush_langsmith_tracers():
+    """Flushes pending trace telemetry events to LangSmith dashboard."""
+    try:
+        if os.environ.get("LANGCHAIN_TRACING_V2") == "true":
+            from langsmith import Client
+            ls_client = Client()
+            ls_client.flush()
+    except Exception as exc:
+        print(f"[LangSmith Flush Warning] {exc}")
+
+
 def build_agent_graph():
     """
     Constructs and compiles the 4-node LangGraph pipeline:

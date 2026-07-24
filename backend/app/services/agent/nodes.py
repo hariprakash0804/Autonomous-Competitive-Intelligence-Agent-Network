@@ -82,7 +82,7 @@ def researcher_node(state: AgentState) -> AgentState:
 
 def should_reflect_edge(state: AgentState) -> str:
     """
-    Conditional Reflection Edge:
+    Conditional Reflection Edge: Pure routing function.
     If any page is_stale and retry_count < 2, loop back to Researcher node for a retry pass.
     Otherwise proceed to Change-Detector node.
     """
@@ -91,17 +91,19 @@ def should_reflect_edge(state: AgentState) -> str:
     if has_stale and state.get("retry_count", 0) < 2:
         return "Researcher"
 
-    if has_stale and state.get("retry_count", 0) >= 2:
-        state["is_incomplete"] = True
-
     return "Change-Detector"
 
 
 def change_detector_node(state: AgentState) -> AgentState:
     """
     2. Change-Detector Node:
-       Compares pricing pages using Phase 2 diff_pricing service function directly.
+       Sets is_incomplete flag if max retries were hit with stale pages,
+       and compares pricing pages using Phase 2 diff_pricing service.
     """
+    has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
+    if has_stale and state.get("retry_count", 0) >= 2:
+        state["is_incomplete"] = True
+
     diffs = []
     db: Session = SessionLocal()
     try:

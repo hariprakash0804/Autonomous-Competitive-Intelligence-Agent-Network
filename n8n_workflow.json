@@ -1,0 +1,105 @@
+{
+  "name": "Weekly Autonomous Competitive Intelligence Pipeline Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "name": "Weekly Cron Trigger (Mondays 9 AM)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://backend:8000/competitors/",
+        "options": {}
+      },
+      "name": "Fetch Tracked Competitors List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:8000/pipeline/run/{{$json.id}}",
+        "options": {}
+      },
+      "name": "Trigger Agent Pipeline Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        690,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$node[\"Trigger Agent Pipeline Run\"].json.slack_webhook_url || \"https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK\"}}",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\n  \"text\": \"🚨 *Weekly Competitive Intelligence Alert: \" + $node[\"Fetch Tracked Competitors List\"].json.name + \"*\\nReport Status: \" + $json.status + \"\\nView Report: http://localhost:8000/reports/\" + $json.agent_run_id + \"/html\"\n}",
+        "options": {}
+      },
+      "name": "Post Report Summary to Slack Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        910,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Weekly Cron Trigger (Mondays 9 AM)": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tracked Competitors List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tracked Competitors List": {
+      "main": [
+        [
+          {
+            "node": "Trigger Agent Pipeline Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Agent Pipeline Run": {
+      "main": [
+        [
+          {
+            "node": "Post Report Summary to Slack Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

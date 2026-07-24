@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: ci_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ci_user
+      POSTGRES_PASSWORD: ci_password
+      POSTGRES_DB: ci_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ci_user -d ci_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ci_backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://ci_user:ci_password@postgres:5432/ci_db
+      SECRET_KEY: super-secret-key-change-in-production
+      LLM_PROVIDER: openrouter
+      LLM_API_KEY: ${LLM_API_KEY}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - faissdata:/app/faiss_data
+      - reportsdata:/app/static/reports
+
+volumes:
+  pgdata:
+    driver: local
+  faissdata:
+    driver: local
+  reportsdata:
+    driver: local

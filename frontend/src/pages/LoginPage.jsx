@@ -1,0 +1,194 @@
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
+  const [name, setName] = useState('');
+
+  const { login, signup } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      if (isSignup) {
+        await signup(email, password, name);
+      } else {
+        await login(email, password);
+      }
+      navigate('/dashboard');
+    } catch (err) {
+      const msg =
+        err.response?.data?.detail || 'Something went wrong. Please try again.';
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+      {/* Background decoration */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Logo / Brand */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow mb-4">
+            <svg
+              className="w-8 h-8 text-primary-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"
+              />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-1">
+            Competitive Intelligence
+          </h1>
+          <p className="text-dark-200 text-sm">
+            Autonomous agent network for market analysis
+          </p>
+        </div>
+
+        {/* Login Card */}
+        <div className="glass rounded-2xl p-8 glow">
+          <h2 className="text-xl font-semibold text-white mb-6">
+            {isSignup ? 'Create your account' : 'Welcome back'}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {isSignup && (
+              <div>
+                <label
+                  htmlFor="name"
+                  className="block text-sm font-medium text-dark-100 mb-1.5"
+                >
+                  Full Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required={isSignup}
+                  placeholder="John Doe"
+                  className="w-full px-4 py-3 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+                />
+              </div>
+            )}
+
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-dark-100 mb-1.5"
+              >
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@company.com"
+                className="w-full px-4 py-3 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-dark-100 mb-1.5"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                className="w-full px-4 py-3 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                <svg
+                  className="w-4 h-4 text-red-400 flex-shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
+                  />
+                </svg>
+                <span className="text-sm text-red-300">{error}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-primary-500/20"
+            >
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  {isSignup ? 'Creating account...' : 'Signing in...'}
+                </span>
+              ) : isSignup ? (
+                'Create Account'
+              ) : (
+                'Sign In'
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => {
+                setIsSignup(!isSignup);
+                setError('');
+              }}
+              className="text-sm text-dark-200 hover:text-primary-400 transition-colors"
+            >
+              {isSignup
+                ? 'Already have an account? Sign in'
+                : "Don't have an account? Sign up"}
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <p className="mt-6 text-center text-xs text-dark-300">
+          Powered by autonomous AI agents
+        </p>
+      </div>
+    </div>
+  );
+}

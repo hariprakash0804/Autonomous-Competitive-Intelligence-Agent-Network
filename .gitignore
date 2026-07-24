@@ -1,0 +1,40 @@
+# Environment
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# FAISS
+*.faiss
+faiss_index/
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Reports
+reports/*.pdf
+reports/*.html

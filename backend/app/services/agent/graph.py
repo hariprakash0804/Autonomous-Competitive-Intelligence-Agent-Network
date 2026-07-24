@@ -15,18 +15,25 @@ from app.services.agent.nodes import (
 
 def setup_langsmith_tracing():
     """
-    Configures optional LangSmith tracing environment variables.
-    Bypasses tracing gracefully if key is invalid, placeholder, or empty to prevent HTTP 403 errors.
+    Configures LangSmith tracing environment variables.
+    Supports regional endpoints (e.g. https://apac.api.smith.langchain.com for APAC accounts).
     """
     key = (settings.LANGSMITH_API_KEY or os.getenv("LANGSMITH_API_KEY", "")).strip()
-    if key and key.startswith("lsv2_"):
+    endpoint = os.getenv("LANGSMITH_ENDPOINT") or os.getenv("LANGCHAIN_ENDPOINT") or "https://apac.api.smith.langchain.com"
+
+    if key and (key.startswith("lsv2_pt_") or key.startswith("lsv2_")):
         os.environ["LANGCHAIN_TRACING_V2"] = "true"
         os.environ["LANGCHAIN_API_KEY"] = key
-        os.environ["LANGCHAIN_PROJECT"] = settings.LANGSMITH_PROJECT or "competitive-intel"
-        print(f"[LangSmith] Tracing enabled for project '{os.environ['LANGCHAIN_PROJECT']}'")
+        os.environ["LANGCHAIN_ENDPOINT"] = endpoint
+        os.environ["LANGSMITH_TRACING"] = "true"
+        os.environ["LANGSMITH_API_KEY"] = key
+        os.environ["LANGSMITH_ENDPOINT"] = endpoint
+        os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT or "competitive-intel"
+        print(f"[LangSmith] Tracing enabled for project '{os.environ['LANGSMITH_PROJECT']}' (Endpoint: {endpoint})")
     else:
         os.environ.pop("LANGCHAIN_TRACING_V2", None)
         os.environ.pop("LANGCHAIN_API_KEY", None)
+        os.environ.pop("LANGSMITH_TRACING", None)
         print("[LangSmith] LANGSMITH_API_KEY unset or invalid — skipping tracing gracefully.")
 
 

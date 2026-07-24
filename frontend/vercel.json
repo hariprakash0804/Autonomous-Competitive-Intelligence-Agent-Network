@@ -1,0 +1,36 @@
+{
+  "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/auth/:path*"
+    },
+    {
+      "source": "/competitors/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/competitors/:path*"
+    },
+    {
+      "source": "/snapshots/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/snapshots/:path*"
+    },
+    {
+      "source": "/reports/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/reports/:path*"
+    },
+    {
+      "source": "/chat/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/chat/:path*"
+    },
+    {
+      "source": "/pipeline/:path*",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/pipeline/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://autonomous-competitive-intelligence-agent-network.onrender.com/health"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

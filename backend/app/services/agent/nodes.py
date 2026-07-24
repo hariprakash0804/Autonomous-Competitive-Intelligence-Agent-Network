@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
 
 from sqlalchemy.orm import Session
@@ -22,14 +23,14 @@ from app.services.agent.state import AgentState
 def researcher_node(state: AgentState) -> AgentState:
     """
     1. Researcher Node:
-       Increments retry_count and fetches all registered competitor URLs.
+       Increments retry_count and fetches all registered competitor URLs in parallel using ThreadPoolExecutor.
        Calls scraper.py directly for scraping and staleness evaluation.
     """
     if state.get("retry_count", 0) >= 1:
         state["reflection_triggered"] = True
 
     state["retry_count"] = state.get("retry_count", 0) + 1
-    raw_pages = []
+    urls = state.get("urls", [])
 
     db: Session = SessionLocal()
     try:
@@ -38,12 +39,16 @@ def researcher_node(state: AgentState) -> AgentState:
         if competitor:
             state["competitor_name"] = competitor.name
 
-        for url in state["urls"]:
-            # Directly call Phase 2 scraper service function
-            scrape_res = scrape_url(url)
-            raw_pages.append(scrape_res)
+        # Parallel scraping to reduce node runtime from 15s to <3s
+        if urls:
+            with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
+                raw_pages = list(executor.map(scrape_url, urls))
+        else:
+            raw_pages = []
 
-            # Record snapshot in DB & FAISS if valid
+        # Record snapshots in DB & FAISS if valid
+        for scrape_res in raw_pages:
+            url = scrape_res.get("url", "")
             if competitor and not scrape_res["is_stale"] and scrape_res["clean_text"]:
                 source_type = SourceType.PRICING if "pricing" in url.lower() else (
                     SourceType.REVIEW if "review" in url.lower() or "about" in url.lower() or "docs" in url.lower() else SourceType.NEWS

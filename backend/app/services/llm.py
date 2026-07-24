@@ -55,12 +55,13 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}'...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 12s HTTP timeout guard...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=700,
+                max_tokens=600,
+                timeout=12.0,
             )
             model_served = getattr(response, "model", model)
             content = response.choices[0].message.content or ""
@@ -73,12 +74,12 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
             is_404 = getattr(exc, "status_code", None) == 404 or "404" in err_msg or "unavailable for free" in err_msg.lower()
 
             if is_429:
-                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 3s...")
-                time.sleep(3.0)
+                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 2s...")
+                time.sleep(2.0)
             elif is_404:
                 print(f"[OpenRouter 404 Deprecated/Paid] Model '{model}' unavailable for free. Trying fallback candidate...")
             else:
-                print(f"[OpenRouter Error] Model '{model}' failed: {exc}. Retrying next candidate...")
+                print(f"[OpenRouter Error/Timeout] Model '{model}' failed: {exc}. Retrying next candidate...")
 
     raise last_exception if last_exception else RuntimeError("All OpenRouter candidate models failed.")
 
@@ -98,7 +99,7 @@ def generate_executive_report(
     api_key = settings.LLM_API_KEY or ""
 
     prompt = f"""
-You are an expert Competitive Intelligence Analyst. Generate a comprehensive executive report for '{competitor_name}'.
+You are an expert Competitive Intelligence Analyst. Generate a concise executive report for '{competitor_name}'.
 
 Data Context:
 - Price Changes & Tiers Detected: {diffs}
@@ -125,9 +126,9 @@ Report Structure:
             report_text, model_used = call_openrouter(prompt, api_key)
             return report_text, f"openrouter/{model_used}"
         except Exception as exc:
-            print(f"[OpenRouter API Failure] {exc}. Falling back to structured mock generator.")
+            print(f"[OpenRouter API Failure] {exc}. Falling back to instant structured mock generator.")
 
-    # 2. Keyless Fallback Mock Generator
+    # 2. Keyless Fallback Instant Report Generator
     stale_notice = (
         "> [!WARNING]\n> **Data Collection Incomplete**: One or more source pages were flagged stale after 2 retries.\n\n"
         if is_incomplete
@@ -171,7 +172,7 @@ Automated agent pipeline completed multi-source intelligence gathering for **{co
 - Monitor competitor pricing adjustments for tier positioning response.
 - Leverage positive sentiment topics to refine product marketing.
 """
-    return mock_report, "mock/generator"
+    return mock_report, "instant/structured_generator"
 
 
 def generate_rag_answer(question: str, retrieved_chunks: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:

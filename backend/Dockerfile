@@ -9,13 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python packages
-COPY requirements.txt .
+COPY backend/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend codebase
-COPY app ./app
-COPY scripts ./scripts
-COPY static ./static
+COPY backend/app ./app
+COPY backend/scripts ./scripts
+COPY backend/static ./static
 
 # Create data directories for persistence
 RUN mkdir -p /app/faiss_data /app/static/reports

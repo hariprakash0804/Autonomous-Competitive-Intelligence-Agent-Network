@@ -58,7 +58,7 @@ def list_reports(
             "id": str(r.id),
             "competitor_id": str(r.competitor_id),
             "competitor_name": comp.name if comp else "Unknown",
-            "model_used": r.model_used,
+            "model_used": getattr(r, "model_used", "openai/gpt-oss-120b:free"),
             "generated_at": r.generated_at.isoformat(),
             "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M UTC"),
             "content_snippet": (r.summary or "")[:200] + "...",

@@ -53,10 +53,17 @@ class VectorStoreService:
             # ── Mode: hf_api (explicit) or auto with HF token ───────────────
             if store_mode == "hf_api" or (store_mode == "auto" and hf_token):
                 if hf_token:
-                    print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {MODEL_NAME}).", flush=True)
-                    self.model = "hf_api"
-                    self._embedding_mode = "hf_api"
-                    return self.model
+                    # Quick connectivity check — detect DNS/network issues immediately
+                    if self._check_hf_api_connectivity(hf_token):
+                        print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {MODEL_NAME}).", flush=True)
+                        self.model = "hf_api"
+                        self._embedding_mode = "hf_api"
+                        return self.model
+                    else:
+                        print("[Vector Store] HF API unreachable (DNS/network issue). Using hash vectorizer.", flush=True)
+                        self.model = "fallback"
+                        self._embedding_mode = "hash"
+                        return self.model
                 else:
                     print("[Vector Store] VECTOR_STORE_MODE=hf_api but HF_API_TOKEN not set. Falling back to hash.", flush=True)
                     self.model = "fallback"
@@ -86,23 +93,67 @@ class VectorStoreService:
 
         return self.model
 
+    def _check_hf_api_connectivity(self, hf_token: str) -> bool:
+        """Quick connectivity check to HuggingFace API. Returns False if DNS/network is broken."""
+        try:
+            response = httpx.post(
+                HF_API_URL,
+                headers={"Authorization": f"Bearer {hf_token}"},
+                json={"inputs": "test", "options": {"wait_for_model": False}},
+                timeout=5.0,
+            )
+            # Any HTTP response (even 503 model loading) means network is reachable
+            return True
+        except (httpx.ConnectError, OSError) as e:
+            print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
+            return False
+        except httpx.TimeoutException:
+            # Timeout is OK — server is reachable but slow
+            return True
+        except Exception as e:
+            print(f"[Vector Store] HF API connectivity check error: {e}", flush=True)
+            return False
+
+    @staticmethod
+    def _is_unrecoverable_error(exc: Exception) -> bool:
+        """Detects DNS failures, connection refused, and other errors that won't resolve on retry."""
+        err_msg = str(exc).lower()
+        unrecoverable_patterns = [
+            "no address associated with hostname",
+            "name or service not known",
+            "nodename nor servname provided",
+            "getaddrinfo failed",
+            "connection refused",
+            "network is unreachable",
+            "no route to host",
+            "ssl: certificate_verify_failed",
+        ]
+        return any(pattern in err_msg for pattern in unrecoverable_patterns)
+
     def _hf_api_encode(self, texts: List[str]) -> np.ndarray:
         """
         Calls HuggingFace Inference API for real semantic embeddings.
-        Free tier: ~30k chars/min. Same model quality as local SentenceTransformer.
+        Detects unrecoverable errors (DNS, connection) on first failure
+        and immediately falls back to hash for ALL remaining batches.
         """
         hf_token = settings.HF_API_TOKEN or os.environ.get("HF_API_TOKEN", "")
         headers = {"Authorization": f"Bearer {hf_token}"}
 
-        # HF API accepts a list of strings and returns a list of embeddings
-        # Batch in groups of 16 to stay within API limits
         all_embeddings = []
         batch_size = 16
+        use_hash_fallback = False  # Flag to skip all remaining HF API calls
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            # Truncate each text to 512 chars for embedding (model's effective window)
+
+            # If we already detected an unrecoverable error, skip straight to hash
+            if use_hash_fallback:
+                hash_vecs = self._hash_encode(batch)
+                all_embeddings.extend(hash_vecs)
+                continue
+
             batch_truncated = [t[:512] for t in batch]
+            batch_succeeded = False
 
             for attempt in range(3):
                 try:
@@ -114,7 +165,6 @@ class VectorStoreService:
                     )
 
                     if response.status_code == 503:
-                        # Model is loading on HF side — wait and retry
                         wait = min(float(response.json().get("estimated_time", 5)), 10)
                         print(f"[Vector Store] HF API model loading, waiting {wait:.0f}s...", flush=True)
                         time.sleep(wait)
@@ -128,25 +178,30 @@ class VectorStoreService:
                     response.raise_for_status()
                     embeddings_batch = response.json()
 
-                    # Response is a list of embeddings (each is a list of floats)
                     for emb in embeddings_batch:
                         vec = np.array(emb, dtype=np.float32)
-                        # Normalize for cosine similarity with FAISS IndexFlatIP
                         norm = np.linalg.norm(vec)
                         if norm > 0:
                             vec /= norm
                         all_embeddings.append(vec)
-                    break  # Success, move to next batch
+                    batch_succeeded = True
+                    break
 
                 except Exception as exc:
+                    if self._is_unrecoverable_error(exc):
+                        # DNS/network failure — skip ALL remaining batches immediately
+                        print(f"[Vector Store] HF API unrecoverable error: {exc}. Switching to hash for all batches.", flush=True)
+                        use_hash_fallback = True
+                        break
                     if attempt < 2:
                         print(f"[Vector Store] HF API attempt {attempt + 1} failed: {exc}. Retrying...", flush=True)
                         time.sleep(1.0)
                     else:
-                        print(f"[Vector Store] HF API failed after 3 attempts: {exc}. Falling back to hash for this batch.", flush=True)
-                        # Fallback to hash for this batch
-                        hash_vecs = self._hash_encode(batch)
-                        all_embeddings.extend(hash_vecs)
+                        print(f"[Vector Store] HF API failed after 3 attempts: {exc}.", flush=True)
+
+            if not batch_succeeded:
+                hash_vecs = self._hash_encode(batch)
+                all_embeddings.extend(hash_vecs)
 
         return np.array(all_embeddings, dtype=np.float32)
 

@@ -215,24 +215,26 @@ function renderMarkdownFormatted(mdText) {
   let tableRows = [];
 
   const flushTable = (key) => {
-    if (tableRows.length > 0) {
-      const headerRow = tableRows[0];
-      const bodyRows = tableRows.slice(1).filter((r) => !r.every((c) => c.trim().startsWith('-')));
+    if (tableRows && tableRows.length > 0) {
+      const headerRow = tableRows[0] || [];
+      const bodyRows = (tableRows.slice(1) || []).filter(
+        (r) => r && Array.isArray(r) && !r.every((c) => (c || '').trim().startsWith('-'))
+      );
       elements.push(
         <div key={key} className="overflow-x-auto my-4 border border-slate-800 rounded-xl shadow-lg">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-900 text-indigo-300 border-b border-slate-800 font-semibold">
               <tr>
-                {headerRow.map((cell, idx) => (
-                  <th key={idx} className="p-3">{cell.replace(/\*\*/g, '').trim()}</th>
+                {(Array.isArray(headerRow) ? headerRow : []).map((cell, idx) => (
+                  <th key={idx} className="p-3">{(cell || '').replace(/\*\*/g, '').trim()}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 bg-slate-950/80">
-              {bodyRows.map((row, rIdx) => (
+              {(Array.isArray(bodyRows) ? bodyRows : []).map((row, rIdx) => (
                 <tr key={rIdx} className="hover:bg-slate-900/40 transition">
-                  {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="p-3 text-slate-300 font-sans">{cell.replace(/\*\*/g, '').trim()}</td>
+                  {(Array.isArray(row) ? row : []).map((cell, cIdx) => (
+                    <td key={cIdx} className="p-3 text-slate-300 font-sans">{(cell || '').replace(/\*\*/g, '').trim()}</td>
                   ))}
                 </tr>
               ))}

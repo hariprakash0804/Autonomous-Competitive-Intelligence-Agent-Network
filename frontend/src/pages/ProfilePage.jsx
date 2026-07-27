@@ -397,7 +397,7 @@ export default function ProfilePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60">
-                      {filteredCompetitors.map((c) => (
+                      {(Array.isArray(filteredCompetitors) ? filteredCompetitors : []).map((c) => (
                         <tr key={c.id} className="hover:bg-slate-800/30 transition">
                           <td className="py-3 px-3">
                             <div className="font-bold text-slate-100">{c.name}</div>

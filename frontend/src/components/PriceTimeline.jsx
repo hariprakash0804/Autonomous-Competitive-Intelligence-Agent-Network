@@ -83,7 +83,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           <Tag className="w-3.5 h-3.5 text-indigo-400" /> Extracted Pricing Records
         </h4>
         <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-          {priceHistory.map((item, idx) => (
+          {(Array.isArray(priceHistory) ? priceHistory : []).map((item, idx) => (
             <div
               key={item.id}
               style={{ '--i': idx }}

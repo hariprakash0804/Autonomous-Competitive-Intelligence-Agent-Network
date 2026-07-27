@@ -28,7 +28,7 @@ export default function CompetitorList({
       </div>
 
       <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-        {competitors.map((comp, idx) => {
+        {(Array.isArray(competitors) ? competitors : []).map((comp, idx) => {
           const isSelected = comp.id === selectedId;
           return (
             <div

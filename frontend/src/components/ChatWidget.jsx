@@ -79,7 +79,7 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
 
       {/* Messages List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-        {messages.map((msg, index) => (
+        {(Array.isArray(messages) ? messages : []).map((msg, index) => (
           <div
             key={index}
             className={`flex gap-2.5 animate-fade-in-up ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -106,7 +106,7 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
                     Cited Snapshots ({msg.citations.length})
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    {msg.citations.map((cite, cIdx) => (
+                    {(Array.isArray(msg.citations) ? msg.citations : []).map((cite, cIdx) => (
                       <span
                         key={cIdx}
                         title={cite.snippet}

@@ -85,7 +85,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
             <Hash className="w-3.5 h-3.5 text-indigo-400" /> Key Extracted Topics
           </h4>
           <div className="flex flex-wrap gap-1.5">
-            {allTopics.map((topic, i) => (
+            {(Array.isArray(allTopics) ? allTopics : []).map((topic, i) => (
               <span
                 key={i}
                 style={{ '--i': i }}

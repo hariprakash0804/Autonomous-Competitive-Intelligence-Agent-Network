@@ -79,7 +79,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
       </div>
 
       <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
-        {filteredReports.map((r, idx) => (
+        {(Array.isArray(filteredReports) ? filteredReports : []).map((r, idx) => (
           <div
             key={r.id}
             style={{ '--i': idx }}

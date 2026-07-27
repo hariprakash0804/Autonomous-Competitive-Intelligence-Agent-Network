@@ -117,7 +117,9 @@ class VectorStoreService:
         source_type: str,
         fetched_at: str,
         text: str,
+        defer_save: bool = False,
     ) -> int:
+        """Adds text chunks to the FAISS index. Set defer_save=True to batch multiple additions before persisting."""
         chunks = self.chunk_text(text)
         if not chunks:
             return 0
@@ -136,8 +138,13 @@ class VectorStoreService:
             }
             self.metadata.append(meta)
 
-        self._save_index()
+        if not defer_save:
+            self._save_index()
         return len(chunks)
+
+    def flush(self):
+        """Persists the current in-memory FAISS index and metadata to disk. Call after batched add_snapshot_chunks(defer_save=True)."""
+        self._save_index()
 
     def search(
         self,

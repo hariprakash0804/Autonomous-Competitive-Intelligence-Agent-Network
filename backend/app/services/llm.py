@@ -1,6 +1,7 @@
 import os
 import time
 from typing import Dict, Any, Tuple, List, Optional
+import traceback
 from openai import OpenAI, RateLimitError, APIError
 
 from app.config import settings
@@ -10,13 +11,18 @@ PRIMARY_FREE_MODEL = "google/gemma-4-31b-it:free"
 FALLBACK_FREE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
 ALTERNATIVE_FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 
-# Proactive rate-limiting: minimum delay between LLM requests (3 seconds = max 20 requests/minute)
-MIN_REQUEST_INTERVAL_SECONDS = 3.0
+# Proactive rate-limiting: minimum delay between LLM requests
+# Pipeline makes ~1-3 LLM calls per run — 0.5s is more than sufficient to stay under 20 req/min
+MIN_REQUEST_INTERVAL_SECONDS = 0.5
 _last_request_timestamp = 0.0
+
+# Cached OpenAI client to avoid repeated TLS handshake overhead
+_cached_client: Optional[OpenAI] = None
+_cached_client_key: str = ""
 
 
 def _enforce_proactive_rate_limit():
-    """Proactively ensures at least 3 seconds between LLM calls to respect 20 req/min limit."""
+    """Proactively ensures at least 0.5s between LLM calls to respect 20 req/min limit."""
     global _last_request_timestamp
     elapsed = time.time() - _last_request_timestamp
     if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
@@ -26,21 +32,30 @@ def _enforce_proactive_rate_limit():
     _last_request_timestamp = time.time()
 
 
+def _get_cached_client(api_key: str) -> OpenAI:
+    """Returns a cached OpenAI client to avoid repeated TLS handshake overhead."""
+    global _cached_client, _cached_client_key
+    if _cached_client is None or _cached_client_key != api_key:
+        _cached_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            default_headers={
+                "HTTP-Referer": "https://github.com/Autonomous-Competitive-Intelligence-Agent-Network",
+                "X-Title": "Autonomous Competitive Intelligence Agent Network",
+            },
+        )
+        _cached_client_key = api_key
+    return _cached_client
+
+
 def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     """
     Invokes OpenRouter API using OpenAI SDK with active free model.
-    Proactively enforces a 3s delay (20 req/min limit) and reactively catches 429 rate limits
+    Proactively enforces a 0.5s delay and reactively catches 429 rate limits
     or API errors to automatically try fallbacks.
     Returns (response_text, actual_model_served).
     """
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-        default_headers={
-            "HTTP-Referer": "https://github.com/Autonomous-Competitive-Intelligence-Agent-Network",
-            "X-Title": "Autonomous Competitive Intelligence Agent Network",
-        },
-    )
+    client = _get_cached_client(api_key)
 
     models_to_try = [
         PRIMARY_FREE_MODEL,
@@ -55,13 +70,13 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}' with 12s HTTP timeout guard...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 8s HTTP timeout guard...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=600,
-                timeout=12.0,
+                timeout=8.0,
             )
             model_served = getattr(response, "model", model)
             content = response.choices[0].message.content or ""
@@ -74,8 +89,8 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
             is_404 = getattr(exc, "status_code", None) == 404 or "404" in err_msg or "unavailable for free" in err_msg.lower()
 
             if is_429:
-                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 2s...")
-                time.sleep(2.0)
+                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 1s...")
+                time.sleep(1.0)
             elif is_404:
                 print(f"[OpenRouter 404 Deprecated/Paid] Model '{model}' unavailable for free. Trying fallback candidate...")
             else:

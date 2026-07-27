@@ -27,7 +27,9 @@ def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
 
 
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
-    """Background worker function executing the LangGraph agent pipeline with a 90-second timeout guard."""
+    """Background worker function executing the LangGraph agent pipeline with a 120-second timeout guard."""
+    import time as _time
+    pipeline_start = _time.time()
     print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
     db: Session = SessionLocal()
     agent_run = None
@@ -52,13 +54,14 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
 
         print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
 
-        # Run pipeline with a 90s hard timeout guard to account for LLM generation & rate-limiting delays
+        # Run pipeline with a 120s hard timeout guard to account for LLM generation & rate-limiting delays
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_execute_graph_with_timeout, initial_state)
             try:
-                final_state = future.result(timeout=90.0)
+                final_state = future.result(timeout=120.0)
             except TimeoutError:
-                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after 90s hard limit!", flush=True)
+                elapsed = _time.time() - pipeline_start
+                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s hard limit!", flush=True)
                 final_state = {"reflection_triggered": False}
                 if agent_run:
                     agent_run.status = "FAILED"
@@ -77,10 +80,12 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
                 else None
             )
             db.commit()
-            print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED successfully!", flush=True)
+            elapsed = _time.time() - pipeline_start
+            print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED in {elapsed:.1f}s!", flush=True)
 
     except Exception as exc:
-        print(f"[Pipeline Task Error] Agent pipeline background run failed: {exc}", flush=True)
+        elapsed = _time.time() - pipeline_start
+        print(f"[Pipeline Task Error] Agent pipeline failed after {elapsed:.1f}s: {exc}", flush=True)
         traceback.print_exc(file=sys.stdout)
         if agent_run:
             agent_run.status = "FAILED"

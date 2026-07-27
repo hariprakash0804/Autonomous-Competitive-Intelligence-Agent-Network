@@ -1,4 +1,5 @@
 import uuid
+import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
@@ -25,7 +26,11 @@ def researcher_node(state: AgentState) -> AgentState:
     1. Researcher Node:
        Increments retry_count and fetches all registered competitor URLs in parallel using ThreadPoolExecutor.
        Calls scraper.py directly for scraping and staleness evaluation.
+       Uses batched DB commits and deferred FAISS saves for performance.
     """
+    node_start = time.time()
+    print(f"[Researcher Node] Starting...", flush=True)
+
     if state.get("retry_count", 0) >= 1:
         state["reflection_triggered"] = True
 
@@ -40,13 +45,17 @@ def researcher_node(state: AgentState) -> AgentState:
             state["competitor_name"] = competitor.name
 
         # Parallel scraping using ThreadPoolExecutor
+        scrape_start = time.time()
         if urls:
             with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
                 raw_pages = list(executor.map(scrape_url, urls))
         else:
             raw_pages = []
+        print(f"[Researcher Node] Scraping {len(urls)} URLs completed in {time.time() - scrape_start:.2f}s", flush=True)
 
-        # Record snapshots in DB & FAISS if valid
+        # Record snapshots in DB & FAISS if valid — batched commits
+        db_start = time.time()
+        snapshots_to_index = []
         for scrape_res in raw_pages:
             url = scrape_res.get("url", "")
             if competitor and not scrape_res["is_stale"] and scrape_res["clean_text"]:
@@ -63,20 +72,35 @@ def researcher_node(state: AgentState) -> AgentState:
                     fetched_at=datetime.now(timezone.utc),
                 )
                 db.add(snapshot)
-                db.commit()
-                db.refresh(snapshot)
+                db.flush()  # Get snapshot.id without committing — batched
 
-                vector_store.add_snapshot_chunks(
-                    snapshot_id=str(snapshot.id),
-                    competitor_id=str(competitor.id),
-                    source_type=source_type.value,
-                    fetched_at=snapshot.fetched_at.isoformat(),
-                    text=scrape_res["clean_text"],
-                )
+                snapshots_to_index.append((snapshot, source_type, scrape_res["clean_text"]))
+
+        # Single batch commit for all snapshots
+        if snapshots_to_index:
+            db.commit()
+        print(f"[Researcher Node] DB batch commit ({len(snapshots_to_index)} snapshots) in {time.time() - db_start:.2f}s", flush=True)
+
+        # FAISS indexing with deferred save — single flush at end
+        faiss_start = time.time()
+        for snapshot, source_type, clean_text in snapshots_to_index:
+            vector_store.add_snapshot_chunks(
+                snapshot_id=str(snapshot.id),
+                competitor_id=str(competitor.id),
+                source_type=source_type.value,
+                fetched_at=snapshot.fetched_at.isoformat(),
+                text=clean_text,
+                defer_save=True,
+            )
+        if snapshots_to_index:
+            vector_store.flush()
+        print(f"[Researcher Node] FAISS indexing + flush in {time.time() - faiss_start:.2f}s", flush=True)
+
     finally:
         db.close()
 
     state["raw_pages"] = raw_pages
+    print(f"[Researcher Node] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state
 
 
@@ -84,14 +108,14 @@ def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge: Pure routing function.
     If any page is_stale and retry_count < 2, loop back to Researcher node for a retry pass.
-    Otherwise proceed to Change-Detector node.
+    Otherwise proceed to Parallel-Analysis node.
     """
     has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
 
     if has_stale and state.get("retry_count", 0) < 2:
         return "Researcher"
 
-    return "Change-Detector"
+    return "Parallel-Analysis"
 
 
 def change_detector_node(state: AgentState) -> AgentState:
@@ -100,6 +124,9 @@ def change_detector_node(state: AgentState) -> AgentState:
        Sets is_incomplete flag if max retries were hit with stale pages,
        and compares pricing pages using Phase 2 diff_pricing service.
     """
+    node_start = time.time()
+    print(f"[Change-Detector] Starting...", flush=True)
+
     has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
     if has_stale and state.get("retry_count", 0) >= 2:
         state["is_incomplete"] = True
@@ -144,6 +171,7 @@ def change_detector_node(state: AgentState) -> AgentState:
         db.close()
 
     state["diffs"] = diffs
+    print(f"[Change-Detector] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state
 
 
@@ -151,11 +179,22 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
     """
     3. Sentiment-Analyst Node:
        Analyzes review and news pages using Phase 2 sentiment_score service function directly.
+       Uses a single pre-fetched snapshot and batched DB commit for performance.
     """
+    node_start = time.time()
+    print(f"[Sentiment-Analyst] Starting...", flush=True)
+
     sentiment_results = []
     db: Session = SessionLocal()
     try:
         competitor_id = uuid.UUID(state["competitor_id"])
+
+        # Pre-fetch the latest snapshot ONCE instead of per-page queries
+        latest_snap = db.scalars(
+            select(Snapshot)
+            .where(Snapshot.competitor_id == competitor_id)
+            .order_by(Snapshot.fetched_at.desc())
+        ).first()
 
         for page in state.get("raw_pages", []):
             url = page.get("url", "")
@@ -173,28 +212,47 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
                 }
                 sentiment_results.append(result_item)
 
-                # Fetch snapshot for this url if available
-                snap = db.scalars(
-                    select(Snapshot)
-                    .where(Snapshot.competitor_id == competitor_id)
-                    .order_by(Snapshot.fetched_at.desc())
-                ).first()
-
-                if snap:
+                # Batch — add without committing per-page
+                if latest_snap:
                     ss = SentimentScore(
                         competitor_id=competitor_id,
-                        snapshot_id=snap.id,
+                        snapshot_id=latest_snap.id,
                         score=sent_res["score"],
                         topics=sent_res["topics"],
                         source_type=source_type,
                         scored_at=datetime.now(timezone.utc),
                     )
                     db.add(ss)
-                db.commit()
+
+        # Single batch commit for all sentiment scores
+        db.commit()
     finally:
         db.close()
 
     state["sentiment_results"] = sentiment_results
+    print(f"[Sentiment-Analyst] TOTAL: {time.time() - node_start:.2f}s", flush=True)
+    return state
+
+
+def parallel_analysis_node(state: AgentState) -> AgentState:
+    """
+    Parallel Analysis Node:
+    Runs Change-Detector and Sentiment-Analyst concurrently using ThreadPoolExecutor.
+    Both nodes write to different state keys (diffs vs sentiment_results) and use
+    independent DB sessions, so concurrent execution is safe.
+    """
+    node_start = time.time()
+    print(f"[Parallel Analysis] Starting Change-Detector + Sentiment-Analyst concurrently...", flush=True)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        cd_future = executor.submit(change_detector_node, state)
+        sa_future = executor.submit(sentiment_analyst_node, state)
+
+        # Wait for both — propagate any exceptions
+        cd_future.result()
+        sa_future.result()
+
+    print(f"[Parallel Analysis] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state
 
 
@@ -203,6 +261,9 @@ def report_writer_node(state: AgentState) -> AgentState:
     4. Report-Writer Node:
        Synthesizes report draft using LLM provider abstraction module and saves Report row to DB.
     """
+    node_start = time.time()
+    print(f"[Report-Writer] Starting...", flush=True)
+
     pages_summary = [
         {
             "url": p.get("url"),
@@ -212,6 +273,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         for p in state.get("raw_pages", [])
     ]
 
+    llm_start = time.time()
     report_md, model_used = generate_executive_report(
         competitor_name=state.get("competitor_name", "Competitor"),
         diffs=state.get("diffs", []),
@@ -219,6 +281,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         pages_summary=pages_summary,
         is_incomplete=state.get("is_incomplete", False),
     )
+    print(f"[Report-Writer] LLM report generation: {time.time() - llm_start:.2f}s (model: {model_used})", flush=True)
 
     state["report_draft"] = report_md
     state["model_used"] = model_used
@@ -244,4 +307,5 @@ def report_writer_node(state: AgentState) -> AgentState:
     finally:
         db.close()
 
+    print(f"[Report-Writer] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state

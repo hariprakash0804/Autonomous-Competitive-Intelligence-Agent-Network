@@ -680,8 +680,8 @@ body {
 /* The character container */
 .character-container {
   position: relative;
-  width: 230px;
-  height: 195px;
+  width: 240px;
+  height: 170px;
   margin: 0 auto;
 }
 
@@ -700,12 +700,13 @@ body {
   transform: translateX(-55vw);
 }
 
-/* Character body — at ground level, shifted left so suitcase sits beside it */
+/* Character body — standing on ground level at left side of container */
 .character-body {
   position: absolute;
   bottom: 4px;
-  left: 36%;
+  left: 65px;
   transform: translateX(-50%);
+  z-index: 2;
 }
 
 /* Walking bounce on body */
@@ -719,8 +720,8 @@ body {
   top: -6px;
   left: 50%;
   transform: translateX(-50%);
-  width: 54px;
-  height: 24px;
+  width: 52px;
+  height: 22px;
   background: linear-gradient(135deg, #2d1f1b, #1a1210);
   border-radius: 20px 20px 6px 6px;
   z-index: 4;
@@ -730,8 +731,8 @@ body {
   position: absolute;
   top: 4px;
   left: 4px;
-  width: 22px;
-  height: 12px;
+  width: 20px;
+  height: 11px;
   background: #3d2c27;
   border-radius: 12px 12px 0 0;
   transform: rotate(-10deg);
@@ -739,8 +740,8 @@ body {
 
 /* Head */
 .character-head {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   background: linear-gradient(180deg, #ffe4c4, #f5c79e);
   border-radius: 50%;
   margin: 0 auto 0;
@@ -769,46 +770,46 @@ body {
 /* Ears */
 .character-ear {
   position: absolute;
-  width: 8px;
-  height: 12px;
+  width: 7px;
+  height: 11px;
   background: #f5c79e;
   border-radius: 4px;
-  top: 18px;
+  top: 17px;
 }
-.ear-left  { left: -5px; }
-.ear-right { right: -5px; }
+.ear-left  { left: -4px; }
+.ear-right { right: -4px; }
 
 /* Eyebrows */
 .character-eyebrow {
   position: absolute;
   width: 10px;
-  height: 3px;
+  height: 2.5px;
   background: #2d1f1b;
   border-radius: 2px;
   top: 13px;
 }
-.eyebrow-left  { left: 10px; transform: rotate(-5deg); }
-.eyebrow-right { right: 10px; transform: rotate(5deg); }
+.eyebrow-left  { left: 9px; transform: rotate(-5deg); }
+.eyebrow-right { right: 9px; transform: rotate(5deg); }
 
 /* Eyes */
 .character-eye {
   position: absolute;
-  width: 10px;
-  height: 11px;
+  width: 9.5px;
+  height: 10.5px;
   background: #ffffff;
   border-radius: 50%;
-  top: 18px;
+  top: 17px;
   overflow: hidden;
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);
   animation: blink 4s ease-in-out infinite;
 }
-.eye-left  { left: 10px; }
-.eye-right { right: 10px; }
+.eye-left  { left: 9px; }
+.eye-right { right: 9px; }
 
 .character-pupil {
   position: absolute;
-  width: 5px;
-  height: 5px;
+  width: 4.5px;
+  height: 4.5px;
   background: #2a1a14;
   border-radius: 50%;
   top: 3px;
@@ -833,11 +834,11 @@ body {
 /* Rosy cheeks */
 .character-blush {
   position: absolute;
-  width: 8px;
-  height: 5px;
+  width: 7px;
+  height: 4.5px;
   background: rgba(244, 114, 182, 0.35);
   border-radius: 50%;
-  top: 27px;
+  top: 26px;
 }
 .blush-left  { left: 8px; }
 .blush-right { right: 8px; }
@@ -845,19 +846,22 @@ body {
 /* Smile */
 .character-smile {
   position: absolute;
-  bottom: 8px;
+  bottom: 7px;
   left: 50%;
   transform: translateX(-50%);
-  height: 7px;
-  border-block: 2.5px solid #ab5e42;
+  height: 6px;
+  border-bottom: 2.5px solid #ab5e42;
+  border-top: none;
+  border-left: none;
+  border-right: none;
   border-radius: 0 0 10px 10px;
   transition: all 0.5s ease;
 }
 
 /* Neck */
 .character-neck {
-  width: 14px;
-  height: 8px;
+  width: 13px;
+  height: 7px;
   background: #f5c79e;
   margin: -3px auto 0;
   border-radius: 0 0 4px 4px;
@@ -867,7 +871,7 @@ body {
 
 /* Torso - Dark Business Suit Jacket */
 .character-torso {
-  width: 42px;
+  width: 40px;
   height: 38px;
   background: linear-gradient(180deg, #1e293b, #0f172a);
   border-radius: 8px 8px 3px 3px;
@@ -887,13 +891,13 @@ body {
   z-index: 3;
 }
 .collar-left {
-  left: 8px;
-  border-width: 10px 9px 0 0;
+  left: 7px;
+  border-width: 10px 8px 0 0;
   border-color: #ffffff transparent transparent transparent;
 }
 .collar-right {
-  right: 8px;
-  border-width: 10px 0 0 9px;
+  right: 7px;
+  border-width: 10px 0 0 8px;
   border-color: #ffffff transparent transparent transparent;
 }
 
@@ -903,7 +907,7 @@ body {
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 7px;
+  width: 6.5px;
   height: 22px;
   clip-path: polygon(20% 0%, 80% 0%, 100% 70%, 50% 100%, 0% 70%);
   z-index: 4;
@@ -940,7 +944,7 @@ body {
 .character-arm-left,
 .character-arm-right {
   position: absolute;
-  width: 12px;
+  width: 11px;
   height: 32px;
   background: linear-gradient(180deg, #1e293b, #0f172a);
   border-radius: 6px;
@@ -948,8 +952,8 @@ body {
   transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
   z-index: 1;
 }
-.character-arm-left  { left: -13px; transform-origin: top center; transform: rotate(-10deg); }
-.character-arm-right { right: -13px; transform-origin: top center; transform: rotate(10deg); }
+.character-arm-left  { left: -12px; transform-origin: top center; transform: rotate(-10deg); }
+.character-arm-right { right: -12px; transform-origin: top center; transform: rotate(18deg); }
 
 /* Skin Hands */
 .character-hand {
@@ -957,8 +961,8 @@ body {
   bottom: -4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   background: #ffe4c4;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
@@ -973,18 +977,18 @@ body {
 }
 
 /* When opening suitcase */
-.character-opening .character-arm-left  { transform: rotate(-30deg); }
-.character-opening .character-arm-right { transform: rotate(30deg); }
+.character-opening .character-arm-left  { transform: rotate(-25deg); }
+.character-opening .character-arm-right { transform: rotate(35deg); }
 
-/* Suitcase */
+/* Suitcase — sitting right beside the character on the ground */
 .suitcase {
   position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100px;
-  height: 60px;
+  bottom: 4px;
+  left: 135px;
+  width: 90px;
+  height: 52px;
   perspective: 500px;
+  z-index: 1;
 }
 
 .suitcase-body {

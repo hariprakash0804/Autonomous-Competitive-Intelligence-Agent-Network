@@ -70,13 +70,13 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}' with 8s HTTP timeout guard...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 25s HTTP timeout guard...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=600,
-                timeout=8.0,
+                max_tokens=2500,
+                timeout=25.0,
             )
             model_served = getattr(response, "model", model)
             content = response.choices[0].message.content or ""
@@ -134,7 +134,7 @@ Report Structure MUST include:
 Brief high-level comparative summary of both companies.
 
 ## 1. Feature & Capability Comparison Matrix
-Compare product capabilities, developer experience, scalability, and target market between {user_company_name} and {competitor_name}.
+Compare product capabilities, developer experience, scalability, and target market between {user_company_name} and {competitor_name}. Include a complete Markdown table with rows for Core Models, Developer Experience, Scalability, and Enterprise Governance.
 
 ## 2. Pricing & Tier Structure Comparison
 Compare pricing plans, tiers, free offerings, enterprise pricing, and recent cost movements.
@@ -150,6 +150,8 @@ Bullet list of competitor strengths, missing features, or areas where {competito
 
 ## 6. Strategic Recommendations & Action Plan
 Actionable steps for marketing, product roadmap, and sales positioning.
+
+CRITICAL REQUIREMENT: Output ALL 6 sections completely. Do NOT stop mid-table or truncate mid-sentence.
 """
 
     if is_incomplete:

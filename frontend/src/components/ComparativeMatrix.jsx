@@ -191,9 +191,9 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
         </div>
       ) : (
         /* Executive Report View */
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-[480px] overflow-y-auto animate-fade-in-up">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 text-xs text-slate-300 max-h-[520px] overflow-y-auto animate-fade-in-up space-y-2">
           {reportSummary ? (
-            reportSummary
+            renderMarkdownFormatted(reportSummary)
           ) : (
             <div className="text-center py-10 text-slate-500 space-y-2">
               <FileText className="w-8 h-8 text-slate-600 mx-auto" />
@@ -205,4 +205,84 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
       )}
     </div>
   );
+}
+
+function renderMarkdownFormatted(mdText) {
+  if (!mdText) return null;
+  const lines = mdText.split('\n');
+  const elements = [];
+  let inTable = false;
+  let tableRows = [];
+
+  const flushTable = (key) => {
+    if (tableRows.length > 0) {
+      const headerRow = tableRows[0];
+      const bodyRows = tableRows.slice(1).filter((r) => !r.every((c) => c.trim().startsWith('-')));
+      elements.push(
+        <div key={key} className="overflow-x-auto my-4 border border-slate-800 rounded-xl shadow-lg">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-900 text-indigo-300 border-b border-slate-800 font-semibold">
+              <tr>
+                {headerRow.map((cell, idx) => (
+                  <th key={idx} className="p-3">{cell.replace(/\*\*/g, '').trim()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60 bg-slate-950/80">
+              {bodyRows.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-slate-900/40 transition">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="p-3 text-slate-300 font-sans">{cell.replace(/\*\*/g, '').trim()}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      tableRows = [];
+    }
+    inTable = false;
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      inTable = true;
+      const cells = trimmed.split('|').slice(1, -1);
+      tableRows.push(cells);
+    } else {
+      if (inTable) flushTable(`table-${idx}`);
+      if (trimmed.startsWith('## ')) {
+        elements.push(
+          <h3 key={idx} className="text-sm font-bold text-indigo-400 mt-5 mb-2 font-sans border-b border-slate-800/80 pb-1.5 flex items-center gap-2">
+            {trimmed.replace('## ', '')}
+          </h3>
+        );
+      } else if (trimmed.startsWith('# ')) {
+        elements.push(
+          <h2 key={idx} className="text-base font-extrabold text-slate-100 mt-2 mb-3 font-sans">
+            {trimmed.replace('# ', '')}
+          </h2>
+        );
+      } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const text = trimmed.replace(/^[-*]\s+/, '');
+        elements.push(
+          <div key={idx} className="text-xs text-slate-300 font-sans my-1.5 flex items-start gap-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+            <span>{text.replace(/\*\*(.*?)\*\*/g, '$1')}</span>
+          </div>
+        );
+      } else if (trimmed && trimmed !== '---') {
+        elements.push(
+          <p key={idx} className="text-xs text-slate-300 font-sans my-2 leading-relaxed">
+            {trimmed.replace(/\*\*(.*?)\*\*/g, '$1')}
+          </p>
+        );
+      }
+    }
+  });
+
+  if (inTable) flushTable('table-end');
+  return elements;
 }

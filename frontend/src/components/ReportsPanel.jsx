@@ -10,7 +10,10 @@ export default function ReportsPanel({ selectedCompetitorId }) {
 
   const fetchReports = async () => {
     try {
-      const res = await api.get('/reports/');
+      const endpoint = selectedCompetitorId
+        ? `/reports/competitor/${selectedCompetitorId}`
+        : '/reports/';
+      const res = await api.get(endpoint);
       setReports(res.data);
     } catch (err) {
       console.error('Failed to fetch reports:', err);
@@ -60,9 +63,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     }
   };
 
-  const filteredReports = selectedCompetitorId
-    ? reports.filter((r) => r.competitor_id === selectedCompetitorId)
-    : reports;
+  const filteredReports = reports;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4 animate-fade-in-up">

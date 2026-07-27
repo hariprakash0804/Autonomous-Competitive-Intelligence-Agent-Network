@@ -282,13 +282,42 @@ ANSWER:"""
         except Exception as exc:
             print(f"[RAG LLM Error] {exc}. Falling back to deterministic RAG synthesis.")
 
-    # Keyless / Fallback RAG synthesis
+    # Keyless / Fallback RAG synthesis: extract targeted section if user asked a specific question
     first_chunk = retrieved_chunks[0]['chunk_text'] if retrieved_chunks else "No snapshot context available."
     first_meta = cited_snapshots[0] if cited_snapshots else {"fetched_at": "N/A", "source_type": "database"}
-    
+    q_lower = question.lower().strip()
+
+    extracted_content = ""
+
+    # Smart section extraction if context is an executive report document
+    if "# Competitive Intelligence Executive Summary" in first_chunk or "## " in first_chunk:
+        sections = first_chunk.split("## ")
+        for sec in sections:
+            if not sec.strip():
+                continue
+            sec_heading = sec.split("\n")[0].lower()
+            if any(k in q_lower for k in ["strength", "advantage", "benefit", "better", "pro", "over"]):
+                if any(x in sec_heading for x in ["advantage", "3.", "feature", "1."]):
+                    extracted_content += f"## {sec.strip()}\n\n"
+            elif any(k in q_lower for k in ["weakness", "gap", "disadvantage", "con", "lacking", "flaw"]):
+                if any(x in sec_heading for x in ["disadvantage", "gap", "4."]):
+                    extracted_content += f"## {sec.strip()}\n\n"
+            elif any(k in q_lower for k in ["price", "cost", "tier", "plan", "fee", "rate"]):
+                if any(x in sec_heading for x in ["pricing", "2."]):
+                    extracted_content += f"## {sec.strip()}\n\n"
+            elif any(k in q_lower for k in ["sentiment", "perception", "rating", "review", "score"]):
+                if any(x in sec_heading for x in ["sentiment", "5."]):
+                    extracted_content += f"## {sec.strip()}\n\n"
+            elif any(k in q_lower for k in ["recommend", "action", "strategy", "plan"]):
+                if any(x in sec_heading for x in ["recommendation", "6."]):
+                    extracted_content += f"## {sec.strip()}\n\n"
+
+    if not extracted_content.strip():
+        extracted_content = first_chunk
+
     fallback_answer = (
         f"Based on the competitive intelligence snapshot fetched on **{first_meta['fetched_at']}** ({first_meta['source_type']}), "
-        f"here is the relevant intelligence:\n\n"
-        f"{first_chunk}"
+        f"here is the targeted information for your query:\n\n"
+        f"{extracted_content.strip()}"
     )
     return fallback_answer, cited_snapshots

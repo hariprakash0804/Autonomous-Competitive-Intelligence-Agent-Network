@@ -680,8 +680,8 @@ body {
 /* The character container */
 .character-container {
   position: relative;
-  width: 160px;
-  height: 180px;
+  width: 230px;
+  height: 195px;
   margin: 0 auto;
 }
 
@@ -700,11 +700,11 @@ body {
   transform: translateX(-55vw);
 }
 
-/* Character body */
+/* Character body — at ground level, shifted left so suitcase sits beside it */
 .character-body {
   position: absolute;
-  bottom: 60px;
-  left: 50%;
+  bottom: 4px;
+  left: 36%;
   transform: translateX(-50%);
 }
 

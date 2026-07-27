@@ -158,8 +158,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
             </div>
           </div>
         ))}
-
-        {filteredReports.length === 0 && (
+        {(!Array.isArray(filteredReports) || filteredReports.length === 0) && (
           <div className="text-center py-6 text-slate-500 text-xs animate-fade-in-up">
             No generated reports found. Trigger an agent pipeline run to generate executive reports.
           </div>

@@ -114,7 +114,7 @@ export default function CompetitorList({
           );
         })}
 
-        {competitors.length === 0 && (
+        {(!Array.isArray(competitors) || competitors.length === 0) && (
           <div className="text-center py-8 text-slate-500 text-sm animate-fade-in-up">
             No competitors found. Click "Add Competitor" to start tracking.
           </div>

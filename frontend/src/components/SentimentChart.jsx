@@ -3,7 +3,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { Activity, Hash } from 'lucide-react';
 
 export default function SentimentChart({ sentimentHistory, competitorName }) {
-  if (!sentimentHistory || sentimentHistory.length === 0) {
+  if (!Array.isArray(sentimentHistory) || sentimentHistory.length === 0) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[250px] animate-fade-in-up">
         <Activity className="w-10 h-10 text-slate-700 mb-2" />
@@ -17,7 +17,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
 
   // Collect all unique topic keywords
   const allTopics = Array.from(
-    new Set(sentimentHistory.flatMap((item) => item.topics || []))
+    new Set((Array.isArray(sentimentHistory) ? sentimentHistory : []).flatMap((item) => item?.topics || []))
   ).slice(0, 8);
 
   return (
@@ -48,14 +48,14 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
             <YAxis domain={[-1, 1]} stroke="#64748b" fontSize={11} />
             <Tooltip
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
+                if (active && Array.isArray(payload) && payload.length > 0) {
                   const data = payload[0].payload;
                   return (
                     <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">
                       <p className="font-bold text-slate-100">Date: {data.formatted_date}</p>
                       <p className="text-emerald-400 font-semibold">Sentiment Score: {data.score}</p>
                       <p className="text-slate-400">Source: {data.source_type}</p>
-                      {data.topics && data.topics.length > 0 && (
+                      {Array.isArray(data?.topics) && data.topics.length > 0 && (
                         <p className="text-slate-300">Topics: {data.topics.join(', ')}</p>
                       )}
                     </div>
@@ -79,7 +79,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
       </div>
 
       {/* Extracted Topic Badges */}
-      {allTopics.length > 0 && (
+      {Array.isArray(allTopics) && allTopics.length > 0 && (
         <div className="border-t border-slate-800 pt-3">
           <h4 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1">
             <Hash className="w-3.5 h-3.5 text-indigo-400" /> Key Extracted Topics

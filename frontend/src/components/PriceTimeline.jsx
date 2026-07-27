@@ -3,7 +3,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGri
 import { DollarSign, Tag, Info } from 'lucide-react';
 
 export default function PriceTimeline({ priceHistory, competitorName }) {
-  if (!priceHistory || priceHistory.length === 0) {
+  if (!Array.isArray(priceHistory) || priceHistory.length === 0) {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[300px] animate-fade-in-up">
         <DollarSign className="w-10 h-10 text-slate-700 mb-2" />
@@ -47,7 +47,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
             <Tooltip
               cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
+                if (active && Array.isArray(payload) && payload.length > 0) {
                   const data = payload[0].payload;
                   return (
                     <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">

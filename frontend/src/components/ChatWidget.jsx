@@ -100,10 +100,10 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
 
               {/* Render Cited Snapshot Date Badges */}
-              {msg.citations && msg.citations.length > 0 && (
+              {Array.isArray(msg.citations) && msg.citations.length > 0 && (
                 <div className="border-t border-slate-700/60 pt-2 mt-2 space-y-1">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Cited Snapshots ({msg.citations.length})
+                    Cited Snapshots ({msg.citations?.length || 0})
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {(Array.isArray(msg.citations) ? msg.citations : []).map((cite, cIdx) => (

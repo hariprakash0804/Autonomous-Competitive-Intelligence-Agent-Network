@@ -360,7 +360,7 @@ export default function ProfilePage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-3">
                 <div>
                   <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                    <Building2 className="w-5 h-5 text-indigo-400" /> Managed Competitors ({competitors.length})
+                    <Building2 className="w-5 h-5 text-indigo-400" /> Managed Competitors ({competitors?.length || 0})
                   </h3>
                   <p className="text-xs text-slate-400">Zero-duplication verified competitor tracking list</p>
                 </div>
@@ -380,7 +380,7 @@ export default function ProfilePage() {
 
               {loadingComps ? (
                 <div className="py-8 text-center text-xs text-slate-400">Loading competitors...</div>
-              ) : filteredCompetitors.length === 0 ? (
+              ) : (!Array.isArray(filteredCompetitors) || filteredCompetitors.length === 0) ? (
                 <div className="py-12 text-center text-slate-500 space-y-2">
                   <Building2 className="w-8 h-8 text-slate-700 mx-auto" />
                   <p className="text-xs">No competitors found matching your criteria.</p>

@@ -36,12 +36,14 @@ export default function DashboardPage() {
   const fetchCompetitors = async () => {
     try {
       const res = await api.get('/competitors/');
-      setCompetitors(res.data);
-      if (res.data.length > 0 && !selectedCompId) {
-        setSelectedCompId(res.data[0].id);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setCompetitors(data);
+      if (data.length > 0 && !selectedCompId) {
+        setSelectedCompId(data[0].id);
       }
     } catch (err) {
       console.error('Failed to fetch competitors:', err);
+      setCompetitors([]);
     }
   };
 
@@ -53,11 +55,14 @@ export default function DashboardPage() {
         api.get(`/competitors/${compId}/sentiment-history`),
         api.get(`/reports/competitor/${compId}`),
       ]);
-      setPriceHistory(priceRes.data);
-      setSentimentHistory(sentRes.data);
-      setReports(repRes.data);
+      setPriceHistory(Array.isArray(priceRes.data) ? priceRes.data : []);
+      setSentimentHistory(Array.isArray(sentRes.data) ? sentRes.data : []);
+      setReports(Array.isArray(repRes.data) ? repRes.data : []);
     } catch (err) {
       console.error('Failed to fetch charts history:', err);
+      setPriceHistory([]);
+      setSentimentHistory([]);
+      setReports([]);
     }
   };
 
@@ -139,8 +144,8 @@ export default function DashboardPage() {
     }
   };
 
-  const selectedCompetitor = competitors.find((c) => c.id === selectedCompId);
-  const latestReport = reports.length > 0 ? reports[0] : null;
+  const selectedCompetitor = Array.isArray(competitors) ? competitors.find((c) => c.id === selectedCompId) : null;
+  const latestReport = Array.isArray(reports) && reports.length > 0 ? reports[0] : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">

@@ -15,10 +15,22 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
     );
   }
 
-  // Collect all unique topic keywords
+  // Collect all unique, valid topic keywords (filtering out minified JS code noise)
+  const INVALID_PAIRS_REGEX = /xv|xj|zx|qj|fx|fz|kx|jx|vf|vj|vk|vm|vn|vp|vq|vw|vx|vy|vz|wx|wz|xb|xc|xd|xf|xg|xh|xj|xk|xm|xn|xp|xq|xr|xs|xt|xw|xz|yy|qq|jj|kk|vv|ww|^uu|^q[^u]/;
+  const BLACKLIST_TOPICS = new Set(['uuow', 'exvu', 'nrx', 'mmnl', 'eid']);
+
   const allTopics = Array.from(
     new Set((Array.isArray(sentimentHistory) ? sentimentHistory : []).flatMap((item) => item?.topics || []))
-  ).slice(0, 8);
+  )
+    .filter((t) => {
+      if (!t || typeof t !== 'string') return false;
+      const str = t.trim().toLowerCase();
+      if (str.length < 3 || BLACKLIST_TOPICS.has(str)) return false;
+      if (!/[aeiouy]/.test(str)) return false; // Must contain at least one vowel
+      if (INVALID_PAIRS_REGEX.test(str)) return false; // Reject minified consonant clusters
+      return true;
+    })
+    .slice(0, 8);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4 animate-fade-in-up">

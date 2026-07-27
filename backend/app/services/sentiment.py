@@ -57,13 +57,25 @@ VALID_3_LETTER_WORDS = {
 VOWELS = set("aeiouy")
 
 
+# Explicit blacklist for known obfuscated minified JS variable names
+BLACKLIST_OBFUSCATED = {"uuow", "exvu", "nrx", "mmnl", "eid", "uuow", "exvu"}
+
+# Regex matching impossible/obfuscated letter combinations in English words
+INVALID_PHONOTACTICS = re.compile(
+    r"xv|xj|zx|qj|fx|fz|kx|jx|vf|vj|vk|vm|vn|vp|vq|vw|vx|vy|vz|wx|wz|xb|xc|xd|xf|xg|xh|xj|xk|xm|xn|xp|xq|xr|xs|xt|xw|xz|yy|qq|jj|kk|vv|ww|^uu|^q[^u]"
+)
+
+
 def _is_valid_topic_word(word: str) -> bool:
     """
     Validates whether a word is a real, meaningful topic vs minified JS code or gibberish.
-    Checks vowel presence, length constraints, and repeating/consonant cluster patterns.
+    Checks vowel presence, length constraints, repeating patterns, and phonotactic rules.
     """
     w = word.lower().strip()
     if not w or len(w) < 3 or not w.isalpha():
+        return False
+
+    if w in BLACKLIST_OBFUSCATED:
         return False
 
     if len(w) == 3 and w not in VALID_3_LETTER_WORDS:
@@ -75,6 +87,10 @@ def _is_valid_topic_word(word: str) -> bool:
 
     # Check for repeating character triples (e.g. 'aaa')
     if re.search(r"(.)\1\1", w):
+        return False
+
+    # Check for impossible/minified letter combinations
+    if INVALID_PHONOTACTICS.search(w):
         return False
 
     # Check for 4+ consecutive consonants (minified variable or hash string)

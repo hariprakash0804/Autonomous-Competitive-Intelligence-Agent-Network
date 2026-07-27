@@ -1,5 +1,4 @@
-import React from 'react';
-import { Play, LineChart as ChartIcon, MessageSquare, Plus, Globe, Trash2 } from 'lucide-react';
+import { Play, MessageSquare, Plus, Globe, Trash2 } from 'lucide-react';
 
 export default function CompetitorList({
   competitors,
@@ -11,81 +10,95 @@ export default function CompetitorList({
   onDeleteCompetitor,
 }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
+    <div className="glass-card rounded-2xl p-5 neon-border">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <Globe className="w-5 h-5 text-indigo-400" /> Tracked Competitors
+          <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10">
+              <Globe className="w-4 h-4 text-emerald-400" />
+            </div>
+            Tracked Competitors
           </h2>
-          <p className="text-xs text-slate-400">Select a target to view timeline charts or trigger agent runs</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Select a target to analyze</p>
         </div>
         <button
           onClick={onAddCompetitor}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-200 hover:scale-[1.03] active:scale-95 shadow-md shadow-indigo-950/40"
+          className="flex items-center gap-1.5 btn-gradient text-xs font-semibold px-3 py-2 rounded-xl shadow-lg shadow-indigo-600/15"
         >
-          <Plus className="w-4 h-4" /> Add Competitor
+          <Plus className="w-3.5 h-3.5" /> Add
         </button>
       </div>
 
-      <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+      <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
         {(Array.isArray(competitors) ? competitors : []).map((comp, idx) => {
           const isSelected = comp.id === selectedId;
+          const sentimentColor = comp.avg_sentiment >= 0.05 
+            ? 'from-emerald-500 to-emerald-400' 
+            : comp.avg_sentiment <= -0.05 
+            ? 'from-rose-500 to-rose-400' 
+            : 'from-slate-500 to-slate-400';
+
           return (
             <div
               key={comp.id}
               onClick={() => onSelect(comp.id)}
               style={{ '--i': idx }}
-              className={`stagger-item hover-lift relative p-4 rounded-xl border cursor-pointer transition-colors duration-200 flex items-center justify-between overflow-hidden ${
+              className={`stagger-item hover-lift relative p-4 rounded-xl cursor-pointer transition-all duration-300 flex items-center justify-between overflow-hidden ${
                 isSelected
-                  ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-950/50'
-                  : 'bg-slate-800/50 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
+                  ? 'glass-card neon-border bg-indigo-500/[0.06]'
+                  : 'bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] hover:border-white/[0.08]'
               }`}
             >
-              {/* Selection indicator bar */}
+              {/* Colored accent bar based on sentiment */}
               <span
-                className={`absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-400 to-purple-500 transition-all duration-300 ${
-                  isSelected ? 'opacity-100' : 'opacity-0'
+                className={`absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b ${sentimentColor} transition-all duration-500 ${
+                  isSelected ? 'opacity-100' : 'opacity-40'
                 }`}
               />
 
-              <div>
+              <div className="pl-2">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-100 text-sm">{comp.name}</h3>
-                  {comp.avg_sentiment !== null && (
+                  <h3 className="font-semibold text-slate-100 text-[13px]">{comp.name}</h3>
+                  {comp.avg_sentiment !== null && comp.avg_sentiment !== undefined && (
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${
+                      className={`text-[10px] px-2 py-0.5 rounded-lg font-medium ${
                         comp.avg_sentiment >= 0.05
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
                           : comp.avg_sentiment <= -0.05
-                          ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                          : 'bg-slate-800 text-slate-300 border border-slate-700'
+                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+                          : 'bg-white/[0.04] text-slate-400 border border-white/[0.06]'
                       }`}
                     >
-                      Score: {comp.avg_sentiment}
+                      {comp.avg_sentiment > 0 ? '+' : ''}{comp.avg_sentiment}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400 truncate max-w-xs mt-1">
+                <p className="text-[11px] text-slate-500 truncate max-w-[180px] mt-0.5 font-mono">
                   {comp.pricing_url || 'No URL specified'}
                 </p>
 
-                <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
-                  <span>Snapshots: <strong className="text-slate-200">{comp.snapshot_count}</strong></span>
-                  <span>•</span>
-                  <span>Price Diffs: <strong className="text-slate-200">{comp.price_change_count}</strong></span>
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-slate-500" />
+                    Snapshots: <strong className="text-slate-300 counter-number">{comp.snapshot_count}</strong>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-amber-500" />
+                    Diffs: <strong className="text-slate-300 counter-number">{comp.price_change_count}</strong>
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     onRunPipeline(comp.id);
                   }}
                   title="Trigger Agent Pipeline Run"
-                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg border border-indigo-500/30 transition-all duration-200 hover:scale-110 active:scale-95"
+                  className="p-2 bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg border border-indigo-500/15 transition-all duration-200 hover:scale-110 active:scale-95"
                 >
-                  <Play className="w-4 h-4" />
+                  <Play className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => {
@@ -93,9 +106,9 @@ export default function CompetitorList({
                     onOpenChat(comp.id);
                   }}
                   title="Ask RAG Chat"
-                  className="p-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-600 transition-all duration-200 hover:scale-110 active:scale-95"
+                  className="p-2 bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white rounded-lg border border-white/[0.06] transition-all duration-200 hover:scale-110 active:scale-95"
                 >
-                  <MessageSquare className="w-4 h-4" />
+                  <MessageSquare className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => {
@@ -105,9 +118,9 @@ export default function CompetitorList({
                     }
                   }}
                   title="Delete Competitor"
-                  className="p-2 bg-rose-950/50 hover:bg-rose-900 text-rose-400 hover:text-rose-200 rounded-lg border border-rose-800/50 transition-all duration-200 hover:scale-110 active:scale-95"
+                  className="p-2 bg-rose-500/[0.06] hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg border border-rose-500/15 transition-all duration-200 hover:scale-110 active:scale-95"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
@@ -115,8 +128,12 @@ export default function CompetitorList({
         })}
 
         {(!Array.isArray(competitors) || competitors.length === 0) && (
-          <div className="text-center py-8 text-slate-500 text-sm animate-fade-in-up">
-            No competitors found. Click "Add Competitor" to start tracking.
+          <div className="text-center py-10 animate-fade-in-up">
+            <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mx-auto mb-3">
+              <Globe className="w-7 h-7 text-slate-700" />
+            </div>
+            <p className="text-xs text-slate-500 font-medium">No competitors tracked yet</p>
+            <p className="text-[10px] text-slate-600 mt-1">Click "Add" to start monitoring</p>
           </div>
         )}
       </div>

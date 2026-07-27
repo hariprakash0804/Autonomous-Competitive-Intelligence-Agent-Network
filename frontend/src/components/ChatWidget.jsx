@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Calendar, Sparkles, X } from 'lucide-react';
 import api from '../api/client';
 
@@ -7,13 +7,22 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
   const [messages, setMessages] = useState([
     {
       sender: 'bot',
-      text: `Hello! I am your Autonomous Competitive Intelligence RAG Assistant. Ask me anything grounded in competitor snapshot data for ${
+      text: `Hello! I'm your Competitive Intelligence RAG Assistant. Ask me anything grounded in competitor data for ${
         selectedCompetitor ? selectedCompetitor.name : 'all tracked competitors'
       }.`,
       citations: [],
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -53,26 +62,28 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col h-[550px] w-full max-w-lg animate-slide-up-panel">
+    <div className="glass-card rounded-2xl neon-border shadow-2xl flex flex-col h-[550px] w-full max-w-lg animate-spring-in"
+      style={{ boxShadow: '0 25px 80px -20px rgba(99, 102, 241, 0.2), 0 0 40px rgba(0, 0, 0, 0.5)' }}
+    >
       {/* Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 rounded-t-xl">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-lg signal-pulse">
+      <div className="p-4 border-b border-white/[0.04] flex items-center justify-between bg-white/[0.02] rounded-t-2xl">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl signal-pulse border border-indigo-500/15">
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-100 text-sm">Competitive Intelligence RAG Chat</h3>
-            <p className="text-[11px] text-slate-400">
-              Grounded answers with cited snapshot timestamps ({selectedCompetitor ? selectedCompetitor.name : 'Global'})
+            <h3 className="font-bold text-white text-sm font-display">RAG Intelligence Chat</h3>
+            <p className="text-[10px] text-slate-500">
+              {selectedCompetitor ? selectedCompetitor.name : 'Global'} • Grounded answers
             </p>
           </div>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-200 transition-transform duration-200 hover:rotate-90"
+            className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-white/[0.05] rounded-lg transition-all duration-200 hover:rotate-90"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -82,27 +93,28 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
         {(Array.isArray(messages) ? messages : []).map((msg, index) => (
           <div
             key={index}
-            className={`flex gap-2.5 animate-fade-in-up ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+            style={{ '--i': index, animation: 'fade-in-up 0.3s ease both', animationDelay: `${index * 50}ms` }}
           >
             {msg.sender === 'bot' && (
-              <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/15 flex items-center justify-center flex-shrink-0">
+                <Bot className="w-3.5 h-3.5" />
               </div>
             )}
 
             <div
-              className={`max-w-[82%] p-3.5 rounded-2xl transition-shadow duration-200 ${
+              className={`max-w-[82%] p-3.5 rounded-2xl transition-all duration-200 ${
                 msg.sender === 'user'
-                  ? 'bg-indigo-600 text-white rounded-br-none font-medium'
-                  : 'bg-slate-800/80 border border-slate-700/80 text-slate-200 rounded-bl-none shadow-md space-y-2 hover:border-slate-600'
+                  ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-br-sm font-medium shadow-lg shadow-indigo-600/20'
+                  : 'bg-white/[0.04] border border-white/[0.06] text-slate-200 rounded-bl-sm space-y-2 hover:border-white/[0.1]'
               }`}
             >
               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
 
-              {/* Render Cited Snapshot Date Badges */}
+              {/* Citations */}
               {Array.isArray(msg.citations) && msg.citations.length > 0 && (
-                <div className="border-t border-slate-700/60 pt-2 mt-2 space-y-1">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="border-t border-white/[0.06] pt-2 mt-2 space-y-1.5">
+                  <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-widest">
                     Cited Snapshots ({msg.citations?.length || 0})
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -111,7 +123,7 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
                         key={cIdx}
                         title={cite.snippet}
                         style={{ '--i': cIdx }}
-                        className="stagger-item bg-slate-900 text-indigo-300 border border-indigo-800/80 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 font-mono transition-colors duration-150 hover:bg-indigo-950/60 hover:border-indigo-600"
+                        className="stagger-item bg-indigo-500/[0.08] text-indigo-300 border border-indigo-500/10 text-[10px] px-2 py-0.5 rounded-lg flex items-center gap-1 font-mono transition-all duration-200 hover:bg-indigo-500/15 hover:border-indigo-500/25 cursor-help"
                       >
                         <Calendar className="w-2.5 h-2.5 text-indigo-400" />
                         {new Date(cite.fetched_at).toLocaleDateString()} ({cite.source_type})
@@ -123,8 +135,8 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
             </div>
 
             {msg.sender === 'user' && (
-              <div className="w-7 h-7 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4" />
+              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 text-slate-200 flex items-center justify-center flex-shrink-0 shadow-md">
+                <User className="w-3.5 h-3.5" />
               </div>
             )}
           </div>
@@ -132,32 +144,33 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
 
         {loading && (
           <div className="flex items-center gap-2.5 animate-fade-in-up">
-            <div className="w-7 h-7 rounded-full bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/15 flex items-center justify-center flex-shrink-0">
+              <Bot className="w-3.5 h-3.5" />
             </div>
-            <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl rounded-bl-none px-4 py-3 flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot" />
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot" />
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 typing-dot" />
-              <span className="text-slate-400 text-[11px] italic ml-1">retrieving grounded context...</span>
+            <div className="bg-white/[0.04] border border-white/[0.06] rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 typing-dot" />
+              <span className="w-2 h-2 rounded-full bg-indigo-400 typing-dot" />
+              <span className="w-2 h-2 rounded-full bg-indigo-400 typing-dot" />
+              <span className="text-slate-500 text-[10px] italic ml-1">retrieving context...</span>
             </div>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Form */}
-      <form onSubmit={handleSend} className="p-3 border-t border-slate-800 bg-slate-950/60 rounded-b-xl flex gap-2">
+      <form onSubmit={handleSend} className="p-3 border-t border-white/[0.04] bg-white/[0.02] rounded-b-2xl flex gap-2">
         <input
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder={`Ask about ${selectedCompetitor ? selectedCompetitor.name : 'competitors'}...`}
-          className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+          className="flex-1 bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
         />
         <button
           type="submit"
           disabled={loading || !question.trim()}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3.5 py-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95 text-xs font-semibold flex items-center gap-1"
+          className="btn-gradient disabled:opacity-30 px-4 py-2.5 rounded-xl transition-all duration-200 text-xs font-semibold flex items-center gap-1.5"
         >
           <Send className="w-3.5 h-3.5" />
         </button>

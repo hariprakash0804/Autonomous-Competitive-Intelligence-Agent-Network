@@ -1,8 +1,118 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Bot, Shield, Zap, Globe } from 'lucide-react';
 
+/* ────────────────────────────────────────────
+   Suitcase Character Component
+   ──────────────────────────────────────────── */
+function SuitcaseCharacter({ isSignup, isSwitching }) {
+  return (
+    <div className="character-container mb-2">
+      {/* Character Body */}
+      <div className={`character-body ${!isSwitching ? 'character-opening' : ''}`}>
+        {/* Head */}
+        <div className="character-head">
+          {/* Smile */}
+          <div
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[16px] h-[8px] border-b-[2.5px] border-white/60 rounded-b-full transition-all duration-500"
+            style={{ width: isSignup ? '18px' : '16px' }}
+          />
+        </div>
+
+        {/* Torso */}
+        <div className="character-torso">
+          {/* Tie/Badge */}
+          <div className={`absolute top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full transition-colors duration-500 ${
+            isSignup ? 'bg-purple-400/80' : 'bg-cyan-400/80'
+          }`} />
+          {/* Arms */}
+          <div className="character-arm-left" />
+          <div className="character-arm-right" />
+        </div>
+
+        {/* Legs */}
+        <div className="character-legs mt-1">
+          <div className="character-leg" />
+          <div className="character-leg" />
+        </div>
+      </div>
+
+      {/* Suitcase */}
+      <div className={`suitcase ${isSwitching ? 'suitcase-switching' : ''}`}>
+        <div className={`suitcase-body ${isSignup ? 'signup-case' : 'login-case'} ${!isSwitching ? 'suitcase-open' : ''}`}>
+          <div className="suitcase-handle" />
+          <div className="suitcase-lid" style={{ background: isSignup
+            ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
+            : 'linear-gradient(135deg, #4f46e5, #6366f1)'
+          }} />
+          <div className="suitcase-lock" />
+          <div className="suitcase-glow" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────
+   Floating Particle Dots
+   ──────────────────────────────────────────── */
+function ParticleField() {
+  const particles = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    top: `${Math.random() * 100}%`,
+    delay: `${-Math.random() * 20}s`,
+    size: Math.random() * 2 + 1,
+  }));
+
+  return (
+    <div className="particles">
+      {particles.map((p) => (
+        <div
+          key={p.id}
+          className="particle"
+          style={{
+            left: p.left,
+            animationDelay: p.delay,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────
+   Typing Effect Hook
+   ──────────────────────────────────────────── */
+function useTypingEffect(text, speed = 40) {
+  const [displayed, setDisplayed] = useState('');
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    setDisplayed('');
+    setDone(false);
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i < text.length) {
+        setDisplayed(text.slice(0, i + 1));
+        i++;
+      } else {
+        setDone(true);
+        clearInterval(timer);
+      }
+    }, speed);
+    return () => clearInterval(timer);
+  }, [text, speed]);
+
+  return { displayed, done };
+}
+
+/* ════════════════════════════════════════════
+   LOGIN PAGE
+   ════════════════════════════════════════════ */
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -11,9 +121,25 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
   const [name, setName] = useState('');
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const { login, signup } = useAuth();
   const navigate = useNavigate();
+
+  const tagline = useTypingEffect('Autonomous agent network for market intelligence', 35);
+
+  const handleToggleMode = () => {
+    setIsSwitching(true);
+    setError('');
+    // Close suitcase, wait, then switch mode
+    setTimeout(() => {
+      setIsSignup(!isSignup);
+      // Open new suitcase after a beat
+      setTimeout(() => {
+        setIsSwitching(false);
+      }, 300);
+    }, 500);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,51 +163,61 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen gradient-bg flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen mesh-gradient-bg flex items-center justify-center p-4 relative overflow-hidden noise-overlay">
+      {/* Particle constellation background */}
+      <ParticleField />
+
       {/* Ambient grid overlay */}
       <div
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        className="absolute inset-0 opacity-[0.02] pointer-events-none"
         style={{
           backgroundImage:
             'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
+          backgroundSize: '60px 60px',
         }}
       />
 
-      {/* Background decoration — now with ambient drift */}
+      {/* Background ambient orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600/10 rounded-full blur-3xl orb-float" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl orb-float-slow" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl orb-float" />
+        <div className="absolute -top-32 -right-32 w-[500px] h-[500px] bg-indigo-600/[0.07] rounded-full blur-[100px] orb-float" />
+        <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] bg-purple-600/[0.06] rounded-full blur-[100px] orb-float-slow" />
+        <div className="absolute top-1/3 left-1/4 w-[300px] h-[300px] bg-cyan-500/[0.04] rounded-full blur-[80px] orb-float" />
+        <div className="absolute bottom-1/4 right-1/3 w-[250px] h-[250px] bg-rose-500/[0.03] rounded-full blur-[80px] orb-float-slow" />
       </div>
 
-      <div className="w-full max-w-md relative z-10 animate-fade-in-up">
-        {/* Logo / Brand */}
-        <div className="text-center mb-8 animate-fade-in-up" style={{ '--i': 0 }}>
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow mb-4 signal-pulse transition-transform duration-300 hover:scale-105 hover:rotate-3">
-            <img src="/favicon.svg" alt="CI Agent Network Logo" className="w-10 h-10 drop-shadow-md" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-1 gradient-text">
+      <div className="w-full max-w-md relative z-10 animate-spring-in">
+        {/* Character + Suitcase Animation */}
+        <div className="text-center mb-4">
+          <SuitcaseCharacter isSignup={isSignup} isSwitching={isSwitching} />
+        </div>
+
+        {/* Brand text */}
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-extrabold gradient-text-vivid font-display tracking-tight">
             Competitive Intelligence
           </h1>
-          <p className="text-dark-200 text-sm">
-            Autonomous agent network for market analysis
+          <p className="text-slate-400 text-sm mt-2 h-5 font-medium">
+            {tagline.displayed}
+            {!tagline.done && <span className="inline-block w-0.5 h-4 bg-indigo-400 ml-0.5 animate-pulse" />}
           </p>
         </div>
 
-        {/* Login Card */}
-        <div className="glass rounded-2xl p-8 glow animate-scale-in" style={{ animationDelay: '80ms' }}>
-          <h2 className="text-xl font-semibold text-white mb-6">
+        {/* Login/Signup Card */}
+        <div className="glass-card rounded-2xl p-8 neon-border animate-scale-in" style={{ animationDelay: '100ms' }}>
+          <h2 className="text-xl font-bold text-white mb-1 font-display">
             {isSignup ? 'Create your account' : 'Welcome back'}
           </h2>
+          <p className="text-xs text-slate-500 mb-6">
+            {isSignup
+              ? 'Set up your intelligence command center'
+              : 'Sign in to your intelligence dashboard'
+            }
+          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {isSignup && (
               <div className="animate-fade-in-up">
-                <label
-                  htmlFor="name"
-                  className="block text-sm font-medium text-dark-100 mb-1.5"
-                >
+                <label htmlFor="name" className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
                   Full Name
                 </label>
                 <input
@@ -91,16 +227,13 @@ export default function LoginPage() {
                   onChange={(e) => setName(e.target.value)}
                   required={isSignup}
                   placeholder="John Doe"
-                  className="w-full px-4 py-3 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+                  className="w-full px-4 py-3 bg-white/[0.03] rounded-xl text-white placeholder-slate-600 text-sm input-glow transition-all duration-300"
                 />
               </div>
             )}
 
             <div className="stagger-item" style={{ '--i': 1 }}>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-dark-100 mb-1.5"
-              >
+              <label htmlFor="email" className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
                 Email Address
               </label>
               <input
@@ -110,15 +243,12 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="you@company.com"
-                className="w-full px-4 py-3 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+                className="w-full px-4 py-3 bg-white/[0.03] rounded-xl text-white placeholder-slate-600 text-sm input-glow transition-all duration-300"
               />
             </div>
 
             <div className="stagger-item" style={{ '--i': 2 }}>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-dark-100 mb-1.5"
-              >
+              <label htmlFor="password" className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">
                 Password
               </label>
               <div className="relative">
@@ -129,14 +259,14 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 pr-11 bg-dark-700/50 border border-dark-400/30 rounded-xl text-white placeholder-dark-300 focus:border-primary-500/50 focus:ring-2 focus:ring-primary-500/20 transition-all duration-200"
+                  className="w-full px-4 py-3 pr-11 bg-white/[0.03] rounded-xl text-white placeholder-slate-600 text-sm input-glow transition-all duration-300"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 hover:text-primary-400 transition-colors duration-200"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400 transition-colors duration-200"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -144,9 +274,9 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 animate-scale-in">
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 animate-scale-in">
                 <svg
-                  className="w-4 h-4 text-red-400 flex-shrink-0"
+                  className="w-4 h-4 text-rose-400 flex-shrink-0"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -158,14 +288,14 @@ export default function LoginPage() {
                     d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
                   />
                 </svg>
-                <span className="text-sm text-red-300">{error}</span>
+                <span className="text-sm text-rose-300">{error}</span>
               </div>
             )}
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-primary-500/20 hover:shadow-primary-500/40"
+              className="w-full py-3.5 px-4 btn-gradient rounded-xl text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -182,11 +312,9 @@ export default function LoginPage() {
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => {
-                setIsSignup(!isSignup);
-                setError('');
-              }}
-              className="text-sm text-dark-200 hover:text-primary-400 transition-colors duration-200"
+              onClick={handleToggleMode}
+              disabled={isSwitching}
+              className="text-sm text-slate-400 hover:text-indigo-400 transition-colors duration-200 disabled:opacity-50"
             >
               {isSignup
                 ? 'Already have an account? Sign in'
@@ -195,9 +323,26 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Trust Indicators */}
+        <div className="mt-6 flex items-center justify-center gap-6 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
+          {[
+            { icon: Bot, label: 'AI Agents' },
+            { icon: Shield, label: 'Encrypted' },
+            { icon: Zap, label: 'Real-time' },
+            { icon: Globe, label: 'Global Intel' },
+          ].map(({ icon: Icon, label }) => (
+            <div key={label} className="flex flex-col items-center gap-1 group">
+              <div className="p-2 rounded-lg bg-white/[0.03] border border-white/[0.04] group-hover:border-indigo-500/20 transition-all duration-300 group-hover:bg-white/[0.05]">
+                <Icon className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors" />
+              </div>
+              <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">{label}</span>
+            </div>
+          ))}
+        </div>
+
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-dark-300">
-          Powered by autonomous AI agents
+        <p className="mt-4 text-center text-[11px] text-slate-600">
+          Powered by autonomous AI agents • Multi-agent orchestration
         </p>
       </div>
     </div>

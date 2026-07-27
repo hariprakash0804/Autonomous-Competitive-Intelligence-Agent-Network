@@ -1,63 +1,97 @@
-import React from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { DollarSign, Tag, Info } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
+import { DollarSign, Tag, Info, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function PriceTimeline({ priceHistory, competitorName }) {
   if (!Array.isArray(priceHistory) || priceHistory.length === 0) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[300px] animate-fade-in-up">
-        <DollarSign className="w-10 h-10 text-slate-700 mb-2" />
-        <h3 className="text-slate-300 font-semibold text-sm">No Price Movement Data Yet</h3>
-        <p className="text-xs text-slate-500 text-center max-w-sm mt-1">
-          Trigger an Agent Pipeline run on {competitorName || 'this competitor'} to extract pricing snapshots and diffs.
+      <div className="glass-card rounded-2xl p-8 neon-border flex flex-col items-center justify-center min-h-[300px] animate-fade-in-up">
+        <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mb-3">
+          <DollarSign className="w-7 h-7 text-slate-700" />
+        </div>
+        <h3 className="text-slate-300 font-bold text-sm font-display">No Price Movement Data</h3>
+        <p className="text-[11px] text-slate-500 text-center max-w-sm mt-1">
+          Trigger an Agent Pipeline run on {competitorName || 'this competitor'} to extract pricing snapshots.
         </p>
       </div>
     );
   }
 
+  // Compute sparkline trend
+  const prices = priceHistory.map(p => p.new_price || 0);
+  const maxPrice = Math.max(...prices);
+  const minPrice = Math.min(...prices);
+  const latestPrice = prices[prices.length - 1];
+  const firstPrice = prices[0];
+  const trend = latestPrice >= firstPrice ? 'up' : 'down';
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4 animate-fade-in-up">
+    <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-400" /> Pricing & Tier History
+          <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display">
+            <div className="p-1.5 rounded-lg bg-emerald-500/10">
+              <DollarSign className="w-4 h-4 text-emerald-400" />
+            </div>
+            Pricing & Tier History
           </h2>
-          <p className="text-xs text-slate-400">
-            Detected plan tiers and baseline pricing for <span className="text-indigo-400 font-medium">{competitorName}</span>
+          <p className="text-[10px] text-slate-500 mt-0.5">
+            Detected tiers for <span className="text-indigo-400 font-medium">{competitorName}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700">
-            <span className="w-2 h-2 rounded-full bg-slate-400"></span> Baseline Initial Price
-          </span>
-          <span className="inline-flex items-center gap-1 bg-emerald-950 text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-800">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Genuine Price Change
-          </span>
+        <div className="flex items-center gap-3">
+          {/* Trend indicator */}
+          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
+            trend === 'up'
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+              : 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+          }`}>
+            {trend === 'up' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            ${latestPrice}
+          </div>
+
+          <div className="flex items-center gap-2 text-[10px]">
+            <span className="inline-flex items-center gap-1 bg-white/[0.03] text-slate-400 px-2 py-1 rounded-lg border border-white/[0.05]">
+              <span className="w-2 h-2 rounded-full bg-slate-500" /> Baseline
+            </span>
+            <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/10">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Changed
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Recharts Chart */}
+      {/* Chart */}
       <div className="h-[220px] w-full pt-2">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={priceHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="tier_name" stroke="#64748b" fontSize={11} />
-            <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => `$${value}`} />
+            <defs>
+              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#818cf8" stopOpacity={1} />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity={0.6} />
+              </linearGradient>
+              <linearGradient id="barGradientChanged" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#34d399" stopOpacity={1} />
+                <stop offset="100%" stopColor="#10b981" stopOpacity={0.6} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+            <XAxis dataKey="tier_name" stroke="#475569" fontSize={10} tick={{ fill: '#64748b' }} />
+            <YAxis stroke="#475569" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(value) => `$${value}`} />
             <Tooltip
-              cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
+              cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
               content={({ active, payload }) => {
                 if (active && Array.isArray(payload) && payload.length > 0) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">
-                      <p className="font-bold text-slate-100">{data.tier_name}</p>
-                      <p className="text-emerald-400 font-semibold">New Price: ${data.new_price}</p>
+                    <div className="glass-card p-3 rounded-xl shadow-2xl text-xs space-y-1 animate-scale-in border border-white/[0.06]">
+                      <p className="font-bold text-white font-display">{data.tier_name}</p>
+                      <p className="text-emerald-400 font-semibold">${data.new_price}</p>
                       {data.is_baseline ? (
-                        <p className="text-slate-400 italic">Type: Initial Baseline Price</p>
+                        <p className="text-slate-500 italic text-[10px]">Initial Baseline</p>
                       ) : (
-                        <p className="text-amber-400 font-medium">
-                          Old Price: ${data.old_price} (Changed {data.formatted_date})
+                        <p className="text-amber-400 text-[10px]">
+                          Changed from ${data.old_price} • {data.formatted_date}
                         </p>
                       )}
                     </div>
@@ -68,37 +102,40 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
             />
             <Bar
               dataKey="new_price"
-              fill="#6366f1"
-              radius={[4, 4, 0, 0]}
-              animationDuration={700}
+              radius={[6, 6, 0, 0]}
+              animationDuration={800}
               animationEasing="ease-out"
-            />
+            >
+              {priceHistory.map((entry, index) => (
+                <Cell key={index} fill={entry.is_baseline ? 'url(#barGradient)' : 'url(#barGradientChanged)'} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Detailed Table showing Baseline distinction */}
-      <div className="border-t border-slate-800 pt-3">
-        <h4 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1">
-          <Tag className="w-3.5 h-3.5 text-indigo-400" /> Extracted Pricing Records
+      {/* Pricing Records */}
+      <div className="border-t border-white/[0.04] pt-3">
+        <h4 className="text-[10px] font-semibold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-wider">
+          <Tag className="w-3 h-3 text-indigo-400" /> Extracted Records
         </h4>
         <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
           {(Array.isArray(priceHistory) ? priceHistory : []).map((item, idx) => (
             <div
               key={item.id}
               style={{ '--i': idx }}
-              className="stagger-item flex items-center justify-between bg-slate-800/40 hover:bg-slate-800 px-3 py-2 rounded-lg text-xs transition-colors duration-150"
+              className="stagger-item flex items-center justify-between bg-white/[0.02] hover:bg-white/[0.04] px-3 py-2.5 rounded-xl text-xs transition-all duration-200 border border-white/[0.03]"
             >
               <span className="font-medium text-slate-200">{item.tier_name}</span>
               <div className="flex items-center gap-3">
-                <span className="text-slate-100 font-semibold">${item.new_price}</span>
+                <span className="text-white font-bold counter-number">${item.new_price}</span>
                 {item.is_baseline ? (
-                  <span className="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
-                    <Info className="w-3 h-3 text-slate-400" /> Baseline Initial
+                  <span className="bg-white/[0.04] text-slate-500 text-[10px] px-2 py-0.5 rounded-lg border border-white/[0.06] flex items-center gap-1">
+                    <Info className="w-3 h-3" /> Baseline
                   </span>
                 ) : (
-                  <span className="bg-amber-950 text-amber-300 text-[10px] px-2 py-0.5 rounded border border-amber-800 font-medium">
-                    Changed from ${item.old_price}
+                  <span className="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/10 font-medium">
+                    ← ${item.old_price}
                   </span>
                 )}
               </div>

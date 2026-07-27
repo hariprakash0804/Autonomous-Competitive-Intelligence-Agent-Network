@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 
+import Sidebar from '../components/Sidebar';
 import CompetitorList from '../components/CompetitorList';
 import PriceTimeline from '../components/PriceTimeline';
 import SentimentChart from '../components/SentimentChart';
@@ -11,8 +12,35 @@ import ChatWidget from '../components/ChatWidget';
 import ReportsPanel from '../components/ReportsPanel';
 import ComparativeMatrix from '../components/ComparativeMatrix';
 
-import { Bot, LogOut, Plus, Sparkles, Building2, TrendingUp, BarChart2, User, AlertCircle, LayoutDashboard } from 'lucide-react';
+import {
+  LogOut, Plus, Sparkles, Building2, 
+  AlertCircle, LayoutDashboard, Globe, FileText, Activity,
+  DollarSign, Clock
+} from 'lucide-react';
 
+/* ────────────────────────────────────────────
+   Live Clock
+   ──────────────────────────────────────────── */
+function LiveClock() {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const h = time.getHours().toString().padStart(2, '0');
+  const m = time.getMinutes().toString().padStart(2, '0');
+  const s = time.getSeconds().toString().padStart(2, '0');
+  return (
+    <span className="font-mono-data text-xs text-slate-400 flex items-center gap-0.5">
+      <Clock className="w-3 h-3 text-slate-500" />
+      {h}<span className="clock-separator">:</span>{m}<span className="clock-separator">:</span>{s}
+    </span>
+  );
+}
+
+/* ════════════════════════════════════════════
+   DASHBOARD PAGE
+   ════════════════════════════════════════════ */
 export default function DashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -147,124 +175,233 @@ export default function DashboardPage() {
   const selectedCompetitor = Array.isArray(competitors) ? competitors.find((c) => c.id === selectedCompId) : null;
   const latestReport = Array.isArray(reports) && reports.length > 0 ? reports[0] : null;
 
+  // KPI data
+  const totalCompetitors = competitors.length;
+  const totalReports = reports.length;
+  const avgSentiment = sentimentHistory.length > 0
+    ? (sentimentHistory.reduce((s, h) => s + (h.score || 0), 0) / sentimentHistory.length).toFixed(2)
+    : '—';
+  const totalPriceChanges = priceHistory.filter(p => !p.is_baseline).length;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="CI Agent Network Logo" className="w-9 h-9 rounded-xl shadow-lg shadow-indigo-600/30 signal-pulse" />
-            <div>
-              <h1 className="text-base font-bold text-slate-100 leading-tight">
-                Autonomous Competitive Intelligence
-              </h1>
-              <p className="text-[11px] text-slate-400">Agent Network Platform</p>
+    <div className="min-h-screen bg-[#050507] text-slate-100 flex font-sans noise-overlay">
+      {/* Sidebar */}
+      <Sidebar onToggleChat={() => setShowChat(!showChat)} />
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+        {/* Top Navbar */}
+        <header className="bg-[#08080f]/70 backdrop-blur-xl border-b border-white/[0.04] sticky top-0 z-30">
+          <div className="px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <h1 className="text-sm font-bold text-white font-display flex items-center gap-2">
+                  <LayoutDashboard className="w-4 h-4 text-indigo-400" />
+                  Intelligence Dashboard
+                </h1>
+                <p className="text-[10px] text-slate-500">Real-time competitive analysis command center</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <LiveClock />
+
+              <div className="h-4 w-px bg-white/[0.06]" />
+
+              <button
+                onClick={() => setShowChat(!showChat)}
+                className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-300 hover:scale-[1.03] active:scale-95 ${
+                  showChat
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25'
+                    : 'bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20'
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                RAG Chat
+                {!showChat && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 badge-pulse" />
+                )}
+              </button>
+
+              <div className="h-4 w-px bg-white/[0.06]" />
+
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold shadow-lg shadow-indigo-600/20">
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <span className="text-xs text-slate-300 font-medium hidden sm:block">
+                  {user?.name || user?.email}
+                </span>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all duration-200"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
+        </header>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('/profile')}
-              className="underline-grow flex items-center gap-1.5 text-xs text-slate-300 hover:text-indigo-400 font-semibold px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition-all duration-200"
-            >
-              <User className="w-3.5 h-3.5 text-indigo-400" /> User Profile & Targets
-            </button>
-
-            <button
-              onClick={() => setShowChat(!showChat)}
-              className="flex items-center gap-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-200 hover:scale-[1.03] active:scale-95"
-            >
-              <Sparkles className="w-4 h-4 text-indigo-400" /> RAG AI Assistant
-            </button>
-
-            <div className="h-4 w-px bg-slate-800" />
-
-            <span className="text-xs text-slate-300 font-medium">
-              {user?.name || user?.email}
-            </span>
-
-            <button
-              onClick={handleLogout}
-              title="Sign Out"
-              className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-all duration-200 hover:scale-110"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+        {/* Aurora Effect */}
+        <div className="relative">
+          <div className="absolute top-0 left-0 right-0 h-[120px] bg-gradient-to-b from-indigo-500/[0.03] via-purple-500/[0.02] to-transparent pointer-events-none" />
         </div>
-      </header>
 
-      {/* Main Dashboard Layout */}
-      <main className="max-w-7xl mx-auto px-6 py-8 flex-1 space-y-6 w-full">
-        {/* Active Pipeline Run Status Poller */}
-        {activeRunId && (
-          <AgentRunStatus runId={activeRunId} onComplete={handleRunComplete} />
-        )}
+        {/* Main Dashboard Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+            {/* Welcome Banner + KPIs */}
+            <div className="animate-fade-in-up">
+              {/* Welcome */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-xl font-bold text-white font-display">
+                    Welcome back, <span className="gradient-text-vivid">{user?.name || 'Agent'}</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">Your competitive intelligence overview at a glance</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setAddError('');
+                    setNewCompanyUrl(user?.company_url || '');
+                    setShowAddModal(true);
+                  }}
+                  className="flex items-center gap-2 btn-gradient px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-indigo-600/20"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Competitor
+                </button>
+              </div>
 
-        {/* Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Tracked Competitor List */}
-          <div className="lg:col-span-1 space-y-6 stagger-item" style={{ '--i': 0 }}>
-            <CompetitorList
-              competitors={competitors}
-              selectedId={selectedCompId}
-              onSelect={setSelectedCompId}
-              onRunPipeline={handleTriggerPipeline}
-              onOpenChat={(id) => {
-                setSelectedCompId(id);
-                setShowChat(true);
-              }}
-              onAddCompetitor={() => {
-                setAddError('');
-                setNewCompanyUrl(user?.company_url || '');
-                setShowAddModal(true);
-              }}
-              onDeleteCompetitor={handleDeleteCompetitor}
-            />
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="kpi-card kpi-indigo card-3d">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-indigo-500/10">
+                      <Globe className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Competitors</span>
+                  </div>
+                  <p className="text-2xl font-bold text-white counter-number">{totalCompetitors}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Active targets tracked</p>
+                </div>
+
+                <div className="kpi-card kpi-emerald card-3d">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-emerald-500/10">
+                      <FileText className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Reports</span>
+                  </div>
+                  <p className="text-2xl font-bold text-white counter-number">{totalReports}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Intelligence briefs</p>
+                </div>
+
+                <div className="kpi-card kpi-violet card-3d">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-violet-500/10">
+                      <Activity className="w-4 h-4 text-violet-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Avg Sentiment</span>
+                  </div>
+                  <p className="text-2xl font-bold text-white counter-number">{avgSentiment}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">VADER compound score</p>
+                </div>
+
+                <div className="kpi-card kpi-amber card-3d">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-2 rounded-lg bg-amber-500/10">
+                      <DollarSign className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Price Changes</span>
+                  </div>
+                  <p className="text-2xl font-bold text-white counter-number">{totalPriceChanges}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Detected movements</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Pipeline Run Status Poller */}
+            {activeRunId && (
+              <AgentRunStatus runId={activeRunId} onComplete={handleRunComplete} />
+            )}
+
+            {/* Section Divider */}
+            <div className="section-divider text-[10px] font-semibold text-slate-600 uppercase tracking-widest">
+              Intelligence Analysis
+            </div>
+
+            {/* Dashboard Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Column: Tracked Competitor List */}
+              <div className="lg:col-span-1 space-y-6 stagger-item" style={{ '--i': 0 }}>
+                <CompetitorList
+                  competitors={competitors}
+                  selectedId={selectedCompId}
+                  onSelect={setSelectedCompId}
+                  onRunPipeline={handleTriggerPipeline}
+                  onOpenChat={(id) => {
+                    setSelectedCompId(id);
+                    setShowChat(true);
+                  }}
+                  onAddCompetitor={() => {
+                    setAddError('');
+                    setNewCompanyUrl(user?.company_url || '');
+                    setShowAddModal(true);
+                  }}
+                  onDeleteCompetitor={handleDeleteCompetitor}
+                />
+              </div>
+
+              {/* Right Column: Intelligence Panels */}
+              <div className="lg:col-span-2 space-y-6 stagger-item" style={{ '--i': 1 }}>
+                <ComparativeMatrix
+                  selectedCompetitor={selectedCompetitor}
+                  userProfile={user}
+                  latestReport={latestReport}
+                />
+
+                <PriceTimeline
+                  priceHistory={priceHistory}
+                  competitorName={selectedCompetitor?.name}
+                />
+
+                <SentimentChart
+                  sentimentHistory={sentimentHistory}
+                  competitorName={selectedCompetitor?.name}
+                />
+
+                <ReportsPanel selectedCompetitorId={selectedCompId} />
+              </div>
+            </div>
           </div>
-
-          {/* Right Column: Comparative Intelligence Matrix & Recharts Visualizations */}
-          <div className="lg:col-span-2 space-y-6 stagger-item" style={{ '--i': 1 }}>
-            {/* Side-by-side Advantages/Disadvantages Comparative Matrix */}
-            <ComparativeMatrix
-              selectedCompetitor={selectedCompetitor}
-              userProfile={user}
-              latestReport={latestReport}
-            />
-
-            <PriceTimeline
-              priceHistory={priceHistory}
-              competitorName={selectedCompetitor?.name}
-            />
-
-            <SentimentChart
-              sentimentHistory={sentimentHistory}
-              competitorName={selectedCompetitor?.name}
-            />
-
-            <ReportsPanel selectedCompetitorId={selectedCompId} />
-          </div>
-        </div>
-      </main>
+        </main>
+      </div>
 
       {/* Dual-URL Add Competitor Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-scale-in" style={{ animationDuration: '0.2s' }}>
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-slide-up-panel">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-indigo-400" /> Add Dual-URL Competitor Target
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-scale-in" style={{ animationDuration: '0.25s' }}>
+          <div className="glass-card rounded-2xl max-w-md w-full p-6 neon-border shadow-2xl space-y-4 animate-spring-in">
+            <div className="flex items-center justify-between border-b border-white/[0.04] pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2 font-display">
+                <div className="p-1.5 rounded-lg bg-indigo-500/10">
+                  <Building2 className="w-4 h-4 text-indigo-400" />
+                </div>
+                Add Competitor Target
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-200 transition-transform duration-200 hover:rotate-90"
+                className="text-slate-500 hover:text-slate-200 transition-all duration-200 hover:rotate-90 p-1"
               >
                 ✕
               </button>
             </div>
 
             {addError && (
-              <div className="p-3 bg-rose-950/60 border border-rose-500/30 text-rose-300 rounded-xl text-xs flex items-center gap-2 animate-scale-in">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center gap-2 animate-scale-in">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{addError}</span>
               </div>
@@ -272,7 +409,7 @@ export default function DashboardPage() {
 
             <form onSubmit={handleAddCompetitorSubmit} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-400 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
                   Competitor Name *
                 </label>
                 <input
@@ -281,12 +418,12 @@ export default function DashboardPage() {
                   value={newCompName}
                   onChange={(e) => setNewCompName(e.target.value)}
                   placeholder="e.g. Stripe, Linear, Vercel"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-400 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
                   URL 1: Your Company URL
                 </label>
                 <input
@@ -294,12 +431,12 @@ export default function DashboardPage() {
                   value={newCompanyUrl}
                   onChange={(e) => setNewCompanyUrl(e.target.value)}
                   placeholder="https://mycompany.com"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">
+                <label className="block text-slate-400 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
                   URL 2: Competitor Pricing URL
                 </label>
                 <input
@@ -307,7 +444,7 @@ export default function DashboardPage() {
                   value={newPricingUrl}
                   onChange={(e) => setNewPricingUrl(e.target.value)}
                   placeholder="https://competitor.com/pricing"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all duration-200"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
                 />
               </div>
 
@@ -315,14 +452,14 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all duration-200"
+                  className="px-4 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 rounded-xl transition-all duration-200 font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingAdd}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-all duration-200 hover:scale-[1.03] active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
+                  className="px-4 py-2.5 btn-gradient rounded-xl transition-all duration-200 text-xs disabled:opacity-50 disabled:hover:scale-100"
                 >
                   {submittingAdd ? 'Adding...' : 'Save Competitor'}
                 </button>

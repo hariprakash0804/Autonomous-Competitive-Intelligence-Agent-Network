@@ -143,10 +143,20 @@ def clean_html(html_content: str) -> str:
         except Exception:
             return ""
 
-    for tag in soup(["script", "style", "noscript", "svg", "header", "footer", "nav", "iframe"]):
+    for tag in soup([
+        "script", "style", "noscript", "svg", "header", "footer", "nav",
+        "iframe", "template", "code", "pre", "symbol", "canvas", "object",
+        "embed", "link", "meta", "form", "button", "input", "select", "textarea"
+    ]):
         tag.decompose()
 
     text = soup.get_text(separator=" ", strip=True)
+
+    # Strip residual inline JSON, JS variable declarations, and CSS rules
+    text = re.sub(r"\{\s*\"[^\"]+\"\s*:\s*[^}]+\}", " ", text)
+    text = re.sub(r"\b(?:var|const|let)\s+[a-zA-Z0-9_$]+\s*=\s*[^;]+;", " ", text)
+    text = re.sub(r"\bfunction\s*\([^)]*\)\s*\{[^}]*\}", " ", text)
+    text = re.sub(r"\.[a-zA-Z0-9_-]+\s*\{[^}]*\}", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 

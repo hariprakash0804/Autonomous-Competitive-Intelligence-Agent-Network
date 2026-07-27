@@ -53,7 +53,9 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
                   return (
                     <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">
                       <p className="font-bold text-slate-100">Date: {data.formatted_date}</p>
-                      <p className="text-emerald-400 font-semibold">Sentiment Score: {data.score}</p>
+                      <p className="text-emerald-400 font-semibold">
+                        Sentiment Score: {data.score} {data.score > 0.05 ? '(Positive)' : data.score < -0.05 ? '(Negative)' : '(Neutral)'}
+                      </p>
                       <p className="text-slate-400">Source: {data.source_type}</p>
                       {Array.isArray(data?.topics) && data.topics.length > 0 && (
                         <p className="text-slate-300">Topics: {data.topics.join(', ')}</p>

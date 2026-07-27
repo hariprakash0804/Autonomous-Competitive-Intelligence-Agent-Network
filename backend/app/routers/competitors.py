@@ -290,14 +290,24 @@ def get_sentiment_history(
         .order_by(SentimentScore.scored_at.asc())
     ).all()
 
-    return [
-        {
+    from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
+
+    results = []
+    for ss in scores:
+        clean_topics = [
+            t for t in (ss.topics or [])
+            if t and t.lower() not in STOP_WORDS and _is_valid_topic_word(t)
+        ]
+        if not clean_topics:
+            clean_topics = ["overview", "features", "pricing", "platform"]
+
+        results.append({
             "id": str(ss.id),
             "score": ss.score,
             "source_type": ss.source_type,
-            "topics": ss.topics or [],
+            "topics": clean_topics,
             "scored_at": ss.scored_at.isoformat(),
             "formatted_date": ss.scored_at.strftime("%b %d, %H:%M"),
-        }
-        for ss in scores
-    ]
+        })
+
+    return results

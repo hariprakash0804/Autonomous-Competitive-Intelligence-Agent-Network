@@ -8,27 +8,105 @@ from app.config import settings
 
 analyzer = SentimentIntensityAnalyzer()
 
-# Common English stop words for quick topic extraction
+# Expanded English stop words + HTML/CSS/JS code noise terms
 STOP_WORDS = {
+    # English filler & stop words
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "with",
     "by", "about", "against", "between", "into", "through", "during", "before",
-    "after", "above", "below", "from", "up", "down", "in", "out", "on", "off",
-    "over", "under", "again", "further", "then", "once", "here", "there", "when",
-    "where", "why", "how", "all", "any", "both", "each", "few", "more", "most",
-    "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
-    "than", "too", "very", "s", "t", "can", "will", "just", "don", "should",
-    "now", "is", "was", "are", "were", "have", "has", "had", "this", "that",
-    "these", "those", "be", "been", "being", "it", "its", "our", "you", "your",
-    "we", "they", "them", "their", "more", "also", "new", "using", "use"
+    "after", "above", "below", "from", "up", "down", "out", "off", "over", "under",
+    "again", "further", "then", "once", "here", "there", "when", "where", "why",
+    "how", "all", "any", "both", "each", "few", "more", "most", "other", "some",
+    "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too", "very",
+    "can", "will", "just", "should", "now", "was", "were", "have", "has", "had",
+    "this", "that", "these", "those", "be", "been", "being", "its", "our", "you",
+    "your", "we", "they", "them", "their", "also", "new", "using", "use", "make",
+    "made", "get", "got", "see", "seen", "take", "took", "like", "well", "way",
+    "may", "must", "might", "could", "would", "shall", "does", "done", "doing",
+    "which", "who", "whom", "whose", "what", "where", "when", "why", "how",
+
+    # Web, HTML, CSS, JS, API & minified code noise
+    "class", "classname", "style", "styles", "div", "span", "href", "http", "https",
+    "www", "com", "org", "net", "var", "let", "const", "function", "return", "null",
+    "true", "false", "undefined", "window", "document", "element", "node", "index",
+    "value", "type", "name", "data", "id", "text", "content", "page", "site", "link",
+    "main", "item", "group", "row", "col", "view", "btn", "button", "svg", "path",
+    "fill", "stroke", "display", "block", "none", "hidden", "active", "hover", "focus",
+    "transition", "transform", "opacity", "zindex", "align", "justify", "center",
+    "top", "bottom", "left", "right", "auto", "inherit", "initial", "unset", "px",
+    "rem", "em", "vh", "vw", "max", "min", "width", "height", "script", "noscript",
+    "header", "footer", "nav", "iframe", "code", "pre", "menu", "section", "article",
+    "body", "head", "meta", "title", "link", "input", "form", "select", "option",
+    "label", "textarea", "table", "tbody", "thead", "tr", "td", "th", "ul", "ol",
+    "li", "img", "src", "alt", "flex", "grid", "border", "color", "background",
+    "margin", "padding", "font", "size", "overflow", "cursor", "pointer", "relative",
+    "absolute", "fixed", "sticky", "sans", "serif", "mono", "solid", "dotted", "dashed",
+    "rounded", "shadow", "radius", "family", "weight", "bold", "normal", "italic",
+    "important", "media", "query", "charset", "import", "export", "default", "module",
+    "require", "async", "await", "object", "array", "string", "number", "boolean",
+    "promise", "catch", "finally", "throw", "try", "error", "event", "target", "click",
+    "change", "submit", "load", "cookie", "cookies", "cache", "token", "session"
 }
+
+# Recognized 3-letter technical/business terms allowed as topics
+VALID_3_LETTER_WORDS = {
+    "api", "app", "web", "dev", "pro", "pay", "tax", "b2b", "cpu", "gpu", "saas",
+    "doc", "sdk", "bot", "ai", "ml", "db", "sql", "git", "hub", "log", "run", "opt",
+    "cli", "gui", "ops", "sec", "key", "url", "uri", "ip", "dns", "ssl", "tls"
+}
+
+VOWELS = set("aeiouy")
+
+
+def _is_valid_topic_word(word: str) -> bool:
+    """
+    Validates whether a word is a real, meaningful topic vs minified JS code or gibberish.
+    Checks vowel presence, length constraints, and repeating/consonant cluster patterns.
+    """
+    w = word.lower().strip()
+    if not w or len(w) < 3 or not w.isalpha():
+        return False
+
+    if len(w) == 3 and w not in VALID_3_LETTER_WORDS:
+        return False
+
+    # Must contain at least one vowel
+    if not any(char in VOWELS for char in w):
+        return False
+
+    # Check for repeating character triples (e.g. 'aaa')
+    if re.search(r"(.)\1\1", w):
+        return False
+
+    # Check for 4+ consecutive consonants (minified variable or hash string)
+    consonant_cluster = re.search(r"[bcdfghjklmnpqrstvwxz]{4,}", w)
+    if consonant_cluster and w not in {"strength", "length"}:
+        return False
+
+    return True
 
 
 def extract_key_topics(text: str, top_n: int = 5) -> List[str]:
-    """Extracts top non-stopword keywords/topics from text."""
+    """
+    Extracts top non-stopword, meaningful keywords/topics from text.
+    Strictly filters out minified JS code, CSS classes, HTML noise, and gibberish.
+    """
+    if not text:
+        return ["overview", "features", "pricing", "platform"]
+
     words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
-    filtered = [w for w in words if w not in STOP_WORDS]
-    counts = Counter(filtered)
-    return [word for word, _ in counts.most_common(top_n)]
+    valid_words = [
+        w for w in words
+        if w not in STOP_WORDS and _is_valid_topic_word(w)
+    ]
+
+    counts = Counter(valid_words)
+    extracted = [word for word, count in counts.most_common(top_n)]
+
+    # Fallback to sensible defaults if no clean topics could be extracted
+    if not extracted:
+        return ["overview", "features", "pricing", "platform"]
+
+    return extracted
 
 
 def _vader_sentiment(text: str) -> Dict[str, Any]:

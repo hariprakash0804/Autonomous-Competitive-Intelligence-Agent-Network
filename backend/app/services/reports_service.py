@@ -159,28 +159,38 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
 
 
 def _clean_latin1(text: str) -> str:
-    """Replaces Unicode characters outside Latin-1 with ASCII equivalents for FPDF."""
+    """Replaces Unicode characters, non-breaking hyphens, dashes, and HTML breaks with clean ASCII equivalents for FPDF."""
     if not text:
         return ""
+    text = re.sub(r"<br\s*/?>", "\n  - ", text, flags=re.IGNORECASE)
     replacements = {
-        "\u2022": "-",
+        "\u00a0": " ",
+        "\u202f": " ",
+        "\u2007": " ",
+        "\u200b": "",
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
         "\u2013": "-",
         "\u2014": "--",
-        "\u201c": '"',
-        "\u201d": '"',
+        "\u2015": "--",
+        "\u2212": "-",
         "\u2018": "'",
         "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2022": "-",
         "\u2026": "...",
     }
     for orig, repl in replacements.items():
         text = text.replace(orig, repl)
-    return text.encode("latin-1", "replace").decode("latin-1")
+    return text.encode("latin-1", "ignore").decode("latin-1")
 
 
 def render_pdf_report(report_id: str, competitor_name: str, markdown_content: str) -> str:
     """
     Renders a Markdown report into a downloadable PDF document using fpdf2.
-    Supports headings, bullet lists, markdown tables, and body text cleanly.
+    Supports headings, bullet lists, native multi-column PDF tables, and clean typography.
     """
     from fpdf import FPDF
 
@@ -196,7 +206,7 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
         # Title Header
         pdf.set_font("Helvetica", "B", 16)
         pdf.set_text_color(99, 102, 241)  # Indigo
-        pdf.cell(0, 10, _clean_latin1(f"Competitive Intelligence Report"), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 10, _clean_latin1("Competitive Intelligence Executive Report"), new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 12)
         pdf.set_text_color(100, 116, 139)  # Slate
         pdf.cell(0, 6, _clean_latin1(f"Target: {competitor_name}"), new_x="LMARGIN", new_y="NEXT")
@@ -210,11 +220,58 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
         pdf.ln(4)
 
         lines = markdown_content.split("\n")
+        i = 0
 
-        for line in lines:
+        while i < len(lines):
+            line = lines[i]
             stripped = line.strip()
+
             if not stripped or stripped == "---":
                 pdf.ln(2)
+                i += 1
+                continue
+
+            # Process Markdown Table block
+            if stripped.startswith("|") and stripped.endswith("|"):
+                table_lines = []
+                while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
+                    table_lines.append(lines[i].strip())
+                    i += 1
+
+                if table_lines:
+                    rows = []
+                    for tl in table_lines:
+                        cells = [c.strip() for c in tl.split("|")[1:-1]]
+                        if not all(c.startswith("-") for c in cells):
+                            rows.append(cells)
+
+                    if rows:
+                        if pdf.get_y() > 220:
+                            pdf.add_page()
+                        pdf.ln(2)
+                        pdf.set_font("Helvetica", "", 8.5)
+                        pdf.set_text_color(30, 41, 59)
+
+                        num_cols = max(len(r) for r in rows)
+                        if num_cols == 3:
+                            col_w = (35, 72, 73)
+                        elif num_cols == 2:
+                            col_w = (50, 130)
+                        else:
+                            col_w = tuple([int(180 / max(1, num_cols))] * num_cols)
+
+                        try:
+                            with pdf.table(col_widths=col_w, text_align="LEFT", line_height=4.5) as table:
+                                for r_idx, row_cells in enumerate(rows):
+                                    row = table.row()
+                                    for c_idx, cell_text in enumerate(row_cells):
+                                        clean_cell = _clean_latin1(cell_text.replace("**", ""))
+                                        row.cell(clean_cell)
+                        except Exception as t_err:
+                            print(f"[PDF Table Fallback] {t_err}")
+                            for row_cells in rows:
+                                pdf.multi_cell(pdf.epw, 5, _clean_latin1(" | ".join(row_cells).replace("**", "")))
+                        pdf.ln(3)
                 continue
 
             if pdf.get_y() > 250:
@@ -223,16 +280,6 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
             pdf.set_x(15)
             display_text = _clean_latin1(stripped.replace("**", "").replace("__", ""))
             epw = pdf.epw
-
-            # Handle Markdown table rows
-            if stripped.startswith("|") and stripped.endswith("|"):
-                cells = [c.strip() for c in stripped.split("|")[1:-1]]
-                if not all(c.startswith("-") for c in cells):
-                    pdf.set_font("Helvetica", "B" if ("Dimension" in display_text or "Feature" in display_text) else "", 9)
-                    pdf.set_text_color(51, 65, 85)
-                    row_str = " | ".join(cells)
-                    pdf.multi_cell(epw, 5, _clean_latin1(row_str.replace("**", "")))
-                continue
 
             if stripped.startswith("### "):
                 pdf.ln(2)
@@ -263,6 +310,8 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
                 pdf.set_text_color(51, 65, 85)
                 pdf.multi_cell(epw, 5, display_text)
 
+            i += 1
+
         # Footer
         pdf.ln(6)
         cur_y = pdf.get_y()
@@ -274,7 +323,7 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(100, 116, 139)
         pdf.cell(
-            epw, 5,
+            pdf.epw, 5,
             _clean_latin1(f"Generated by Autonomous Competitive Intelligence Agent Network  |  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"),
             align="C",
         )

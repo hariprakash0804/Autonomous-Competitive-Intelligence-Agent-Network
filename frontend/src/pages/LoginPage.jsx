@@ -423,29 +423,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-        {/* Trust Indicators */}
-        <div className="mt-6 flex items-center justify-center gap-6 animate-fade-in-up" style={{ animationDelay: '400ms' }}>
-          {[
-            { icon: Bot, label: 'AI Agents' },
-            { icon: Shield, label: 'Encrypted' },
-            { icon: Zap, label: 'Real-time' },
-            { icon: Globe, label: 'Global Intel' },
-          ].map(({ icon: Icon, label }) => (
-            <div key={label} className="flex flex-col items-center gap-1 group">
-              <div className="p-2 rounded-lg bg-white/[0.03] border border-white/[0.04] group-hover:border-indigo-500/20 transition-all duration-300 group-hover:bg-white/[0.05]">
-                <Icon className="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition-colors" />
-              </div>
-              <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <p className="mt-4 text-center text-[11px] text-slate-600">
-          Powered by autonomous AI agents • Multi-agent orchestration
-        </p>
-      </div>
-    </div>
-  );
-}

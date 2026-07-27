@@ -10,16 +10,17 @@ function SuitcaseCharacter({ isSignup, isSwitching, onSuitcaseOpen }) {
   const [hasArrived, setHasArrived] = useState(false);
 
   useEffect(() => {
-    // 2s walk-in from left to center
+    // 2s walk-in CSS animation + 100ms buffer so the animation is fully
+    // settled before the class swap (walking → arrived) happens.
     const timer = setTimeout(() => {
       setHasArrived(true);
-      // Trigger card reveal when suitcase opens
+      // Trigger card reveal once suitcase finishes opening
       setTimeout(() => {
         onSuitcaseOpen?.(true);
       }, 350);
-    }, 2000);
+    }, 2100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [onSuitcaseOpen]);
 
   const isOpening = hasArrived && !isSwitching;
   const containerClass = `character-container mt-4 mb-2 ${

@@ -7,12 +7,11 @@ from openai import OpenAI, RateLimitError, APIError
 from app.config import settings
 
 # Primary and Fallback active OpenRouter free models
-PRIMARY_FREE_MODEL = "google/gemma-4-31b-it:free"
-FALLBACK_FREE_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free"
-ALTERNATIVE_FREE_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+PRIMARY_FREE_MODEL = "google/gemma-2-9b-it:free"
+FALLBACK_FREE_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
+ALTERNATIVE_FREE_MODEL = "mistralai/mistral-7b-instruct:free"
 
 # Proactive rate-limiting: minimum delay between LLM requests
-# Pipeline makes ~1-3 LLM calls per run — 0.5s is more than sufficient to stay under 20 req/min
 MIN_REQUEST_INTERVAL_SECONDS = 0.5
 _last_request_timestamp = 0.0
 
@@ -50,7 +49,7 @@ def _get_cached_client(api_key: str) -> OpenAI:
 
 def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     """
-    Invokes OpenRouter API using OpenAI SDK with active free model.
+    Invokes OpenRouter API using OpenAI SDK with active free models pool.
     Proactively enforces a 0.5s delay and reactively catches 429 rate limits
     or API errors to automatically try fallbacks.
     Returns (response_text, actual_model_served).
@@ -61,6 +60,8 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
         PRIMARY_FREE_MODEL,
         FALLBACK_FREE_MODEL,
         ALTERNATIVE_FREE_MODEL,
+        "qwen/qwen-2.5-72b-instruct:free",
+        "deepseek/deepseek-r1:free",
     ]
     
     last_exception = None
@@ -281,8 +282,12 @@ ANSWER:"""
             print(f"[RAG LLM Error] {exc}. Falling back to deterministic RAG synthesis.")
 
     # Keyless / Fallback RAG synthesis
+    first_chunk = retrieved_chunks[0]['chunk_text'] if retrieved_chunks else "No snapshot context available."
+    first_meta = cited_snapshots[0] if cited_snapshots else {"fetched_at": "N/A", "source_type": "database"}
+    
     fallback_answer = (
-        f"Based on the snapshot content fetched on {cited_snapshots[0]['fetched_at']} ({cited_snapshots[0]['source_type']}), "
-        f"here is the information found: {retrieved_chunks[0]['chunk_text'][:300]}..."
+        f"Based on the competitive intelligence snapshot fetched on **{first_meta['fetched_at']}** ({first_meta['source_type']}), "
+        f"here is the relevant intelligence:\n\n"
+        f"{first_chunk}"
     )
     return fallback_answer, cited_snapshots

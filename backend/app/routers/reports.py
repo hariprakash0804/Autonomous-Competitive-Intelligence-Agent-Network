@@ -117,9 +117,9 @@ def get_report_pdf(
 @router.post("/deliver-slack/{report_id}")
 def deliver_slack_notification(
     report_id: uuid.UUID,
-    payload: SlackDeliverRequest,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+    payload: Optional[SlackDeliverRequest] = None,
 ):
     """Triggers Slack webhook delivery for a report."""
     report = db.get(Report, report_id)
@@ -130,7 +130,8 @@ def deliver_slack_notification(
     if not comp or comp.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    webhook_url = payload.webhook_url or os.getenv("SLACK_WEBHOOK_URL") or "https://hooks.slack.com/services/mock/test/webhook"
+    target_webhook = payload.webhook_url if payload and payload.webhook_url else None
+    webhook_url = target_webhook or os.getenv("SLACK_WEBHOOK_URL") or "https://hooks.slack.com/services/mock/test/webhook"
     backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
     html_url = f"{backend_url}/reports/{report.id}/html"
 
@@ -147,9 +148,9 @@ def deliver_slack_notification(
 @router.post("/deliver-email/{report_id}")
 def deliver_email_notification(
     report_id: uuid.UUID,
-    payload: EmailDeliverRequest,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+    payload: Optional[EmailDeliverRequest] = None,
 ):
     """Triggers 100% Free Email delivery (Gmail SMTP / Free SMTP) for a report."""
     report = db.get(Report, report_id)
@@ -160,7 +161,7 @@ def deliver_email_notification(
     if not comp or comp.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    target_email = payload.recipient_email or current_user.email
+    target_email = (payload.recipient_email if payload and payload.recipient_email else None) or current_user.email
     backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
     html_url = f"{backend_url}/reports/{report.id}/html"
 

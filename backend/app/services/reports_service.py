@@ -155,8 +155,7 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
             pdf.set_font("Helvetica", "", 10)
             pdf.set_text_color(51, 65, 85)
             bullet_text = display_text[2:]
-            pdf.cell(6)
-            pdf.multi_cell(0, 5.5, f"-  {bullet_text}")
+            pdf.multi_cell(0, 5.5, f"  -  {bullet_text}")
         elif stripped.startswith("> "):
             pdf.set_font("Helvetica", "I", 10)
             pdf.set_text_color(129, 140, 248)

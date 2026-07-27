@@ -43,7 +43,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           <BarChart data={priceHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="tier_name" stroke="#64748b" fontSize={11} />
-            <YAxis stroke="#64748b" fontSize={11} unit="$" />
+            <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => `$${value}`} />
             <Tooltip
               cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
               content={({ active, payload }) => {

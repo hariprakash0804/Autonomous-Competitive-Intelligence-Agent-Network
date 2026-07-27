@@ -67,7 +67,38 @@ def list_reports(
             "pdf_url": f"/reports/{r.id}/pdf",
         })
 
-    return results
+@router.get("/competitor/{competitor_id}")
+def get_reports_by_competitor(
+    competitor_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+):
+    """Lists all generated reports for a specific competitor target."""
+    comp = db.get(Competitor, competitor_id)
+    if not comp or comp.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
+
+    reports = db.scalars(
+        select(Report)
+        .where(Report.competitor_id == competitor_id)
+        .order_by(Report.generated_at.desc())
+    ).all()
+
+    return [
+        {
+            "id": str(r.id),
+            "competitor_id": str(r.competitor_id),
+            "competitor_name": comp.name,
+            "model_used": r.model_used or "unknown",
+            "summary": r.summary or "",
+            "generated_at": r.generated_at.isoformat(),
+            "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M UTC"),
+            "content_snippet": (r.summary or "")[:200] + "...",
+            "html_url": f"/reports/{r.id}/html",
+            "pdf_url": f"/reports/{r.id}/pdf",
+        }
+        for r in reports
+    ]
 
 
 @router.get("/{report_id}/html")

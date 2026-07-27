@@ -104,6 +104,7 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
     pdf = FPDF()
+    pdf.set_margins(15, 15, 15)
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -119,7 +120,8 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
     # Divider line
     pdf.set_draw_color(99, 102, 241)
     pdf.set_line_width(0.5)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    cur_y = pdf.get_y()
+    pdf.line(15, cur_y, 195, cur_y)
     pdf.ln(6)
 
     # Parse markdown content into lines and render
@@ -166,10 +168,12 @@ def render_pdf_report(report_id: str, competitor_name: str, markdown_content: st
             pdf.multi_cell(0, 5.5, display_text)
 
     # Footer
-    pdf.ln(12)
-    pdf.set_draw_color(99, 102, 241)
-    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-    pdf.ln(4)
+    pdf.ln(8)
+    cur_y = pdf.get_y()
+    if cur_y < 270:
+        pdf.set_draw_color(99, 102, 241)
+        pdf.line(15, cur_y, 195, cur_y)
+        pdf.ln(4)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(100, 116, 139)
     pdf.cell(

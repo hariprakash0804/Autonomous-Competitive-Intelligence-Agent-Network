@@ -102,6 +102,7 @@ function SuitcaseCharacter({ isSignup, isSwitching, onSuitcaseOpen }) {
       {/* Suitcase */}
       <div className={`suitcase ${isSwitching ? 'suitcase-switching' : ''}`}>
         <div className={`suitcase-body ${isSignup ? 'signup-case' : 'login-case'} ${isOpening ? 'suitcase-open' : ''}`}>
+          <div className="suitcase-beam" />
           <div className="suitcase-handle" />
           <div className="suitcase-lid" style={{ background: isSignup
             ? 'linear-gradient(135deg, #7c3aed, #a855f7)'

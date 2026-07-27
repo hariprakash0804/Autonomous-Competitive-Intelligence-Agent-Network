@@ -677,11 +677,11 @@ body {
   50%      { transform: rotate(-5deg); }
 }
 
-/* The character container */
+/* The character container — perfectly centered under the card */
 .character-container {
   position: relative;
-  width: 240px;
-  height: 170px;
+  width: 215px;
+  height: 165px;
   margin: 0 auto;
 }
 
@@ -704,7 +704,7 @@ body {
 .character-body {
   position: absolute;
   bottom: 4px;
-  left: 65px;
+  left: 45px;
   transform: translateX(-50%);
   z-index: 2;
 }
@@ -984,9 +984,9 @@ body {
 .suitcase {
   position: absolute;
   bottom: 4px;
-  left: 135px;
-  width: 90px;
-  height: 52px;
+  left: 105px;
+  width: 85px;
+  height: 50px;
   perspective: 500px;
   z-index: 1;
 }
@@ -1015,7 +1015,7 @@ body {
   top: -8px;
   left: 50%;
   transform: translateX(-50%);
-  width: 30px;
+  width: 28px;
   height: 10px;
   border: 3px solid rgba(255, 255, 255, 0.4);
   border-bottom: none;
@@ -1046,6 +1046,30 @@ body {
 /* Open state */
 .suitcase-open .suitcase-lid {
   transform: rotateX(-120deg);
+}
+
+/* Upward light projection beam when suitcase opens */
+.suitcase-beam {
+  position: absolute;
+  bottom: 80%;
+  left: 5%;
+  right: 5%;
+  height: 140px;
+  background: linear-gradient(to top, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.15), transparent);
+  clip-path: polygon(30% 100%, 70% 100%, 100% 0%, 0% 0%);
+  opacity: 0;
+  transition: opacity 0.6s ease 0.2s;
+  pointer-events: none;
+  z-index: 0;
+}
+.suitcase-open .suitcase-beam {
+  opacity: 1;
+  animation: beam-glow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes beam-glow {
+  0%   { opacity: 0.6; transform: scaleX(0.95); }
+  100% { opacity: 1; transform: scaleX(1.05); }
 }
 
 /* Suitcase lock */

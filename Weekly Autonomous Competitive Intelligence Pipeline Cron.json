@@ -46,7 +46,7 @@
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/pipeline/run/{{ $json['0'].id }}",
+        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/pipeline/run/{{ $json.id }}",
         "options": {},
         "headerParametersUi": {
           "parameter": [
@@ -83,7 +83,7 @@
     },
     {
       "parameters": {
-        "url": "https://autonomous-competitive-intelligence-957m.onrender.com/reports/",
+        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/reports/competitor/{{ $json.competitor_id }}",
         "options": {},
         "headerParametersUi": {
           "parameter": [
@@ -106,7 +106,7 @@
     {
       "parameters": {
         "requestMethod": "POST",
-        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/reports/deliver-slack/{{ $json[0].id }}",
+        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/reports/deliver-slack/{{ $json.id }}",
         "options": {},
         "headerParametersUi": {
           "parameter": [

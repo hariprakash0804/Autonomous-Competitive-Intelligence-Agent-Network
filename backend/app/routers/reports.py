@@ -143,6 +143,26 @@ def get_report_pdf(
     )
 
 
+def get_public_backend_url() -> str:
+    """
+    Resolves the public backend URL for external links (Slack, Email, webhooks).
+    Prioritizes public URL environment variables (WEBHOOK_URL, RENDER_EXTERNAL_URL, PUBLIC_URL, BACKEND_URL)
+    over local fallback.
+    """
+    for env_var in ["WEBHOOK_URL", "RENDER_EXTERNAL_URL", "PUBLIC_URL", "BACKEND_URL"]:
+        val = os.getenv(env_var)
+        if val and val.strip():
+            cleaned = val.strip().rstrip("/")
+            if cleaned.startswith("http://") or cleaned.startswith("https://"):
+                if "localhost" not in cleaned and "127.0.0.1" not in cleaned:
+                    return cleaned
+
+    if settings.BACKEND_URL and "localhost" not in settings.BACKEND_URL and "127.0.0.1" not in settings.BACKEND_URL:
+        return settings.BACKEND_URL.strip().rstrip("/")
+
+    return (os.getenv("BACKEND_URL") or settings.BACKEND_URL or "http://localhost:8000").strip().rstrip("/")
+
+
 @router.post("/deliver-slack/{report_id}")
 def deliver_slack_notification(
     report_id: uuid.UUID,
@@ -166,7 +186,7 @@ def deliver_slack_notification(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Slack webhook URL is missing. Provide 'webhook_url' in request payload or set SLACK_WEBHOOK_URL environment variable.",
         )
-    backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
+    backend_url = get_public_backend_url()
     html_url = f"{backend_url}/reports/{report.id}/html"
 
     res = send_slack_notification(
@@ -196,7 +216,7 @@ def deliver_email_notification(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     target_email = (payload.recipient_email if payload and payload.recipient_email else None) or current_user.email
-    backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
+    backend_url = get_public_backend_url()
     html_url = f"{backend_url}/reports/{report.id}/html"
 
     res = send_email_notification(

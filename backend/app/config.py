@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     LLM_PROVIDER: Optional[str] = None
     LLM_API_KEY: Optional[str] = None
 
+    # HuggingFace Inference API (free tier for embeddings)
+    HF_API_TOKEN: Optional[str] = None
+
+    # Vector Store: "auto" | "hash" | "hf_api"
+    VECTOR_STORE_MODE: Optional[str] = "auto"
+
     # LangSmith (optional)
     LANGSMITH_API_KEY: Optional[str] = None
     LANGSMITH_PROJECT: Optional[str] = "competitive-intel"

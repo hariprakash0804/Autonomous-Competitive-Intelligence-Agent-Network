@@ -1,7 +1,10 @@
 import re
+import json
 from collections import Counter
 from typing import Dict, Any, List
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+
+from app.config import settings
 
 analyzer = SentimentIntensityAnalyzer()
 
@@ -28,17 +31,8 @@ def extract_key_topics(text: str, top_n: int = 5) -> List[str]:
     return [word for word, _ in counts.most_common(top_n)]
 
 
-def sentiment_score(text: str) -> Dict[str, Any]:
-    """
-    Computes VADER sentiment score (-1.0 to 1.0) and extracts key topics.
-    Returns:
-      {
-        "score": float (compound),
-        "topics": list[str],
-        "sentiment_category": "positive" | "neutral" | "negative",
-        "raw_scores": dict
-      }
-    """
+def _vader_sentiment(text: str) -> Dict[str, Any]:
+    """Fast local VADER-based sentiment analysis (no API calls)."""
     if not text or len(text.strip()) == 0:
         return {
             "score": 0.0,
@@ -47,7 +41,6 @@ def sentiment_score(text: str) -> Dict[str, Any]:
             "raw_scores": {"neg": 0.0, "neu": 1.0, "pos": 0.0, "compound": 0.0},
         }
 
-    # Truncate text for analysis if excessively long to keep execution fast
     sample_text = text[:5000]
     scores = analyzer.polarity_scores(sample_text)
     compound = round(scores["compound"], 4)
@@ -67,3 +60,90 @@ def sentiment_score(text: str) -> Dict[str, Any]:
         "sentiment_category": category,
         "raw_scores": scores,
     }
+
+
+def _llm_sentiment(text: str) -> Dict[str, Any]:
+    """
+    LLM-powered deep sentiment analysis using OpenRouter.
+    Provides richer topic extraction, nuanced sentiment scoring, and competitive insights.
+    Falls back to VADER if LLM is unavailable.
+    """
+    from app.services.llm import call_openrouter
+
+    api_key = settings.LLM_API_KEY or ""
+    if not api_key:
+        return _vader_sentiment(text)
+
+    # Truncate to keep prompt size reasonable for free-tier models
+    sample_text = text[:3000]
+
+    prompt = f"""Analyze the following competitor content for sentiment and key topics.
+
+CONTENT:
+{sample_text}
+
+Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
+{{
+  "score": <float from -1.0 to 1.0 where -1=very negative, 0=neutral, 1=very positive>,
+  "sentiment_category": "<positive|neutral|negative>",
+  "topics": ["<topic1>", "<topic2>", "<topic3>", "<topic4>", "<topic5>"],
+  "key_insights": "<1-2 sentence summary of the sentiment drivers and competitive positioning>"
+}}"""
+
+    try:
+        response_text, model_used = call_openrouter(prompt, api_key)
+        print(f"[LLM Sentiment] Analysis completed via {model_used}", flush=True)
+
+        # Parse JSON from response (handle potential markdown wrapping)
+        json_text = response_text.strip()
+        if json_text.startswith("```"):
+            json_text = re.sub(r"```(?:json)?\s*", "", json_text)
+            json_text = json_text.rstrip("`").strip()
+
+        parsed = json.loads(json_text)
+
+        # Validate and normalize the response
+        score = float(parsed.get("score", 0.0))
+        score = max(-1.0, min(1.0, score))  # Clamp to [-1, 1]
+
+        category = parsed.get("sentiment_category", "neutral")
+        if category not in ("positive", "neutral", "negative"):
+            category = "positive" if score >= 0.05 else ("negative" if score <= -0.05 else "neutral")
+
+        topics = parsed.get("topics", [])
+        if not isinstance(topics, list):
+            topics = extract_key_topics(sample_text, top_n=5)
+        topics = [str(t) for t in topics[:8]]  # Cap at 8 topics
+
+        result = {
+            "score": round(score, 4),
+            "topics": topics,
+            "sentiment_category": category,
+            "raw_scores": {"compound": score},
+            "key_insights": str(parsed.get("key_insights", "")),
+            "model_used": model_used,
+        }
+        return result
+
+    except json.JSONDecodeError as e:
+        print(f"[LLM Sentiment] JSON parse failed: {e}. Falling back to VADER.", flush=True)
+        return _vader_sentiment(text)
+    except Exception as e:
+        print(f"[LLM Sentiment] LLM call failed: {e}. Falling back to VADER.", flush=True)
+        return _vader_sentiment(text)
+
+
+def sentiment_score(text: str) -> Dict[str, Any]:
+    """
+    Smart sentiment analysis that uses LLM when available, VADER as fallback.
+    - If LLM_PROVIDER=openrouter and LLM_API_KEY is set → uses LLM for deep analysis
+    - Otherwise → uses fast local VADER analysis
+    Both return the same interface: {score, topics, sentiment_category, raw_scores}
+    """
+    provider = (settings.LLM_PROVIDER or "").lower().strip()
+    api_key = settings.LLM_API_KEY or ""
+
+    if provider == "openrouter" and api_key:
+        return _llm_sentiment(text)
+
+    return _vader_sentiment(text)

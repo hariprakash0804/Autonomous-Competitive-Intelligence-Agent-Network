@@ -1,5 +1,8 @@
 import re
+import json
 from typing import List, Dict, Any, Optional
+
+from app.config import settings
 
 # Core plan tier names commonly used in software/SaaS pricing pages
 TARGET_TIERS = [
@@ -97,15 +100,11 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     return results
 
 
-def diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
-    """
-    Compares old vs new pricing page text and returns a list of detected price changes.
-    Each item: { tier_name, old_price, new_price, details }
-    """
+def _regex_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
+    """Original regex-based pricing diff (fast, no API calls)."""
     new_plans = extract_plan_prices(new_text)
 
     if not old_text:
-        # First snapshot: register baseline prices for all extracted distinct plan tiers
         changes = []
         for item in new_plans:
             changes.append({
@@ -139,6 +138,151 @@ def diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
                 "old_price": None,
                 "new_price": new_item["price"],
                 "details": f"New plan tier added: {tier} (${new_item['price']})",
+            })
+
+    for tier, old_item in old_map.items():
+        if tier not in new_map:
+            changes.append({
+                "tier_name": tier,
+                "old_price": old_item["price"],
+                "new_price": None,
+                "details": f"Plan tier no longer listed: {tier}",
+            })
+
+    return changes
+
+
+def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
+    """
+    LLM-powered pricing extraction that can detect ANY pricing structure,
+    not just hardcoded tier names. Handles custom tier names, usage-based pricing,
+    per-seat pricing, and complex pricing tables.
+    """
+    from app.services.llm import call_openrouter
+
+    api_key = settings.LLM_API_KEY or ""
+    if not api_key:
+        return extract_plan_prices(text)
+
+    sample_text = text[:4000]
+
+    prompt = f"""Extract ALL pricing tiers/plans from this pricing page content.
+
+CONTENT:
+{sample_text}
+
+Respond ONLY with valid JSON array (no markdown, no extra text). Each item must have:
+[
+  {{
+    "tier_name": "<plan name>",
+    "price": <numeric price or null if contact-us/custom>,
+    "price_str": "<price as shown, e.g. '$20/mo per user'>",
+    "billing_period": "<monthly|yearly|one-time|usage-based|custom>",
+    "key_features": ["<feature1>", "<feature2>"]
+  }}
+]
+
+If no pricing is found, return an empty array: []"""
+
+    try:
+        response_text, model_used = call_openrouter(prompt, api_key)
+        print(f"[LLM Pricing] Extraction completed via {model_used}", flush=True)
+
+        json_text = response_text.strip()
+        if json_text.startswith("```"):
+            json_text = re.sub(r"```(?:json)?\s*", "", json_text)
+            json_text = json_text.rstrip("`").strip()
+
+        parsed = json.loads(json_text)
+        if not isinstance(parsed, list):
+            parsed = [parsed]
+
+        # Normalize to standard format
+        results = []
+        for item in parsed:
+            price_val = item.get("price")
+            if isinstance(price_val, str):
+                # Try to extract numeric from string
+                nums = re.findall(r"[\d.]+", price_val)
+                price_val = float(nums[0]) if nums else None
+            elif isinstance(price_val, (int, float)):
+                price_val = float(price_val)
+            else:
+                price_val = None
+
+            results.append({
+                "tier_name": str(item.get("tier_name", "Unknown")),
+                "price": price_val,
+                "price_str": str(item.get("price_str", f"${price_val}" if price_val else "Custom")),
+                "billing_period": str(item.get("billing_period", "monthly")),
+                "key_features": item.get("key_features", []),
+            })
+
+        return results
+
+    except json.JSONDecodeError as e:
+        print(f"[LLM Pricing] JSON parse failed: {e}. Falling back to regex.", flush=True)
+        return extract_plan_prices(text)
+    except Exception as e:
+        print(f"[LLM Pricing] LLM call failed: {e}. Falling back to regex.", flush=True)
+        return extract_plan_prices(text)
+
+
+def diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
+    """
+    Smart pricing diff that uses LLM for extraction when available.
+    - If LLM_PROVIDER=openrouter and LLM_API_KEY is set → LLM extracts ANY pricing structure
+    - Otherwise → regex-based extraction with hardcoded tier patterns
+    Both return the same interface: [{tier_name, old_price, new_price, details}]
+    """
+    provider = (settings.LLM_PROVIDER or "").lower().strip()
+    api_key = settings.LLM_API_KEY or ""
+
+    if provider == "openrouter" and api_key:
+        return _llm_diff_pricing(old_text, new_text)
+
+    return _regex_diff_pricing(old_text, new_text)
+
+
+def _llm_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
+    """Uses LLM to extract prices from both texts and computes the diff."""
+    new_plans = _llm_extract_pricing(new_text)
+
+    if not old_text:
+        # First snapshot — register baseline
+        changes = []
+        for item in new_plans:
+            changes.append({
+                "tier_name": item["tier_name"],
+                "old_price": None,
+                "new_price": item["price"],
+                "details": f"Initial baseline: {item['tier_name']} at {item['price_str']}"
+                + (f" ({item.get('billing_period', '')})" if item.get("billing_period") else ""),
+            })
+        return changes
+
+    # For the old text, use regex (faster, no extra API call) since we just need tier→price mapping
+    old_plans = extract_plan_prices(old_text)
+    old_map = {item["tier_name"]: item for item in old_plans}
+    new_map = {item["tier_name"]: item for item in new_plans}
+
+    changes = []
+    for tier, new_item in new_map.items():
+        if tier in old_map:
+            old_item = old_map[tier]
+            if old_item["price"] != new_item["price"]:
+                changes.append({
+                    "tier_name": tier,
+                    "old_price": old_item["price"],
+                    "new_price": new_item["price"],
+                    "details": f"Price changed for {tier}: ${old_item['price']} -> ${new_item['price']}",
+                })
+        else:
+            changes.append({
+                "tier_name": tier,
+                "old_price": None,
+                "new_price": new_item["price"],
+                "details": f"New plan detected: {tier} ({new_item.get('price_str', '')})",
             })
 
     for tier, old_item in old_map.items():

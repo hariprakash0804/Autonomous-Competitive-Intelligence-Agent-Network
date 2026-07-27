@@ -2,11 +2,15 @@ import os
 import json
 import uuid
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
+import httpx
 import faiss
 import numpy as np
+
+from app.config import settings
 
 INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "faiss_data"
 INDEX_FILE = INDEX_DIR / "index.faiss"
@@ -15,26 +19,136 @@ METADATA_FILE = INDEX_DIR / "metadata.json"
 MODEL_NAME = "all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384
 
+# HuggingFace Inference API endpoint for the same model
+HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{MODEL_NAME}"
+
 
 class VectorStoreService:
     def __init__(self):
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
         self.model = None  # Lazy load to conserve startup RAM
+        self._embedding_mode = None  # Will be set by _get_model: "local", "hf_api", or "hash"
         self.index: Optional[faiss.IndexFlatIP] = None
         self.metadata: List[Dict[str, Any]] = []
         self._load_or_create_index()
 
     def _get_model(self):
-        """Lazy loads SentenceTransformer to keep startup RAM under 150MB."""
+        """
+        Determines embedding mode in order of preference:
+        1. VECTOR_STORE_MODE=hf_api → HuggingFace Inference API (free, no download, real embeddings)
+        2. VECTOR_STORE_MODE=auto → tries HF API if token available, else local with 15s timeout, else hash
+        3. VECTOR_STORE_MODE=hash → instant hash vectorizer (no API calls, no downloads)
+        """
         if self.model is None:
-            try:
-                print("[Vector Store] Lazy loading SentenceTransformer model...")
-                from sentence_transformers import SentenceTransformer
-                self.model = SentenceTransformer(MODEL_NAME)
-            except Exception as e:
-                print(f"[Vector Store Warning] Failed to load SentenceTransformer ({e}). Using lightweight hash vectorizer fallback.")
+            store_mode = (settings.VECTOR_STORE_MODE or os.environ.get("VECTOR_STORE_MODE", "auto")).lower().strip()
+            hf_token = settings.HF_API_TOKEN or os.environ.get("HF_API_TOKEN", "")
+
+            # ── Mode: hash (instant, no network) ────────────────────────────
+            if store_mode == "hash":
+                print("[Vector Store] VECTOR_STORE_MODE=hash → using instant hash vectorizer.", flush=True)
                 self.model = "fallback"
+                self._embedding_mode = "hash"
+                return self.model
+
+            # ── Mode: hf_api (explicit) or auto with HF token ───────────────
+            if store_mode == "hf_api" or (store_mode == "auto" and hf_token):
+                if hf_token:
+                    print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {MODEL_NAME}).", flush=True)
+                    self.model = "hf_api"
+                    self._embedding_mode = "hf_api"
+                    return self.model
+                else:
+                    print("[Vector Store] VECTOR_STORE_MODE=hf_api but HF_API_TOKEN not set. Falling back to hash.", flush=True)
+                    self.model = "fallback"
+                    self._embedding_mode = "hash"
+                    return self.model
+
+            # ── Mode: auto (try local SentenceTransformer with 15s timeout) ─
+            try:
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+
+                def _load_model():
+                    from sentence_transformers import SentenceTransformer
+                    return SentenceTransformer(MODEL_NAME)
+
+                print("[Vector Store] Loading SentenceTransformer model (15s timeout)...", flush=True)
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_load_model)
+                    self.model = future.result(timeout=15.0)
+                self._embedding_mode = "local"
+                print("[Vector Store] SentenceTransformer loaded successfully.", flush=True)
+
+            except Exception as e:
+                timeout_msg = "TIMED OUT" if "TimeoutError" in type(e).__name__ or "timeout" in str(e).lower() else f"failed ({e})"
+                print(f"[Vector Store] SentenceTransformer {timeout_msg}. Using hash vectorizer.", flush=True)
+                self.model = "fallback"
+                self._embedding_mode = "hash"
+
         return self.model
+
+    def _hf_api_encode(self, texts: List[str]) -> np.ndarray:
+        """
+        Calls HuggingFace Inference API for real semantic embeddings.
+        Free tier: ~30k chars/min. Same model quality as local SentenceTransformer.
+        """
+        hf_token = settings.HF_API_TOKEN or os.environ.get("HF_API_TOKEN", "")
+        headers = {"Authorization": f"Bearer {hf_token}"}
+
+        # HF API accepts a list of strings and returns a list of embeddings
+        # Batch in groups of 16 to stay within API limits
+        all_embeddings = []
+        batch_size = 16
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            # Truncate each text to 512 chars for embedding (model's effective window)
+            batch_truncated = [t[:512] for t in batch]
+
+            for attempt in range(3):
+                try:
+                    response = httpx.post(
+                        HF_API_URL,
+                        headers=headers,
+                        json={"inputs": batch_truncated, "options": {"wait_for_model": True}},
+                        timeout=15.0,
+                    )
+
+                    if response.status_code == 503:
+                        # Model is loading on HF side — wait and retry
+                        wait = min(float(response.json().get("estimated_time", 5)), 10)
+                        print(f"[Vector Store] HF API model loading, waiting {wait:.0f}s...", flush=True)
+                        time.sleep(wait)
+                        continue
+
+                    if response.status_code == 429:
+                        print("[Vector Store] HF API rate limited, waiting 2s...", flush=True)
+                        time.sleep(2.0)
+                        continue
+
+                    response.raise_for_status()
+                    embeddings_batch = response.json()
+
+                    # Response is a list of embeddings (each is a list of floats)
+                    for emb in embeddings_batch:
+                        vec = np.array(emb, dtype=np.float32)
+                        # Normalize for cosine similarity with FAISS IndexFlatIP
+                        norm = np.linalg.norm(vec)
+                        if norm > 0:
+                            vec /= norm
+                        all_embeddings.append(vec)
+                    break  # Success, move to next batch
+
+                except Exception as exc:
+                    if attempt < 2:
+                        print(f"[Vector Store] HF API attempt {attempt + 1} failed: {exc}. Retrying...", flush=True)
+                        time.sleep(1.0)
+                    else:
+                        print(f"[Vector Store] HF API failed after 3 attempts: {exc}. Falling back to hash for this batch.", flush=True)
+                        # Fallback to hash for this batch
+                        hash_vecs = self._hash_encode(batch)
+                        all_embeddings.extend(hash_vecs)
+
+        return np.array(all_embeddings, dtype=np.float32)
 
     def _hash_encode(self, texts: List[str]) -> np.ndarray:
         """Lightweight 384-dim normalized term hashing vectorizer for ultra-low RAM footprint (<10MB RAM)."""
@@ -52,13 +166,26 @@ class VectorStoreService:
         return np.array(vectors, dtype=np.float32)
 
     def _encode_text(self, texts: List[str]) -> np.ndarray:
+        """Routes to the appropriate embedding backend based on current mode."""
         model = self._get_model()
-        if model != "fallback":
+
+        # HuggingFace Inference API path
+        if self._embedding_mode == "hf_api":
+            try:
+                return self._hf_api_encode(texts)
+            except Exception as exc:
+                print(f"[Vector Store] HF API encode failed ({exc}). Falling back to hash.", flush=True)
+                return self._hash_encode(texts)
+
+        # Local SentenceTransformer path
+        if model not in ("fallback", "hf_api"):
             try:
                 embeddings = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
                 return embeddings.astype(np.float32)
             except Exception as exc:
                 print(f"[Vector Store Warning] Model encode failed ({exc}). Using hash vectorizer fallback.")
+
+        # Hash vectorizer fallback
         return self._hash_encode(texts)
 
     def _load_or_create_index(self):

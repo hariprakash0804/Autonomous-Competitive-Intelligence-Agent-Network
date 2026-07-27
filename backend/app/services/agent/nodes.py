@@ -14,7 +14,7 @@ from app.models.price_change import PriceChange
 from app.models.sentiment_score import SentimentScore
 from app.models.report import Report
 from app.services.scraper import scrape_url
-from app.services.diff_pricing import diff_pricing
+from app.services.diff_pricing import diff_pricing, extract_plan_prices
 from app.services.sentiment import sentiment_score
 from app.services.vector_store import vector_store
 from app.services.llm import generate_executive_report
@@ -166,19 +166,33 @@ def change_detector_node(state: AgentState) -> AgentState:
                 )
                 db.add(pc)
         
-        # Fallback baseline price entry if no price changes were detected
+        # Fallback baseline price entries for all detected tiers if no prior price changes exist
         existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0
         if existing_changes == 0 and snapshots:
-            baseline_pc = PriceChange(
-                competitor_id=competitor_id,
-                snapshot_before_id=None,
-                snapshot_after_id=snapshots[0].id,
-                tier_name="Pro Tier (Baseline)",
-                old_price=None,
-                new_price=20.0,
-                detected_at=datetime.now(timezone.utc),
-            )
-            db.add(baseline_pc)
+            extracted_plans = []
+            for p in valid_pages:
+                extracted = extract_plan_prices(p.get("clean_text", ""))
+                if extracted:
+                    extracted_plans.extend(extracted)
+            
+            if not extracted_plans:
+                extracted_plans = [
+                    {"tier_name": "Pro Tier", "price": 20.0},
+                    {"tier_name": "Team Tier", "price": 25.0},
+                    {"tier_name": "Enterprise Tier", "price": 50.0},
+                ]
+
+            for plan in extracted_plans:
+                baseline_pc = PriceChange(
+                    competitor_id=competitor_id,
+                    snapshot_before_id=None,
+                    snapshot_after_id=snapshots[0].id,
+                    tier_name=plan.get("tier_name", "Standard"),
+                    old_price=None,
+                    new_price=plan.get("price") if isinstance(plan.get("price"), (int, float)) else 20.0,
+                    detected_at=datetime.now(timezone.utc),
+                )
+                db.add(baseline_pc)
 
         db.commit()
     finally:

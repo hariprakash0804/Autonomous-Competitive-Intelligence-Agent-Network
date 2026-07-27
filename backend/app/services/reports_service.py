@@ -26,15 +26,96 @@ def _convert_markdown_to_slack_mrkdwn(text: str) -> str:
     return cleaned.strip()
 
 
+def _convert_markdown_to_html(md_text: str) -> str:
+    """Converts raw Markdown text (including tables, headers, bold text, lists) to HTML."""
+    if not md_text:
+        return "<p>No report summary available.</p>"
+
+    lines = md_text.split("\n")
+    html_parts = []
+    in_table = False
+    table_rows = []
+    in_list = False
+
+    def flush_list():
+        nonlocal in_list
+        if in_list:
+            html_parts.append("</ul>")
+            in_list = False
+
+    def flush_table():
+        nonlocal in_table, table_rows
+        if table_rows:
+            header = table_rows[0]
+            body = [r for r in table_rows[1:] if not all(c.strip().startswith("-") for c in r)]
+            table_html = ["<table><thead><tr>"]
+            for h in header:
+                clean_h = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", h.strip())
+                table_html.append(f"<th>{clean_h}</th>")
+            table_html.append("</tr></thead><tbody>")
+            for row in body:
+                table_html.append("<tr>")
+                for cell in row:
+                    clean_c = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", cell.strip())
+                    table_html.append(f"<td>{clean_c}</td>")
+                table_html.append("</tr>")
+            table_html.append("</tbody></table>")
+            html_parts.append("".join(table_html))
+            table_rows = []
+        in_table = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            flush_list()
+            in_table = True
+            cells = [c for c in stripped.split("|")[1:-1]]
+            table_rows.append(cells)
+            continue
+        else:
+            if in_table:
+                flush_table()
+
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            if not in_list:
+                html_parts.append("<ul>")
+                in_list = True
+            item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            html_parts.append(f"<li>{item_text}</li>")
+            continue
+        else:
+            flush_list()
+
+        if stripped.startswith("### "):
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[4:])
+            html_parts.append(f"<h3>{text}</h3>")
+        elif stripped.startswith("## "):
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[3:])
+            html_parts.append(f"<h2>{text}</h2>")
+        elif stripped.startswith("# "):
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            html_parts.append(f"<h1>{text}</h1>")
+        elif stripped.startswith("> "):
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            html_parts.append(f"<blockquote>{text}</blockquote>")
+        elif stripped == "---":
+            html_parts.append("<hr style='border: 0; border-top: 1px solid #1e293b; margin: 24px 0;'>")
+        elif stripped:
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped)
+            html_parts.append(f"<p>{text}</p>")
+
+    if in_table:
+        flush_table()
+    flush_list()
+
+    return "\n".join(html_parts)
+
+
 def render_html_report(report_id: str, competitor_name: str, markdown_content: str) -> str:
-    """Renders a Markdown report into a standalone HTML document."""
+    """Renders a Markdown report into a standalone styled HTML document."""
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    html_body = markdown_content.replace("# ", "<h1>").replace("\n# ", "</h1>\n<h1>")
-    html_body = html_body.replace("## ", "<h2>").replace("\n## ", "</h2>\n<h2>")
-    html_body = html_body.replace("### ", "<h3>").replace("\n### ", "</h3>\n<h3>")
-    html_body = html_body.replace("\n\n", "</p><p>").replace("\n- ", "</li><li>")
-    html_body = html_body.replace("<li>", "<ul><li>", 1) + "</ul>" if "<li>" in html_body else html_body
+    html_body = _convert_markdown_to_html(markdown_content)
 
     html_full = f"""<!DOCTYPE html>
 <html lang="en">
@@ -45,15 +126,17 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #090d16; color: #e2e8f0; margin: 0; padding: 40px 20px; line-height: 1.6; }}
     .container {{ max-width: 860px; margin: 0 auto; background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 40px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }}
-    h1 {{ color: #ffffff; border-bottom: 2px solid #6366f1; padding-bottom: 12px; font-size: 24px; }}
-    h2 {{ color: #818cf8; margin-top: 28px; font-size: 18px; }}
-    h3 {{ color: #cbd5e1; font-size: 15px; }}
-    p {{ color: #94a3b8; font-size: 14px; }}
+    h1 {{ color: #ffffff; border-bottom: 2px solid #6366f1; padding-bottom: 12px; font-size: 24px; margin-top: 0; }}
+    h2 {{ color: #818cf8; margin-top: 28px; font-size: 18px; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }}
+    h3 {{ color: #cbd5e1; font-size: 15px; margin-top: 20px; }}
+    p {{ color: #94a3b8; font-size: 14px; margin: 10px 0; }}
     ul {{ color: #cbd5e1; padding-left: 20px; font-size: 14px; }}
-    li {{ margin-bottom: 6px; }}
-    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }}
+    li {{ margin-bottom: 8px; color: #cbd5e1; }}
+    strong {{ color: #f8fafc; font-weight: 600; }}
+    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; background: #0b1329; border-radius: 8px; overflow: hidden; border: 1px solid #334155; }}
     th, td {{ border: 1px solid #334155; padding: 10px 14px; text-align: left; }}
-    th {{ background: #1e293b; color: #f8fafc; }}
+    th {{ background: #1e293b; color: #818cf8; font-weight: 700; }}
+    tr:nth-child(even) {{ background: #0f172a; }}
     blockquote {{ background: #1e1b4b; border-left: 4px solid #6366f1; padding: 12px 16px; margin: 16px 0; color: #a5b4fc; border-radius: 4px; }}
     .footer {{ margin-top: 40px; pt: 20px; border-top: 1px solid #1e293b; font-size: 12px; color: #64748b; text-align: center; }}
   </style>
@@ -76,7 +159,7 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
 
 
 def _clean_latin1(text: str) -> str:
-    """Replaces Unicode characters outside Latin-1 (bullet, em-dash, smart quotes) with ASCII equivalents for FPDF."""
+    """Replaces Unicode characters outside Latin-1 with ASCII equivalents for FPDF."""
     if not text:
         return ""
     replacements = {
@@ -97,93 +180,111 @@ def _clean_latin1(text: str) -> str:
 def render_pdf_report(report_id: str, competitor_name: str, markdown_content: str) -> str:
     """
     Renders a Markdown report into a downloadable PDF document using fpdf2.
-    Supports headings (H1-H3), bullet lists, and body paragraphs.
+    Supports headings, bullet lists, markdown tables, and body text cleanly.
     """
     from fpdf import FPDF
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = REPORTS_DIR / f"{report_id}.pdf"
 
-    pdf = FPDF()
-    pdf.set_margins(15, 15, 15)
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    try:
+        pdf = FPDF()
+        pdf.set_margins(15, 15, 15)
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Title Header
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.set_text_color(99, 102, 241)  # Indigo
-    pdf.cell(0, 12, _clean_latin1(f"Competitive Intelligence Report"), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 13)
-    pdf.set_text_color(100, 116, 139)  # Slate
-    pdf.cell(0, 8, _clean_latin1(competitor_name), new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(2)
+        # Title Header
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_text_color(99, 102, 241)  # Indigo
+        pdf.cell(0, 10, _clean_latin1(f"Competitive Intelligence Report"), new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 12)
+        pdf.set_text_color(100, 116, 139)  # Slate
+        pdf.cell(0, 6, _clean_latin1(f"Target: {competitor_name}"), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
 
-    # Divider line
-    pdf.set_draw_color(99, 102, 241)
-    pdf.set_line_width(0.5)
-    cur_y = pdf.get_y()
-    pdf.line(15, cur_y, 195, cur_y)
-    pdf.ln(6)
-
-    # Parse markdown content into lines and render
-    pdf.set_text_color(30, 41, 59)  # Dark slate for body text
-    lines = markdown_content.split("\n")
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            pdf.ln(3)
-            continue
-
-        # Strip bold markdown markers and sanitize unicode for PDF rendering
-        display_text = _clean_latin1(stripped.replace("**", "").replace("__", ""))
-
-        if stripped.startswith("### "):
-            pdf.ln(2)
-            pdf.set_font("Helvetica", "B", 11)
-            pdf.set_text_color(71, 85, 105)
-            pdf.multi_cell(0, 6, display_text[4:])
-        elif stripped.startswith("## "):
-            pdf.ln(4)
-            pdf.set_font("Helvetica", "B", 13)
-            pdf.set_text_color(99, 102, 241)
-            pdf.multi_cell(0, 7, display_text[3:])
-            pdf.ln(1)
-        elif stripped.startswith("# "):
-            pdf.ln(3)
-            pdf.set_font("Helvetica", "B", 15)
-            pdf.set_text_color(15, 23, 42)
-            pdf.multi_cell(0, 9, display_text[2:])
-        elif stripped.startswith("- ") or stripped.startswith("* "):
-            pdf.set_font("Helvetica", "", 10)
-            pdf.set_text_color(51, 65, 85)
-            bullet_text = display_text[2:]
-            pdf.multi_cell(0, 5.5, f"  -  {bullet_text}")
-        elif stripped.startswith("> "):
-            pdf.set_font("Helvetica", "I", 10)
-            pdf.set_text_color(129, 140, 248)
-            pdf.multi_cell(0, 5.5, f"  >  {display_text[2:]}")
-        else:
-            pdf.set_font("Helvetica", "", 10)
-            pdf.set_text_color(51, 65, 85)
-            pdf.multi_cell(0, 5.5, display_text)
-
-    # Footer
-    pdf.ln(8)
-    cur_y = pdf.get_y()
-    if cur_y < 270:
+        # Divider line
         pdf.set_draw_color(99, 102, 241)
+        pdf.set_line_width(0.5)
+        cur_y = pdf.get_y()
         pdf.line(15, cur_y, 195, cur_y)
         pdf.ln(4)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_text_color(100, 116, 139)
-    pdf.cell(
-        0, 5,
-        _clean_latin1(f"Generated by Autonomous Competitive Intelligence Agent Network  |  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"),
-        align="C",
-    )
 
-    file_path = REPORTS_DIR / f"{report_id}.pdf"
-    pdf.output(str(file_path))
+        lines = markdown_content.split("\n")
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped == "---":
+                pdf.ln(2)
+                continue
+
+            if pdf.get_y() > 260:
+                pdf.add_page()
+
+            display_text = _clean_latin1(stripped.replace("**", "").replace("__", ""))
+
+            # Handle Markdown table rows
+            if stripped.startswith("|") and stripped.endswith("|"):
+                cells = [c.strip() for c in stripped.split("|")[1:-1]]
+                if not all(c.startswith("-") for c in cells):
+                    pdf.set_font("Helvetica", "B" if ("Dimension" in display_text or "Feature" in display_text) else "", 9)
+                    pdf.set_text_color(51, 65, 85)
+                    row_str = " | ".join(cells)
+                    pdf.multi_cell(0, 5, _clean_latin1(row_str.replace("**", "")))
+                continue
+
+            if stripped.startswith("### "):
+                pdf.ln(2)
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.set_text_color(71, 85, 105)
+                pdf.multi_cell(0, 6, display_text[4:])
+            elif stripped.startswith("## "):
+                pdf.ln(3)
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.set_text_color(99, 102, 241)
+                pdf.multi_cell(0, 6, display_text[3:])
+            elif stripped.startswith("# "):
+                pdf.ln(3)
+                pdf.set_font("Helvetica", "B", 14)
+                pdf.set_text_color(15, 23, 42)
+                pdf.multi_cell(0, 8, display_text[2:])
+            elif stripped.startswith("- ") or stripped.startswith("* "):
+                pdf.set_font("Helvetica", "", 10)
+                pdf.set_text_color(51, 65, 85)
+                bullet_text = display_text[2:]
+                pdf.multi_cell(0, 5, f"  -  {bullet_text}")
+            elif stripped.startswith("> "):
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.set_text_color(99, 102, 241)
+                pdf.multi_cell(0, 5, f"  >  {display_text[2:]}")
+            else:
+                pdf.set_font("Helvetica", "", 10)
+                pdf.set_text_color(51, 65, 85)
+                pdf.multi_cell(0, 5, display_text)
+
+        # Footer
+        pdf.ln(6)
+        cur_y = pdf.get_y()
+        if cur_y < 270:
+            pdf.set_draw_color(99, 102, 241)
+            pdf.line(15, cur_y, 195, cur_y)
+            pdf.ln(3)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(
+            0, 5,
+            _clean_latin1(f"Generated by Autonomous Competitive Intelligence Agent Network  |  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"),
+            align="C",
+        )
+
+        pdf.output(str(file_path))
+    except Exception as exc:
+        print(f"[PDF Generation Error] {exc}. Rendering fallback plain text PDF...")
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 5, _clean_latin1(markdown_content.replace("**", "")))
+        pdf.output(str(file_path))
+
     return f"/static/reports/{report_id}.pdf"
 
 

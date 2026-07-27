@@ -106,7 +106,7 @@ def get_report_html(
     report_id: uuid.UUID,
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Serves the standalone rendered HTML report file."""
+    """Serves the standalone rendered HTML report file with clean Markdown formatting."""
     report = db.get(Report, report_id)
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
@@ -115,8 +115,7 @@ def get_report_html(
     comp_name = comp.name if comp else "Competitor"
 
     file_path = REPORTS_DIR / f"{report.id}.html"
-    if not file_path.exists():
-        render_html_report(str(report.id), comp_name, report.summary or "")
+    render_html_report(str(report.id), comp_name, report.summary or "")
 
     return FileResponse(file_path, media_type="text/html")
 
@@ -135,8 +134,7 @@ def get_report_pdf(
     comp_name = comp.name if comp else "Competitor"
 
     file_path = REPORTS_DIR / f"{report.id}.pdf"
-    if not file_path.exists():
-        render_pdf_report(str(report.id), comp_name, report.summary or "")
+    render_pdf_report(str(report.id), comp_name, report.summary or "")
 
     return FileResponse(
         file_path,

@@ -7,7 +7,8 @@ from app.services.agent.state import AgentState
 from app.services.agent.nodes import (
     researcher_node,
     should_reflect_edge,
-    parallel_analysis_node,
+    change_detector_node,
+    sentiment_analyst_node,
     report_writer_node,
 )
 
@@ -53,16 +54,17 @@ def flush_langsmith_tracers():
 
 def build_agent_graph():
     """
-    Constructs and compiles the optimized 3-node LangGraph pipeline:
-    Researcher -> [Conditional Reflection] -> Parallel-Analysis (Change-Detector + Sentiment-Analyst concurrent) -> Report-Writer -> END
+    Constructs and compiles the 4-node LangGraph pipeline per spec:
+    Researcher -> [Conditional Reflection] -> Change-Detector -> Sentiment-Analyst -> Report-Writer -> END
     """
     setup_langsmith_tracing()
 
     builder = StateGraph(AgentState)
 
-    # 1. Add Nodes (3-node optimized pipeline: Researcher, Parallel-Analysis, Report-Writer)
+    # 1. Add all 4 Nodes (spec-compliant sequential pipeline)
     builder.add_node("Researcher", researcher_node)
-    builder.add_node("Parallel-Analysis", parallel_analysis_node)
+    builder.add_node("Change-Detector", change_detector_node)
+    builder.add_node("Sentiment-Analyst", sentiment_analyst_node)
     builder.add_node("Report-Writer", report_writer_node)
 
     # 2. Set Entry Point
@@ -74,12 +76,13 @@ def build_agent_graph():
         should_reflect_edge,
         {
             "Researcher": "Researcher",
-            "Parallel-Analysis": "Parallel-Analysis",
+            "Change-Detector": "Change-Detector",
         },
     )
 
-    # 4. Add Sequential Edges
-    builder.add_edge("Parallel-Analysis", "Report-Writer")
+    # 4. Add Sequential Edges (4-node chain)
+    builder.add_edge("Change-Detector", "Sentiment-Analyst")
+    builder.add_edge("Sentiment-Analyst", "Report-Writer")
     builder.add_edge("Report-Writer", END)
 
     # 5. Compile Graph

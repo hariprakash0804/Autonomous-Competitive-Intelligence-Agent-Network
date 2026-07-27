@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_or_api_key
 from app.models.user import User
 from app.models.competitor import Competitor
 from app.models.snapshot import Snapshot
@@ -26,7 +26,7 @@ class CompetitorCreate(BaseModel):
 @router.get("/")
 def list_competitors(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
     """Lists all competitors for the current authenticated user."""
     competitors = db.scalars(
@@ -107,6 +107,25 @@ def get_competitor_details(
         "news_keywords": competitor.news_keywords or [],
         "created_at": competitor.created_at.isoformat(),
     }
+
+
+@router.delete("/{competitor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_competitor(
+    competitor_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Deletes a competitor and all related data (snapshots, price changes,
+    sentiment scores, agent runs, reports) via cascade.
+    """
+    competitor = db.get(Competitor, competitor_id)
+    if not competitor or competitor.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
+
+    db.delete(competitor)
+    db.commit()
+    return None
 
 
 @router.get("/{competitor_id}/price-history")

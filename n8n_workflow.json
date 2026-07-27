@@ -25,7 +25,17 @@
     },
     {
       "parameters": {
+        "method": "GET",
         "url": "http://backend:8000/competitors/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Api-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "options": {}
       },
       "name": "Fetch Tracked Competitors List",
@@ -39,7 +49,16 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=http://backend:8000/pipeline/run/{{$json.id}}",
+        "url": "=http://backend:8000/pipeline/run/{{ $json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Api-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "options": {}
       },
       "name": "Trigger Agent Pipeline Run",
@@ -52,17 +71,60 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{$node[\"Trigger Agent Pipeline Run\"].json.slack_webhook_url || \"https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK\"}}",
-        "jsonParameters": true,
-        "bodyParametersJson": "={\n  \"text\": \"🚨 *Weekly Competitive Intelligence Alert: \" + $node[\"Fetch Tracked Competitors List\"].json.name + \"*\\nReport Status: \" + $json.status + \"\\nView Report: http://localhost:8000/reports/\" + $json.agent_run_id + \"/html\"\n}",
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "name": "Wait for Pipeline Execution",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        910,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://backend:8000/reports/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Api-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
         "options": {}
       },
-      "name": "Post Report Summary to Slack Webhook",
+      "name": "Fetch Generated Reports",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        910,
+        1130,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://backend:8000/reports/deliver-slack/{{ $json[0].id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Api-Key",
+              "value": "={{ $env.INTERNAL_API_KEY }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Post Latest Report to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        1350,
         300
       ]
     }
@@ -94,7 +156,29 @@
       "main": [
         [
           {
-            "node": "Post Report Summary to Slack Webhook",
+            "node": "Wait for Pipeline Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Pipeline Execution": {
+      "main": [
+        [
+          {
+            "node": "Fetch Generated Reports",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Generated Reports": {
+      "main": [
+        [
+          {
+            "node": "Post Latest Report to Slack",
             "type": "main",
             "index": 0
           }

@@ -30,6 +30,7 @@ services:
       SECRET_KEY: super-secret-key-change-in-production
       LLM_PROVIDER: openrouter
       LLM_API_KEY: ${LLM_API_KEY}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     ports:
       - "8000:8000"

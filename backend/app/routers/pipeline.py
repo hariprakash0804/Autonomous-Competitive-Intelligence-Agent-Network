@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.database import get_db, SessionLocal
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_or_api_key
 from app.models.user import User
 from app.models.competitor import Competitor
 from app.models.agent_run import AgentRun
@@ -101,7 +101,7 @@ def start_pipeline_run(
     competitor_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
     """
     Triggers the 4-node LangGraph agent pipeline asynchronously using FastAPI BackgroundTasks.

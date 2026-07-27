@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, LineChart as ChartIcon, MessageSquare, Plus, Globe } from 'lucide-react';
+import { Play, LineChart as ChartIcon, MessageSquare, Plus, Globe, Trash2 } from 'lucide-react';
 
 export default function CompetitorList({
   competitors,
@@ -8,6 +8,7 @@ export default function CompetitorList({
   onRunPipeline,
   onOpenChat,
   onAddCompetitor,
+  onDeleteCompetitor,
 }) {
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl">
@@ -87,6 +88,18 @@ export default function CompetitorList({
                   className="p-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-600 transition"
                 >
                   <MessageSquare className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete "${comp.name}" and all associated data?`)) {
+                      onDeleteCompetitor(comp.id);
+                    }
+                  }}
+                  title="Delete Competitor"
+                  className="p-2 bg-rose-950/50 hover:bg-rose-900 text-rose-400 hover:text-rose-200 rounded-lg border border-rose-800/50 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>

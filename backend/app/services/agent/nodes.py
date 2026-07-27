@@ -108,14 +108,14 @@ def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge: Pure routing function.
     If any page is_stale and retry_count < 2, loop back to Researcher node for a retry pass.
-    Otherwise proceed to Parallel-Analysis node.
+    Otherwise proceed to Change-Detector node.
     """
     has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
 
     if has_stale and state.get("retry_count", 0) < 2:
         return "Researcher"
 
-    return "Parallel-Analysis"
+    return "Change-Detector"
 
 
 def change_detector_node(state: AgentState) -> AgentState:
@@ -312,11 +312,15 @@ def report_writer_node(state: AgentState) -> AgentState:
 
             # Auto-render HTML report immediately so first click is instant
             try:
-                from app.services.reports_service import render_html_report
+                from app.services.reports_service import render_html_report, render_pdf_report
                 render_html_report(str(report_row.id), competitor.name if competitor else "Competitor", report_md)
                 print(f"[Report-Writer] HTML report rendered: /reports/{report_row.id}/html", flush=True)
+                render_pdf_report(str(report_row.id), competitor.name if competitor else "Competitor", report_md)
+                report_row.pdf_url = f"/reports/{report_row.id}/pdf"
+                db.commit()
+                print(f"[Report-Writer] PDF report rendered: /reports/{report_row.id}/pdf", flush=True)
             except Exception as html_exc:
-                print(f"[Report-Writer] HTML render warning: {html_exc}", flush=True)
+                print(f"[Report-Writer] Report render warning: {html_exc}", flush=True)
     finally:
         db.close()
 

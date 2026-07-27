@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, ExternalLink, Send, Mail, Copy, Check, Clock } from 'lucide-react';
+import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock } from 'lucide-react';
 import api, { API_BASE_URL } from '../api/client';
 
 export default function ReportsPanel({ selectedCompetitorId }) {
@@ -102,7 +102,16 @@ export default function ReportsPanel({ selectedCompetitorId }) {
                 rel="noreferrer"
                 className="flex items-center gap-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-indigo-500/30 transition text-[11px] font-medium"
               >
-                <ExternalLink className="w-3.5 h-3.5" /> HTML Report
+                <ExternalLink className="w-3.5 h-3.5" /> HTML
+              </a>
+
+              <a
+                href={`${API_BASE_URL}${r.pdf_url || `/reports/${r.id}/pdf`}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 bg-amber-950/60 hover:bg-amber-900 text-amber-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-amber-800/30 transition text-[11px] font-medium"
+              >
+                <Download className="w-3.5 h-3.5" /> PDF
               </a>
 
               <button

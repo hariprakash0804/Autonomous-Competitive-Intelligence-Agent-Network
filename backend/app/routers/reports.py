@@ -9,13 +9,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from app.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_or_api_key
 from app.models.user import User
 from app.models.report import Report
 from app.models.competitor import Competitor
 from app.config import settings
 from app.services.reports_service import (
     render_html_report,
+    render_pdf_report,
     send_slack_notification,
     send_email_notification,
     REPORTS_DIR,
@@ -35,7 +36,7 @@ class EmailDeliverRequest(BaseModel):
 @router.get("/")
 def list_reports(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
     """Lists all generated competitive intelligence reports for current user's competitors."""
     user_competitors = db.scalars(
@@ -63,6 +64,7 @@ def list_reports(
             "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M UTC"),
             "content_snippet": (r.summary or "")[:200] + "...",
             "html_url": f"/reports/{r.id}/html",
+            "pdf_url": f"/reports/{r.id}/pdf",
         })
 
     return results
@@ -88,12 +90,36 @@ def get_report_html(
     return FileResponse(file_path, media_type="text/html")
 
 
+@router.get("/{report_id}/pdf")
+def get_report_pdf(
+    report_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Serves or generates the downloadable PDF report file."""
+    report = db.get(Report, report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    comp = db.get(Competitor, report.competitor_id)
+    comp_name = comp.name if comp else "Competitor"
+
+    file_path = REPORTS_DIR / f"{report.id}.pdf"
+    if not file_path.exists():
+        render_pdf_report(str(report.id), comp_name, report.summary or "")
+
+    return FileResponse(
+        file_path,
+        media_type="application/pdf",
+        filename=f"competitive_intel_{comp_name.replace(' ', '_')}_{report.id}.pdf",
+    )
+
+
 @router.post("/deliver-slack/{report_id}")
 def deliver_slack_notification(
     report_id: uuid.UUID,
     payload: SlackDeliverRequest,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
     """Triggers Slack webhook delivery for a report."""
     report = db.get(Report, report_id)

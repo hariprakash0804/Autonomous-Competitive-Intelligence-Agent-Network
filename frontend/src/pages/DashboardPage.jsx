@@ -85,6 +85,21 @@ export default function DashboardPage() {
     if (selectedCompId) fetchDetails(selectedCompId);
   };
 
+  const handleDeleteCompetitor = async (compId) => {
+    try {
+      await api.delete(`/competitors/${compId}`);
+      if (selectedCompId === compId) {
+        setSelectedCompId(null);
+        setPriceHistory([]);
+        setSentimentHistory([]);
+      }
+      await fetchCompetitors();
+    } catch (err) {
+      console.error('Failed to delete competitor:', err);
+      alert('Failed to delete competitor.');
+    }
+  };
+
   const handleAddCompetitorSubmit = async (e) => {
     e.preventDefault();
     if (!newCompName.trim()) return;
@@ -174,6 +189,7 @@ export default function DashboardPage() {
                 setShowChat(true);
               }}
               onAddCompetitor={() => setShowAddModal(true)}
+              onDeleteCompetitor={handleDeleteCompetitor}
             />
           </div>
 

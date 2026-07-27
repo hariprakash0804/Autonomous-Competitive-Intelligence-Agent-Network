@@ -18,6 +18,7 @@ lxml==5.3.0
 faiss-cpu==1.9.0.post1
 sentence-transformers==3.1.1
 vaderSentiment==3.3.2
+fpdf2==2.8.1
 
 # Phase 3 — LangGraph Agent Pipeline (Stable Pinning)
 langgraph==0.2.20

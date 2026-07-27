@@ -4,43 +4,99 @@ import { useAuth } from '../contexts/AuthContext';
 import { Eye, EyeOff, Bot, Shield, Zap, Globe } from 'lucide-react';
 
 /* ────────────────────────────────────────────
-   Suitcase Character Component
+   Human Suitcase Character Component
    ──────────────────────────────────────────── */
 function SuitcaseCharacter({ isSignup, isSwitching }) {
+  const [hasArrived, setHasArrived] = useState(false);
+
+  useEffect(() => {
+    // 2s walk-in from left to center
+    const timer = setTimeout(() => {
+      setHasArrived(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const isOpening = hasArrived && !isSwitching;
+  const containerClass = `character-container mb-2 ${
+    !hasArrived ? 'walking character-walking' : 'arrived character-arrived'
+  }`;
+
   return (
-    <div className="character-container mb-2">
-      {/* Character Body */}
-      <div className={`character-body ${!isSwitching ? 'character-opening' : ''}`}>
+    <div className={containerClass}>
+      {/* Human Character Body */}
+      <div className={`character-body ${isOpening ? 'character-opening' : ''}`}>
+        {/* Hair */}
+        <div className="character-hair" />
+
         {/* Head */}
         <div className="character-head">
+          {/* Ears */}
+          <div className="character-ear ear-left" />
+          <div className="character-ear ear-right" />
+
+          {/* Eyebrows */}
+          <div className="character-eyebrow eyebrow-left" />
+          <div className="character-eyebrow eyebrow-right" />
+
+          {/* Eyes with pupils */}
+          <div className="character-eye eye-left">
+            <div className="character-pupil" />
+          </div>
+          <div className="character-eye eye-right">
+            <div className="character-pupil" />
+          </div>
+
+          {/* Rosy Cheeks */}
+          <div className="character-blush blush-left" />
+          <div className="character-blush blush-right" />
+
           {/* Smile */}
           <div
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 w-[16px] h-[8px] border-b-[2.5px] border-white/60 rounded-b-full transition-all duration-500"
+            className="character-smile"
             style={{ width: isSignup ? '18px' : '16px' }}
           />
         </div>
 
-        {/* Torso */}
+        {/* Neck */}
+        <div className="character-neck" />
+
+        {/* Torso & Suit Jacket */}
         <div className="character-torso">
-          {/* Tie/Badge */}
-          <div className={`absolute top-1 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full transition-colors duration-500 ${
-            isSignup ? 'bg-purple-400/80' : 'bg-cyan-400/80'
-          }`} />
-          {/* Arms */}
-          <div className="character-arm-left" />
-          <div className="character-arm-right" />
+          {/* White Shirt Collar */}
+          <div className="character-collar collar-left" />
+          <div className="character-collar collar-right" />
+
+          {/* Tie */}
+          <div className={`character-tie ${isSignup ? 'tie-signup' : 'tie-login'}`} />
+
+          {/* Suit Lapels */}
+          <div className="character-lapel lapel-left" />
+          <div className="character-lapel lapel-right" />
+
+          {/* Arms with Skin Hands */}
+          <div className="character-arm-left">
+            <div className="character-hand" />
+          </div>
+          <div className="character-arm-right">
+            <div className="character-hand" />
+          </div>
         </div>
 
-        {/* Legs */}
+        {/* Legs with Dress Shoes */}
         <div className="character-legs mt-1">
-          <div className="character-leg" />
-          <div className="character-leg" />
+          <div className="character-leg">
+            <div className="character-shoe" />
+          </div>
+          <div className="character-leg">
+            <div className="character-shoe" />
+          </div>
         </div>
       </div>
 
       {/* Suitcase */}
       <div className={`suitcase ${isSwitching ? 'suitcase-switching' : ''}`}>
-        <div className={`suitcase-body ${isSignup ? 'signup-case' : 'login-case'} ${!isSwitching ? 'suitcase-open' : ''}`}>
+        <div className={`suitcase-body ${isSignup ? 'signup-case' : 'login-case'} ${isOpening ? 'suitcase-open' : ''}`}>
           <div className="suitcase-handle" />
           <div className="suitcase-lid" style={{ background: isSignup
             ? 'linear-gradient(135deg, #7c3aed, #a855f7)'

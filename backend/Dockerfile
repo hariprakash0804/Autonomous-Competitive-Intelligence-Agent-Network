@@ -14,13 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend codebase and Alembic migrations
 COPY backend/app ./app
-COPY backend/scripts ./scripts
-COPY backend/static ./static
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./alembic.ini
 
-# Create data directories for persistence
-RUN mkdir -p /app/faiss_data /app/static/reports
+# Create data & static directories for persistence
+RUN mkdir -p /app/scripts /app/static/reports /app/faiss_data
 
 EXPOSE 8000
 

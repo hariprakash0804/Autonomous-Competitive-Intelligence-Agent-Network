@@ -127,9 +127,11 @@ def start_pipeline_run(
             if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")) and kw.strip() not in urls:
                 urls.append(kw.strip())
 
-    # Fallback default pricing URL if empty
     if not urls:
-        urls.append("https://github.com/pricing")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid URLs found for competitor. Please specify a company URL, pricing URL, or review URLs."
+        )
 
     # Create AgentRun database record
     agent_run = AgentRun(

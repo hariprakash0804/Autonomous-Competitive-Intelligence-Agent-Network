@@ -160,7 +160,12 @@ def deliver_slack_notification(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     target_webhook = payload.webhook_url if payload and payload.webhook_url else None
-    webhook_url = target_webhook or os.getenv("SLACK_WEBHOOK_URL") or "https://hooks.slack.com/services/mock/test/webhook"
+    webhook_url = target_webhook or os.getenv("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Slack webhook URL is missing. Provide 'webhook_url' in request payload or set SLACK_WEBHOOK_URL environment variable.",
+        )
     backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
     html_url = f"{backend_url}/reports/{report.id}/html"
 

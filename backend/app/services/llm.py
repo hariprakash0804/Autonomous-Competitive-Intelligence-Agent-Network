@@ -190,7 +190,7 @@ CRITICAL REQUIREMENT: Output ALL 6 sections completely. Do NOT stop mid-table or
     for p in pages_summary:
         pages_section += f"- **URL**: {p.get('url')} | Status: `{'Stale' if p.get('is_stale') else 'Valid'}` | Length: {p.get('content_length')} chars\n"
 
-    mock_report = f"""# Competitive Intelligence Executive Summary: {user_company_name} vs {competitor_name}
+    structured_report = f"""# Competitive Intelligence Executive Summary: {user_company_name} vs {competitor_name}
 
 {stale_notice}
 ## Executive Brief
@@ -224,7 +224,7 @@ Automated multi-agent intelligence analysis completed between **{user_company_na
 2. **Address Feature Gaps**: Prioritize expanding top 3 requested third-party marketplace integrations in the upcoming product sprint.
 3. **Monitor Competitor Changes**: Set weekly monitoring cadences to immediately capture price adjustments or new feature rollouts by {competitor_name}.
 """
-    return mock_report, "instant/structured_comparative_generator"
+    return structured_report, "instant/structured_comparative_generator"
 
 
 def generate_rag_answer(question: str, retrieved_chunks: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:

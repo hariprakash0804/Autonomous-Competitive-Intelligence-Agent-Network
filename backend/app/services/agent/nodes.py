@@ -149,47 +149,43 @@ def change_detector_node(state: AgentState) -> AgentState:
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
         for page in valid_pages:
-            # Call diff_pricing service
-            detected_diffs = diff_pricing(prev_text, page["clean_text"])
+            clean_txt = page.get("clean_text", "")
+
+            # 1. Detect genuine price changes vs previous snapshot
+            detected_diffs = diff_pricing(prev_text, clean_txt)
             diffs.extend(detected_diffs)
 
-            # Persist price changes in DB
             for d in detected_diffs:
+                price_val = d.get("new_price") if isinstance(d.get("new_price"), (int, float)) else None
                 pc = PriceChange(
                     competitor_id=competitor_id,
                     snapshot_before_id=snapshots[1].id if len(snapshots) > 1 else None,
                     snapshot_after_id=snapshots[0].id if len(snapshots) > 0 else None,
-                    tier_name=d.get("tier_name", "Standard"),
+                    tier_name=d.get("tier_name", "General"),
                     old_price=d.get("old_price") if isinstance(d.get("old_price"), (int, float)) else None,
-                    new_price=d.get("new_price") if isinstance(d.get("new_price"), (int, float)) else 20.0,
+                    new_price=price_val,
                     detected_at=datetime.now(timezone.utc),
                 )
                 db.add(pc)
-        
-        # Fallback baseline price entries for all detected tiers if no prior price changes exist
+
+        # 2. On initial run (no prior price changes), extract real plan tier prices from scraped text
         existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0
-        if existing_changes == 0 and snapshots:
+        if existing_changes == 0 and snapshots and valid_pages:
             extracted_plans = []
             for p in valid_pages:
                 extracted = extract_plan_prices(p.get("clean_text", ""))
                 if extracted:
                     extracted_plans.extend(extracted)
-            
-            if not extracted_plans:
-                extracted_plans = [
-                    {"tier_name": "Pro Tier", "price": 20.0},
-                    {"tier_name": "Team Tier", "price": 25.0},
-                    {"tier_name": "Enterprise Tier", "price": 50.0},
-                ]
 
             for plan in extracted_plans:
+                price_val = plan.get("price") if isinstance(plan.get("price"), (int, float)) else None
                 baseline_pc = PriceChange(
                     competitor_id=competitor_id,
                     snapshot_before_id=None,
                     snapshot_after_id=snapshots[0].id,
-                    tier_name=plan.get("tier_name", "Standard"),
+                    tier_name=plan.get("tier_name", "General"),
                     old_price=None,
-                    new_price=plan.get("price") if isinstance(plan.get("price"), (int, float)) else 20.0,
+                    new_price=price_val,
                     detected_at=datetime.now(timezone.utc),
                 )
                 db.add(baseline_pc)
@@ -249,26 +245,6 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
                     scored_at=datetime.now(timezone.utc),
                 )
                 db.add(ss)
-
-        # Baseline fallback sentiment score if no pages were valid
-        if not sentiment_results and latest_snap:
-            sent_res = sentiment_score("Positive baseline market sentiment")
-            ss = SentimentScore(
-                competitor_id=competitor_id,
-                snapshot_id=latest_snap.id,
-                score=0.85,
-                topics=["AI Safety", "Constitutional AI", "Enterprise"],
-                source_type="web",
-                scored_at=datetime.now(timezone.utc),
-            )
-            db.add(ss)
-            sentiment_results.append({
-                "url": "baseline",
-                "source_type": "web",
-                "score": 0.85,
-                "topics": ["AI Safety", "Constitutional AI", "Enterprise"],
-                "sentiment_category": "positive",
-            })
 
         db.commit()
     finally:

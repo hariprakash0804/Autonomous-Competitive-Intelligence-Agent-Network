@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import SignupRequest, LoginRequest, TokenResponse, UserResponse, UserProfileUpdate
 from app.dependencies.auth import hash_password, verify_password, create_access_token, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -53,3 +53,23 @@ def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]):
 def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     """Return the currently authenticated user's profile."""
     return current_user
+
+
+@router.put("/profile", response_model=UserResponse)
+def update_profile(
+    body: UserProfileUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Update authenticated user's profile details."""
+    if body.name is not None:
+        current_user.name = body.name.strip()
+    if body.company_name is not None:
+        current_user.company_name = body.company_name.strip()
+    if body.company_url is not None:
+        current_user.company_url = body.company_url.strip()
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+

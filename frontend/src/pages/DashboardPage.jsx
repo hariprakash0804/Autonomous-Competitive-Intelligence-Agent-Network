@@ -9,8 +9,9 @@ import SentimentChart from '../components/SentimentChart';
 import AgentRunStatus from '../components/AgentRunStatus';
 import ChatWidget from '../components/ChatWidget';
 import ReportsPanel from '../components/ReportsPanel';
+import ComparativeMatrix from '../components/ComparativeMatrix';
 
-import { Bot, LogOut, Plus, Sparkles, Building2, TrendingUp, BarChart2 } from 'lucide-react';
+import { Bot, LogOut, Plus, Sparkles, Building2, TrendingUp, BarChart2, User, AlertCircle, LayoutDashboard } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
@@ -20,14 +21,17 @@ export default function DashboardPage() {
   const [selectedCompId, setSelectedCompId] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [sentimentHistory, setSentimentHistory] = useState([]);
+  const [reports, setReports] = useState([]);
   const [activeRunId, setActiveRunId] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // New competitor form state
+  // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
+  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || '');
   const [newPricingUrl, setNewPricingUrl] = useState('');
-  const [newReviewUrl, setNewReviewUrl] = useState('');
+  const [addError, setAddError] = useState('');
+  const [submittingAdd, setSubmittingAdd] = useState(false);
 
   const fetchCompetitors = async () => {
     try {
@@ -44,12 +48,14 @@ export default function DashboardPage() {
   const fetchDetails = async (compId) => {
     if (!compId) return;
     try {
-      const [priceRes, sentRes] = await Promise.all([
+      const [priceRes, sentRes, repRes] = await Promise.all([
         api.get(`/competitors/${compId}/price-history`),
         api.get(`/competitors/${compId}/sentiment-history`),
+        api.get(`/reports/competitor/${compId}`),
       ]);
       setPriceHistory(priceRes.data);
       setSentimentHistory(sentRes.data);
+      setReports(repRes.data);
     } catch (err) {
       console.error('Failed to fetch charts history:', err);
     }
@@ -92,6 +98,7 @@ export default function DashboardPage() {
         setSelectedCompId(null);
         setPriceHistory([]);
         setSentimentHistory([]);
+        setReports([]);
       }
       await fetchCompetitors();
     } catch (err) {
@@ -103,28 +110,37 @@ export default function DashboardPage() {
   const handleAddCompetitorSubmit = async (e) => {
     e.preventDefault();
     if (!newCompName.trim()) return;
+    setSubmittingAdd(true);
+    setAddError('');
 
     try {
       const payload = {
-        name: newCompName,
+        name: newCompName.trim(),
+        company_url: newCompanyUrl || user?.company_url || null,
         pricing_url: newPricingUrl || null,
-        review_urls: newReviewUrl ? [newReviewUrl] : [],
-        news_keywords: [newCompName],
+        review_urls: [],
+        news_keywords: [newCompName.trim()],
       };
       const res = await api.post('/competitors/', payload);
       setShowAddModal(false);
       setNewCompName('');
       setNewPricingUrl('');
-      setNewReviewUrl('');
       await fetchCompetitors();
       setSelectedCompId(res.data.id);
     } catch (err) {
       console.error('Failed to add competitor:', err);
-      alert('Failed to add competitor.');
+      if (err.response?.status === 409) {
+        setAddError(err.response.data.detail || 'A competitor with this domain already exists in your account.');
+      } else {
+        setAddError('Failed to add competitor.');
+      }
+    } finally {
+      setSubmittingAdd(false);
     }
   };
 
   const selectedCompetitor = competitors.find((c) => c.id === selectedCompId);
+  const latestReport = reports.length > 0 ? reports[0] : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -145,13 +161,20 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-indigo-400 font-semibold px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition"
+            >
+              <User className="w-3.5 h-3.5 text-indigo-400" /> User Profile & Targets
+            </button>
+
+            <button
               onClick={() => setShowChat(!showChat)}
               className="flex items-center gap-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 text-xs font-semibold px-3.5 py-2 rounded-xl transition"
             >
               <Sparkles className="w-4 h-4 text-indigo-400" /> RAG AI Assistant
             </button>
 
-            <div className="h-4 w-px bg-slate-800"></div>
+            <div className="h-4 w-px bg-slate-800" />
 
             <span className="text-xs text-slate-300 font-medium">
               {user?.name || user?.email}
@@ -188,13 +211,24 @@ export default function DashboardPage() {
                 setSelectedCompId(id);
                 setShowChat(true);
               }}
-              onAddCompetitor={() => setShowAddModal(true)}
+              onAddCompetitor={() => {
+                setAddError('');
+                setNewCompanyUrl(user?.company_url || '');
+                setShowAddModal(true);
+              }}
               onDeleteCompetitor={handleDeleteCompetitor}
             />
           </div>
 
-          {/* Right Column: Recharts Visualizations & Reports */}
+          {/* Right Column: Comparative Intelligence Matrix & Recharts Visualizations */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Side-by-side Advantages/Disadvantages Comparative Matrix */}
+            <ComparativeMatrix
+              selectedCompetitor={selectedCompetitor}
+              userProfile={user}
+              latestReport={latestReport}
+            />
+
             <PriceTimeline
               priceHistory={priceHistory}
               competitorName={selectedCompetitor?.name}
@@ -210,13 +244,13 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* Add Competitor Modal */}
+      {/* Dual-URL Add Competitor Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-indigo-400" /> Add New Competitor Target
+                <Building2 className="w-5 h-5 text-indigo-400" /> Add Dual-URL Competitor Target
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -225,6 +259,13 @@ export default function DashboardPage() {
                 ✕
               </button>
             </div>
+
+            {addError && (
+              <div className="p-3 bg-rose-950/60 border border-rose-500/30 text-rose-300 rounded-xl text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{addError}</span>
+              </div>
+            )}
 
             <form onSubmit={handleAddCompetitorSubmit} className="space-y-3 text-xs">
               <div>
@@ -236,33 +277,33 @@ export default function DashboardPage() {
                   required
                   value={newCompName}
                   onChange={(e) => setNewCompName(e.target.value)}
-                  placeholder="e.g. Vercel, Linear, Supabase"
+                  placeholder="e.g. Stripe, Linear, Vercel"
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">
-                  Pricing URL
+                  URL 1: Your Company URL
+                </label>
+                <input
+                  type="url"
+                  value={newCompanyUrl}
+                  onChange={(e) => setNewCompanyUrl(e.target.value)}
+                  placeholder="https://mycompany.com"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  URL 2: Competitor Pricing URL
                 </label>
                 <input
                   type="url"
                   value={newPricingUrl}
                   onChange={(e) => setNewPricingUrl(e.target.value)}
-                  placeholder="https://example.com/pricing"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">
-                  Review / About URL
-                </label>
-                <input
-                  type="url"
-                  value={newReviewUrl}
-                  onChange={(e) => setNewReviewUrl(e.target.value)}
-                  placeholder="https://example.com/about"
+                  placeholder="https://competitor.com/pricing"
                   className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -277,9 +318,10 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition"
+                  disabled={submittingAdd}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
                 >
-                  Save Competitor
+                  {submittingAdd ? 'Adding...' : 'Save Competitor'}
                 </button>
               </div>
             </form>
@@ -299,3 +341,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

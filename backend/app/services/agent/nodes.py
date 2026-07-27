@@ -273,6 +273,21 @@ def report_writer_node(state: AgentState) -> AgentState:
         for p in state.get("raw_pages", [])
     ]
 
+    user_company_name = "Our Company"
+    user_company_url = None
+
+    db: Session = SessionLocal()
+    try:
+        competitor_id = uuid.UUID(state["competitor_id"])
+        competitor = db.get(Competitor, competitor_id)
+        if competitor:
+            user = competitor.user
+            if user:
+                user_company_name = user.company_name or "Our Company"
+                user_company_url = user.company_url or competitor.company_url
+    finally:
+        db.close()
+
     llm_start = time.time()
     report_md, model_used = generate_executive_report(
         competitor_name=state.get("competitor_name", "Competitor"),
@@ -280,6 +295,8 @@ def report_writer_node(state: AgentState) -> AgentState:
         sentiment_results=state.get("sentiment_results", []),
         pages_summary=pages_summary,
         is_incomplete=state.get("is_incomplete", False),
+        user_company_name=user_company_name,
+        user_company_url=user_company_url,
     )
     print(f"[Report-Writer] LLM report generation: {time.time() - llm_start:.2f}s (model: {model_used})", flush=True)
 

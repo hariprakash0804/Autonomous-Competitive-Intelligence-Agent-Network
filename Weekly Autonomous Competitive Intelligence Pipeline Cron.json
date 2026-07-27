@@ -3,14 +3,11 @@
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
+        "triggerTimes": {
+          "item": [
             {
-              "field": "weeks",
-              "triggerAtDay": [
-                1
-              ],
-              "triggerAtHour": 9
+              "mode": "everyWeek",
+              "hour": 9
             }
           ]
         }
@@ -19,55 +16,55 @@
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
       "position": [
-        250,
-        300
-      ]
+        880,
+        224
+      ],
+      "id": "d6b2e220-6dcf-45bb-8f19-970318e4d30e"
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "http://backend:8000/competitors/",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "url": "https://autonomous-competitive-intelligence-957m.onrender.com/competitors",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
             {
               "name": "X-Internal-Api-Key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Fetch Tracked Competitors List",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        470,
-        300
-      ]
+        1104,
+        224
+      ],
+      "id": "403a4eb1-1980-4a50-828a-8db6fad00a41"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=http://backend:8000/pipeline/run/{{ $json.id }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "requestMethod": "POST",
+        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/pipeline/run/{{ $json['0'].id }}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
             {
               "name": "X-Internal-Api-Key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Trigger Agent Pipeline Run",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        690,
-        300
-      ]
+        1328,
+        224
+      ],
+      "id": "bb65ba11-0cc3-4d98-b530-74a1ba41226b"
     },
     {
       "parameters": {
@@ -78,57 +75,59 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [
-        910,
-        300
-      ]
+        1552,
+        224
+      ],
+      "id": "d90b4cf7-e12d-48cb-b01b-b80c26650412",
+      "webhookId": "40163839-7110-4980-b84d-9eeec919c697"
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "http://backend:8000/reports/",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "url": "https://autonomous-competitive-intelligence-957m.onrender.com/reports/",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
             {
               "name": "X-Internal-Api-Key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Fetch Generated Reports",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1130,
-        300
-      ]
+        1760,
+        224
+      ],
+      "id": "adee62c1-20e6-4bd9-874b-ded3892b5821"
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "=http://backend:8000/reports/deliver-slack/{{ $json[0].id }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "requestMethod": "POST",
+        "url": "=https://autonomous-competitive-intelligence-957m.onrender.com/reports/deliver-slack/{{ $json[0].id }}",
+        "options": {},
+        "headerParametersUi": {
+          "parameter": [
             {
               "name": "X-Internal-Api-Key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
       "name": "Post Latest Report to Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1350,
-        300
-      ]
+        1984,
+        224
+      ],
+      "id": "f5d227a6-9794-4fdc-a07c-cfd1cde0cbb9"
     }
   ],
+  "pinData": {},
   "connections": {
     "Weekly Cron Trigger (Mondays 9 AM)": {
       "main": [
@@ -185,5 +184,17 @@
         ]
       ]
     }
-  }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "50acfd9e-3b1f-4827-ac84-7bbbfd51723e",
+  "meta": {
+    "instanceId": "5434baa7bbb9e0869169353c4bdc4c256dc615de241b55e789abe313a97ae2fc"
+  },
+  "nodeGroups": [],
+  "id": "aNVCeek68YzWZmJy",
+  "tags": []
 }

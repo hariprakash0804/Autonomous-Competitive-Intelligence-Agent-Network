@@ -111,17 +111,20 @@ def start_pipeline_run(
     if not competitor or competitor.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
 
-    # Collect URLs to scrape
+    # Collect URLs to scrape (both user's company URL and competitor URLs)
     urls = []
+    user_comp_url = competitor.company_url or getattr(current_user, "company_url", None)
+    if user_comp_url and user_comp_url.strip():
+        urls.append(user_comp_url.strip())
     if competitor.pricing_url:
         urls.append(competitor.pricing_url)
     if competitor.review_urls:
         for ru in competitor.review_urls:
-            if ru and ru.strip():
+            if ru and ru.strip() and ru.strip() not in urls:
                 urls.append(ru.strip())
     if competitor.news_keywords:
         for kw in competitor.news_keywords:
-            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")):
+            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")) and kw.strip() not in urls:
                 urls.append(kw.strip())
 
     # Fallback default pricing URL if empty

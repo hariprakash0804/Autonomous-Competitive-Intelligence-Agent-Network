@@ -27,6 +27,10 @@ def on_startup():
             conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS model_used VARCHAR(200);"))
             conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_url TEXT;"))
             conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS html_url TEXT;"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_url VARCHAR(1024);"))
+            conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
+            conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
         print("[Startup] Database tables and schema verified/migrated successfully.")
     except Exception as exc:
         print(f"[Startup Warning] Automatic table creation/migration error: {exc}")

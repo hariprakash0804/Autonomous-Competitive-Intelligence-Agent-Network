@@ -13,14 +13,43 @@ from app.models.snapshot import Snapshot
 from app.models.price_change import PriceChange
 from app.models.sentiment_score import SentimentScore
 
+import urllib.parse
+
 router = APIRouter(prefix="/competitors", tags=["competitors"])
+
+
+def normalize_domain(raw_url_or_name: str) -> str:
+    """Strips scheme, www, subpaths, and ports to extract canonical domain."""
+    if not raw_url_or_name or not raw_url_or_name.strip():
+        return ""
+    val = raw_url_or_name.strip().lower()
+    if not (val.startswith("http://") or val.startswith("https://")):
+        val = "https://" + val
+    try:
+        parsed = urllib.parse.urlparse(val)
+        domain = parsed.netloc or parsed.path
+        domain = domain.split(":")[0]  # remove port if present
+        if domain.startswith("www."):
+            domain = domain[4:]
+        return domain.lower()
+    except Exception:
+        return raw_url_or_name.strip().lower()
 
 
 class CompetitorCreate(BaseModel):
     name: str
+    company_url: Optional[str] = None
     pricing_url: Optional[str] = None
     review_urls: Optional[List[str]] = []
     news_keywords: Optional[List[str]] = []
+
+
+class CompetitorUpdate(BaseModel):
+    name: Optional[str] = None
+    company_url: Optional[str] = None
+    pricing_url: Optional[str] = None
+    review_urls: Optional[List[str]] = None
+    news_keywords: Optional[List[str]] = None
 
 
 @router.get("/")
@@ -50,7 +79,9 @@ def list_competitors(
         results.append({
             "id": str(c.id),
             "name": c.name,
+            "company_url": c.company_url or current_user.company_url,
             "pricing_url": c.pricing_url,
+            "domain": c.domain,
             "review_urls": c.review_urls or [],
             "news_keywords": c.news_keywords or [],
             "snapshot_count": snap_count,
@@ -68,11 +99,32 @@ def create_competitor(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """Creates a new competitor record."""
+    """Creates a new competitor record with strict zero-duplication check."""
+    domain_seed = payload.pricing_url or payload.name
+    target_domain = normalize_domain(domain_seed)
+
+    # 1. Zero Duplication Check per User
+    if target_domain:
+        existing = db.scalar(
+            select(Competitor).where(
+                Competitor.user_id == current_user.id,
+                Competitor.domain == target_domain,
+            )
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Competitor with domain/URL '{target_domain}' already exists in your account.",
+            )
+
+    company_url = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else current_user.company_url
+
     competitor = Competitor(
         user_id=current_user.id,
-        name=payload.name,
-        pricing_url=payload.pricing_url,
+        name=payload.name.strip(),
+        company_url=company_url,
+        pricing_url=payload.pricing_url.strip() if payload.pricing_url else None,
+        domain=target_domain,
         review_urls=payload.review_urls,
         news_keywords=payload.news_keywords,
     )
@@ -83,7 +135,63 @@ def create_competitor(
     return {
         "id": str(competitor.id),
         "name": competitor.name,
+        "company_url": competitor.company_url,
         "pricing_url": competitor.pricing_url,
+        "domain": competitor.domain,
+        "created_at": competitor.created_at.isoformat(),
+    }
+
+
+@router.put("/{competitor_id}")
+def update_competitor(
+    competitor_id: uuid.UUID,
+    payload: CompetitorUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """Updates an existing competitor's details."""
+    competitor = db.get(Competitor, competitor_id)
+    if not competitor or competitor.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
+
+    if payload.name is not None:
+        competitor.name = payload.name.strip()
+    if payload.company_url is not None:
+        competitor.company_url = payload.company_url.strip()
+    if payload.pricing_url is not None:
+        new_pricing = payload.pricing_url.strip()
+        new_domain = normalize_domain(new_pricing or competitor.name)
+        if new_domain and new_domain != competitor.domain:
+            existing = db.scalar(
+                select(Competitor).where(
+                    Competitor.user_id == current_user.id,
+                    Competitor.domain == new_domain,
+                    Competitor.id != competitor_id,
+                )
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Competitor with domain '{new_domain}' already exists in your account.",
+                )
+            competitor.domain = new_domain
+        competitor.pricing_url = new_pricing
+    if payload.review_urls is not None:
+        competitor.review_urls = payload.review_urls
+    if payload.news_keywords is not None:
+        competitor.news_keywords = payload.news_keywords
+
+    db.commit()
+    db.refresh(competitor)
+
+    return {
+        "id": str(competitor.id),
+        "name": competitor.name,
+        "company_url": competitor.company_url,
+        "pricing_url": competitor.pricing_url,
+        "domain": competitor.domain,
+        "review_urls": competitor.review_urls or [],
+        "news_keywords": competitor.news_keywords or [],
         "created_at": competitor.created_at.isoformat(),
     }
 
@@ -102,7 +210,9 @@ def get_competitor_details(
     return {
         "id": str(competitor.id),
         "name": competitor.name,
+        "company_url": competitor.company_url or current_user.company_url,
         "pricing_url": competitor.pricing_url,
+        "domain": competitor.domain,
         "review_urls": competitor.review_urls or [],
         "news_keywords": competitor.news_keywords or [],
         "created_at": competitor.created_at.isoformat(),

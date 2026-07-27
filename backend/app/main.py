@@ -16,13 +16,20 @@ app = FastAPI(
 
 @app.on_event("startup")
 def on_startup():
-    """Ensures PostgreSQL database tables exist automatically on container startup."""
+    """Ensures PostgreSQL database tables exist and schema migrations are applied automatically on startup."""
     try:
         print("[Startup] Ensuring PostgreSQL database tables exist...")
         Base.metadata.create_all(bind=engine)
-        print("[Startup] Database tables verified/created successfully.")
+        
+        # Self-healing column additions for existing production databases
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS model_used VARCHAR(200);"))
+            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_url TEXT;"))
+            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS html_url TEXT;"))
+        print("[Startup] Database tables and schema verified/migrated successfully.")
     except Exception as exc:
-        print(f"[Startup Warning] Automatic table creation error: {exc}")
+        print(f"[Startup Warning] Automatic table creation/migration error: {exc}")
 
 
 # Static files directory for rendered HTML reports

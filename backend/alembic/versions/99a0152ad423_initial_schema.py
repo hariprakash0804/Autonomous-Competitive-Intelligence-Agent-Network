@@ -57,6 +57,7 @@ def upgrade() -> None:
     sa.Column('pdf_url', sa.Text(), nullable=True),
     sa.Column('html_url', sa.Text(), nullable=True),
     sa.Column('summary', sa.Text(), nullable=True),
+    sa.Column('model_used', sa.String(length=200), nullable=True),
     sa.Column('generated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('delivered_channels', sa.ARRAY(sa.Text()), nullable=True),
     sa.ForeignKeyConstraint(['competitor_id'], ['competitors.id'], ondelete='CASCADE'),

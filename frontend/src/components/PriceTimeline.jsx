@@ -18,8 +18,6 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
 
   // Compute sparkline trend
   const prices = priceHistory.map(p => p.new_price || 0);
-  const maxPrice = Math.max(...prices);
-  const minPrice = Math.min(...prices);
   const latestPrice = prices[prices.length - 1];
   const firstPrice = prices[0];
   const trend = latestPrice >= firstPrice ? 'up' : 'down';

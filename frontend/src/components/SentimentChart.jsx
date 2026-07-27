@@ -36,7 +36,6 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
   // Compute overall sentiment
   const avgScore = sentimentHistory.reduce((s, h) => s + (h.score || 0), 0) / sentimentHistory.length;
   const overallLabel = avgScore > 0.05 ? 'Positive' : avgScore < -0.05 ? 'Negative' : 'Neutral';
-  const overallColor = avgScore > 0.05 ? 'text-emerald-400' : avgScore < -0.05 ? 'text-rose-400' : 'text-slate-400';
   const OverallIcon = avgScore > 0.05 ? TrendingUp : avgScore < -0.05 ? TrendingDown : Minus;
 
   return (

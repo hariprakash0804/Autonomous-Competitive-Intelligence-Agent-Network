@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
-
 import Sidebar from '../components/Sidebar';
 import CompetitorList from '../components/CompetitorList';
 import PriceTimeline from '../components/PriceTimeline';
@@ -15,7 +14,7 @@ import ComparativeMatrix from '../components/ComparativeMatrix';
 import {
   LogOut, Plus, Sparkles, Building2, 
   AlertCircle, LayoutDashboard, Globe, FileText, Activity,
-  DollarSign, Clock
+  DollarSign, Clock, CheckCircle2
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────
@@ -56,10 +55,13 @@ export default function DashboardPage() {
 
   // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
-  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || '');
+  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || localStorage.getItem('ci_saved_company_url') || '');
+  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url || localStorage.getItem('ci_saved_company_url')));
   const [newPricingUrl, setNewPricingUrl] = useState('');
   const [addError, setAddError] = useState('');
   const [submittingAdd, setSubmittingAdd] = useState(false);
+
+  const savedCompanyUrl = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
 
   const fetchCompetitors = async () => {
     try {
@@ -140,21 +142,48 @@ export default function DashboardPage() {
     }
   };
 
+  const handleOpenAddModal = () => {
+    setAddError('');
+    setNewCompName('');
+    setNewPricingUrl('');
+    const currentSaved = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    setNewCompanyUrl(currentSaved);
+    setUseSavedUrl(Boolean(currentSaved));
+    setShowAddModal(true);
+  };
+
   const handleAddCompetitorSubmit = async (e) => {
     e.preventDefault();
     if (!newCompName.trim()) return;
     setSubmittingAdd(true);
     setAddError('');
 
+    const effectiveCompanyUrl = (useSavedUrl && savedCompanyUrl) ? savedCompanyUrl : newCompanyUrl;
+
     try {
       const payload = {
         name: newCompName.trim(),
-        company_url: newCompanyUrl || user?.company_url || null,
+        company_url: effectiveCompanyUrl || null,
         pricing_url: newPricingUrl || null,
         review_urls: [],
         news_keywords: [newCompName.trim()],
       };
       const res = await api.post('/competitors/', payload);
+
+      // Auto-save new company URL to user profile if user changed/entered a new URL
+      if (effectiveCompanyUrl && effectiveCompanyUrl !== user?.company_url) {
+        try {
+          await api.put('/auth/profile', {
+            name: user?.name,
+            company_name: user?.company_name,
+            company_url: effectiveCompanyUrl,
+          });
+          localStorage.setItem('ci_saved_company_url', effectiveCompanyUrl);
+        } catch (profileErr) {
+          console.error('Failed to auto-update profile company URL:', profileErr);
+        }
+      }
+
       setShowAddModal(false);
       setNewCompName('');
       setNewPricingUrl('');
@@ -264,11 +293,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-500 mt-1">Your competitive intelligence overview at a glance</p>
                 </div>
                 <button
-                  onClick={() => {
-                    setAddError('');
-                    setNewCompanyUrl(user?.company_url || '');
-                    setShowAddModal(true);
-                  }}
+                  onClick={handleOpenAddModal}
                   className="flex items-center gap-2 btn-gradient px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-indigo-600/20"
                 >
                   <Plus className="w-4 h-4" />
@@ -347,11 +372,7 @@ export default function DashboardPage() {
                     setSelectedCompId(id);
                     setShowChat(true);
                   }}
-                  onAddCompetitor={() => {
-                    setAddError('');
-                    setNewCompanyUrl(user?.company_url || '');
-                    setShowAddModal(true);
-                  }}
+                  onAddCompetitor={handleOpenAddModal}
                   onDeleteCompetitor={handleDeleteCompetitor}
                 />
               </div>
@@ -426,13 +447,50 @@ export default function DashboardPage() {
                 <label className="block text-slate-400 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
                   URL 1: Your Company URL
                 </label>
-                <input
-                  type="url"
-                  value={newCompanyUrl}
-                  onChange={(e) => setNewCompanyUrl(e.target.value)}
-                  placeholder="https://mycompany.com"
-                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
-                />
+
+                {useSavedUrl && savedCompanyUrl ? (
+                  <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between gap-3 animate-scale-in">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Using Saved Company URL</span>
+                      </div>
+                      <p className="text-xs font-mono text-slate-200 truncate mt-0.5">{savedCompanyUrl}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseSavedUrl(false);
+                        setNewCompanyUrl(savedCompanyUrl);
+                      }}
+                      className="px-2.5 py-1 text-[11px] bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 rounded-lg transition-colors font-medium shrink-0"
+                    >
+                      Change URL
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 animate-scale-in">
+                    <input
+                      type="url"
+                      value={newCompanyUrl}
+                      onChange={(e) => setNewCompanyUrl(e.target.value)}
+                      placeholder="https://mycompany.com"
+                      className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                    />
+                    {savedCompanyUrl && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseSavedUrl(true);
+                          setNewCompanyUrl(savedCompanyUrl);
+                        }}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 transition-colors"
+                      >
+                        ← Revert to saved URL ({savedCompanyUrl})
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

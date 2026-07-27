@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock, Zap } from 'lucide-react';
+import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock } from 'lucide-react';
 import api, { API_BASE_URL } from '../api/client';
 
 export default function ReportsPanel({ selectedCompetitorId }) {

@@ -56,12 +56,12 @@ export default function CompetitorList({
                 }`}
               />
 
-              <div className="pl-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-100 text-[13px]">{comp.name}</h3>
+              <div className="pl-2 min-w-0 flex-1 pr-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="font-semibold text-slate-100 text-[13px] truncate">{comp.name}</h3>
                   {comp.avg_sentiment !== null && comp.avg_sentiment !== undefined && (
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-lg font-medium ${
+                      className={`text-[10px] px-2 py-0.5 rounded-lg font-medium flex-shrink-0 ${
                         comp.avg_sentiment >= 0.05
                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
                           : comp.avg_sentiment <= -0.05
@@ -73,7 +73,7 @@ export default function CompetitorList({
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500 truncate max-w-[180px] mt-0.5 font-mono">
+                <p className="text-[11px] text-slate-500 truncate mt-0.5 font-mono">
                   {comp.pricing_url || 'No URL specified'}
                 </p>
 
@@ -89,7 +89,7 @@ export default function CompetitorList({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

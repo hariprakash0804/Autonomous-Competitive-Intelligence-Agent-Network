@@ -21,31 +21,39 @@ export default function CompetitorList({
         </div>
         <button
           onClick={onAddCompetitor}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-all duration-200 hover:scale-[1.03] active:scale-95 shadow-md shadow-indigo-950/40"
         >
           <Plus className="w-4 h-4" /> Add Competitor
         </button>
       </div>
 
       <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-        {competitors.map((comp) => {
+        {competitors.map((comp, idx) => {
           const isSelected = comp.id === selectedId;
           return (
             <div
               key={comp.id}
               onClick={() => onSelect(comp.id)}
-              className={`p-4 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+              style={{ '--i': idx }}
+              className={`stagger-item hover-lift relative p-4 rounded-xl border cursor-pointer transition-colors duration-200 flex items-center justify-between overflow-hidden ${
                 isSelected
                   ? 'bg-indigo-950/40 border-indigo-500/80 shadow-md shadow-indigo-950/50'
                   : 'bg-slate-800/50 border-slate-700/60 hover:bg-slate-800 hover:border-slate-600'
               }`}
             >
+              {/* Selection indicator bar */}
+              <span
+                className={`absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-indigo-400 to-purple-500 transition-all duration-300 ${
+                  isSelected ? 'opacity-100' : 'opacity-0'
+                }`}
+              />
+
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-slate-100 text-sm">{comp.name}</h3>
                   {comp.avg_sentiment !== null && (
                     <span
-                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors ${
                         comp.avg_sentiment >= 0.05
                           ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                           : comp.avg_sentiment <= -0.05
@@ -75,7 +83,7 @@ export default function CompetitorList({
                     onRunPipeline(comp.id);
                   }}
                   title="Trigger Agent Pipeline Run"
-                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg border border-indigo-500/30 transition"
+                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white rounded-lg border border-indigo-500/30 transition-all duration-200 hover:scale-110 active:scale-95"
                 >
                   <Play className="w-4 h-4" />
                 </button>
@@ -85,7 +93,7 @@ export default function CompetitorList({
                     onOpenChat(comp.id);
                   }}
                   title="Ask RAG Chat"
-                  className="p-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-600 transition"
+                  className="p-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-600 transition-all duration-200 hover:scale-110 active:scale-95"
                 >
                   <MessageSquare className="w-4 h-4" />
                 </button>
@@ -97,7 +105,7 @@ export default function CompetitorList({
                     }
                   }}
                   title="Delete Competitor"
-                  className="p-2 bg-rose-950/50 hover:bg-rose-900 text-rose-400 hover:text-rose-200 rounded-lg border border-rose-800/50 transition"
+                  className="p-2 bg-rose-950/50 hover:bg-rose-900 text-rose-400 hover:text-rose-200 rounded-lg border border-rose-800/50 transition-all duration-200 hover:scale-110 active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -107,7 +115,7 @@ export default function CompetitorList({
         })}
 
         {competitors.length === 0 && (
-          <div className="text-center py-8 text-slate-500 text-sm">
+          <div className="text-center py-8 text-slate-500 text-sm animate-fade-in-up">
             No competitors found. Click "Add Competitor" to start tracking.
           </div>
         )}

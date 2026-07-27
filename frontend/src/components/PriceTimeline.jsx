@@ -5,7 +5,7 @@ import { DollarSign, Tag, Info } from 'lucide-react';
 export default function PriceTimeline({ priceHistory, competitorName }) {
   if (!priceHistory || priceHistory.length === 0) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[300px]">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[300px] animate-fade-in-up">
         <DollarSign className="w-10 h-10 text-slate-700 mb-2" />
         <h3 className="text-slate-300 font-semibold text-sm">No Price Movement Data Yet</h3>
         <p className="text-xs text-slate-500 text-center max-w-sm mt-1">
@@ -16,7 +16,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
@@ -45,11 +45,12 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
             <XAxis dataKey="tier_name" stroke="#64748b" fontSize={11} />
             <YAxis stroke="#64748b" fontSize={11} unit="$" />
             <Tooltip
+              cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }}
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1">
+                    <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">
                       <p className="font-bold text-slate-100">{data.tier_name}</p>
                       <p className="text-emerald-400 font-semibold">New Price: ${data.new_price}</p>
                       {data.is_baseline ? (
@@ -65,7 +66,13 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
                 return null;
               }}
             />
-            <Bar dataKey="new_price" fill="#6366f1" radius={[4, 4, 0, 0]} />
+            <Bar
+              dataKey="new_price"
+              fill="#6366f1"
+              radius={[4, 4, 0, 0]}
+              animationDuration={700}
+              animationEasing="ease-out"
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -76,10 +83,11 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           <Tag className="w-3.5 h-3.5 text-indigo-400" /> Extracted Pricing Records
         </h4>
         <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-          {priceHistory.map((item) => (
+          {priceHistory.map((item, idx) => (
             <div
               key={item.id}
-              className="flex items-center justify-between bg-slate-800/40 px-3 py-2 rounded-lg text-xs"
+              style={{ '--i': idx }}
+              className="stagger-item flex items-center justify-between bg-slate-800/40 hover:bg-slate-800 px-3 py-2 rounded-lg text-xs transition-colors duration-150"
             >
               <span className="font-medium text-slate-200">{item.tier_name}</span>
               <div className="flex items-center gap-3">

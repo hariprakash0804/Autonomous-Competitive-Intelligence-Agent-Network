@@ -5,7 +5,7 @@ import { Activity, Hash } from 'lucide-react';
 export default function SentimentChart({ sentimentHistory, competitorName }) {
   if (!sentimentHistory || sentimentHistory.length === 0) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[250px]">
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[250px] animate-fade-in-up">
         <Activity className="w-10 h-10 text-slate-700 mb-2" />
         <h3 className="text-slate-300 font-semibold text-sm">No Sentiment Data Yet</h3>
         <p className="text-xs text-slate-500 text-center max-w-sm mt-1">
@@ -21,7 +21,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
   ).slice(0, 8);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
@@ -51,7 +51,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
                 if (active && payload && payload.length) {
                   const data = payload[0].payload;
                   return (
-                    <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1">
+                    <div className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-xl text-xs space-y-1 animate-scale-in">
                       <p className="font-bold text-slate-100">Date: {data.formatted_date}</p>
                       <p className="text-emerald-400 font-semibold">Sentiment Score: {data.score}</p>
                       <p className="text-slate-400">Source: {data.source_type}</p>
@@ -64,7 +64,16 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
                 return null;
               }}
             />
-            <Area type="monotone" dataKey="score" stroke="#10b981" fillOpacity={1} fill="url(#sentimentColor)" strokeWidth={2} />
+            <Area
+              type="monotone"
+              dataKey="score"
+              stroke="#10b981"
+              fillOpacity={1}
+              fill="url(#sentimentColor)"
+              strokeWidth={2}
+              animationDuration={800}
+              animationEasing="ease-out"
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -79,7 +88,8 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
             {allTopics.map((topic, i) => (
               <span
                 key={i}
-                className="bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 text-[11px] px-2.5 py-0.5 rounded-full font-medium"
+                style={{ '--i': i }}
+                className="stagger-item bg-indigo-950/60 text-indigo-300 border border-indigo-800/60 text-[11px] px-2.5 py-0.5 rounded-full font-medium transition-all duration-150 hover:bg-indigo-900/60 hover:scale-105 cursor-default"
               >
                 #{topic}
               </span>

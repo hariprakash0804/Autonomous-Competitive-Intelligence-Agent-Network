@@ -35,18 +35,28 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
-      {/* Background decoration */}
+    <div className="min-h-screen gradient-bg flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Ambient grid overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+        }}
+      />
+
+      {/* Background decoration — now with ambient drift */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary-600/10 rounded-full blur-3xl orb-float" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl orb-float-slow" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary-500/5 rounded-full blur-3xl orb-float" />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
+      <div className="w-full max-w-md relative z-10 animate-fade-in-up">
         {/* Logo / Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow mb-4">
+        <div className="text-center mb-8 animate-fade-in-up" style={{ '--i': 0 }}>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl glass glow mb-4 signal-pulse transition-transform duration-300 hover:scale-105 hover:rotate-3">
             <svg
               className="w-8 h-8 text-primary-400"
               fill="none"
@@ -61,7 +71,7 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">
+          <h1 className="text-2xl font-bold text-white mb-1 gradient-text">
             Competitive Intelligence
           </h1>
           <p className="text-dark-200 text-sm">
@@ -70,14 +80,14 @@ export default function LoginPage() {
         </div>
 
         {/* Login Card */}
-        <div className="glass rounded-2xl p-8 glow">
+        <div className="glass rounded-2xl p-8 glow animate-scale-in" style={{ animationDelay: '80ms' }}>
           <h2 className="text-xl font-semibold text-white mb-6">
             {isSignup ? 'Create your account' : 'Welcome back'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {isSignup && (
-              <div>
+              <div className="animate-fade-in-up">
                 <label
                   htmlFor="name"
                   className="block text-sm font-medium text-dark-100 mb-1.5"
@@ -96,7 +106,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div>
+            <div className="stagger-item" style={{ '--i': 1 }}>
               <label
                 htmlFor="email"
                 className="block text-sm font-medium text-dark-100 mb-1.5"
@@ -114,7 +124,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <div>
+            <div className="stagger-item" style={{ '--i': 2 }}>
               <label
                 htmlFor="password"
                 className="block text-sm font-medium text-dark-100 mb-1.5"
@@ -133,7 +143,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 animate-scale-in">
                 <svg
                   className="w-4 h-4 text-red-400 flex-shrink-0"
                   fill="none"
@@ -154,7 +164,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 px-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-primary-500/20"
+              className="w-full py-3 px-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 text-white font-medium rounded-xl transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-primary-500/20 hover:shadow-primary-500/40"
             >
               {isLoading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -175,7 +185,7 @@ export default function LoginPage() {
                 setIsSignup(!isSignup);
                 setError('');
               }}
-              className="text-sm text-dark-200 hover:text-primary-400 transition-colors"
+              className="text-sm text-dark-200 hover:text-primary-400 transition-colors duration-200"
             >
               {isSignup
                 ? 'Already have an account? Sign in'

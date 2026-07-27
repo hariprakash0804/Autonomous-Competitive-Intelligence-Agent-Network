@@ -6,7 +6,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
 
   if (!selectedCompetitor) {
     return (
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center space-y-3">
+      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center space-y-3 animate-fade-in-up">
         <Building2 className="w-10 h-10 text-slate-600 mx-auto" />
         <h3 className="text-base font-semibold text-slate-300">No Target Competitor Selected</h3>
         <p className="text-xs text-slate-400 max-w-sm mx-auto">
@@ -25,7 +25,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
   const reportSummary = latestReport?.summary || '';
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6 animate-fade-in-up">
       {/* Header Comparison Banner */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
@@ -50,16 +50,16 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
         <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setActiveTab('matrix')}
-            className={`px-3.5 py-1.5 rounded-lg font-medium transition ${
-              activeTab === 'matrix' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            className={`px-3.5 py-1.5 rounded-lg font-medium transition-all duration-200 ${
+              activeTab === 'matrix' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/50' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             Advantages & Gaps
           </button>
           <button
             onClick={() => setActiveTab('report')}
-            className={`px-3.5 py-1.5 rounded-lg font-medium transition ${
-              activeTab === 'report' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            className={`px-3.5 py-1.5 rounded-lg font-medium transition-all duration-200 ${
+              activeTab === 'report' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/50' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
             Executive Brief Report
@@ -68,11 +68,11 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
       </div>
 
       {activeTab === 'matrix' ? (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in-up">
           {/* Dual Company Card Badges */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Your Company Card */}
-            <div className="bg-slate-950/80 border border-indigo-500/20 rounded-xl p-4 space-y-2">
+            <div className="hover-lift bg-slate-950/80 border border-indigo-500/20 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
                   <Award className="w-4 h-4 text-indigo-400" /> Primary Company Target
@@ -91,7 +91,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
             </div>
 
             {/* Competitor Card */}
-            <div className="bg-slate-950/80 border border-rose-500/20 rounded-xl p-4 space-y-2">
+            <div className="hover-lift bg-slate-950/80 border border-rose-500/20 rounded-xl p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-rose-300 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 text-rose-400" /> Tracked Competitor
@@ -113,7 +113,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
           {/* Advantages vs Disadvantages Side-by-Side Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Advantages Column */}
-            <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-5 space-y-4">
+            <div className="hover-lift bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
                 <h3 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -124,35 +124,36 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
                 </span>
               </div>
               <ul className="space-y-3 text-xs text-slate-300">
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Faster Onboarding & Implementation:</strong> Lower time-to-value for development teams compared to {competitorName}'s enterprise setup process.
-                  </div>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Transparent & Predictable Pricing:</strong> User-based tiers without mandatory annual lock-in or unannounced add-on costs.
-                  </div>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Modern Architecture:</strong> Native multi-agent background orchestration and instant automated intelligence reports.
-                  </div>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Responsive Customer Support:</strong> Faster response SLAs and direct support channel access for engineering teams.
-                  </div>
-                </li>
+                {[
+                  {
+                    title: 'Faster Onboarding & Implementation:',
+                    body: `Lower time-to-value for development teams compared to ${competitorName}'s enterprise setup process.`,
+                  },
+                  {
+                    title: 'Transparent & Predictable Pricing:',
+                    body: 'User-based tiers without mandatory annual lock-in or unannounced add-on costs.',
+                  },
+                  {
+                    title: 'Modern Architecture:',
+                    body: 'Native multi-agent background orchestration and instant automated intelligence reports.',
+                  },
+                  {
+                    title: 'Responsive Customer Support:',
+                    body: 'Faster response SLAs and direct support channel access for engineering teams.',
+                  },
+                ].map((point, idx) => (
+                  <li key={idx} style={{ '--i': idx }} className="stagger-item flex items-start gap-2.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                    <div>
+                      <strong className="text-slate-100">{point.title}</strong> {point.body}
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
 
             {/* Disadvantages / Gap Analysis Column */}
-            <div className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-5 space-y-4">
+            <div className="hover-lift bg-amber-950/20 border border-amber-500/20 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
                 <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -163,31 +164,34 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
                 </span>
               </div>
               <ul className="space-y-3 text-xs text-slate-300">
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Plugin Ecosystem Breadth:</strong> {competitorName} currently maintains more pre-built 3rd party marketplace integrations.
-                  </div>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Legacy Enterprise Brand Recognition:</strong> {competitorName} holds established legacy brand presence in Fortune 500 accounts.
-                  </div>
-                </li>
-                <li className="flex items-start gap-2.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                  <div>
-                    <strong className="text-slate-100">Specialized Industry Certifications:</strong> {competitorName} advertises compliance standard badges for healthcare and finance verticals.
-                  </div>
-                </li>
+                {[
+                  {
+                    title: 'Plugin Ecosystem Breadth:',
+                    body: `${competitorName} currently maintains more pre-built 3rd party marketplace integrations.`,
+                  },
+                  {
+                    title: 'Legacy Enterprise Brand Recognition:',
+                    body: `${competitorName} holds established legacy brand presence in Fortune 500 accounts.`,
+                  },
+                  {
+                    title: 'Specialized Industry Certifications:',
+                    body: `${competitorName} advertises compliance standard badges for healthcare and finance verticals.`,
+                  },
+                ].map((point, idx) => (
+                  <li key={idx} style={{ '--i': idx }} className="stagger-item flex items-start gap-2.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                    <div>
+                      <strong className="text-slate-100">{point.title}</strong> {point.body}
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           </div>
         </div>
       ) : (
         /* Executive Report View */
-        <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-[480px] overflow-y-auto">
+        <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-[480px] overflow-y-auto animate-fade-in-up">
           {reportSummary ? (
             reportSummary
           ) : (

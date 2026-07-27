@@ -42,7 +42,11 @@ def flush_langsmith_tracers():
         if os.environ.get("LANGCHAIN_TRACING_V2") == "true":
             from langsmith import Client
             ls_client = Client()
-            ls_client.flush()
+            # Handle different langsmith SDK versions
+            if hasattr(ls_client, "flush"):
+                ls_client.flush()
+            elif hasattr(ls_client, "close"):
+                ls_client.close()
     except Exception as exc:
         print(f"[LangSmith Flush Warning] {exc}")
 

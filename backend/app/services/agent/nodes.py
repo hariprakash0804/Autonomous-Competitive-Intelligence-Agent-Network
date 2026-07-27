@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.database import SessionLocal
 from app.models.competitor import Competitor

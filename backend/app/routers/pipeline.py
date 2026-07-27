@@ -119,6 +119,10 @@ def start_pipeline_run(
         for ru in competitor.review_urls:
             if ru and ru.strip():
                 urls.append(ru.strip())
+    if competitor.news_keywords:
+        for kw in competitor.news_keywords:
+            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")):
+                urls.append(kw.strip())
 
     # Fallback default pricing URL if empty
     if not urls:

@@ -23,6 +23,7 @@ class Report(Base):
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     html_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_used: Mapped[str | None] = mapped_column(String(200), nullable=True)
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

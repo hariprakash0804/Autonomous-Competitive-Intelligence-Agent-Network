@@ -8,12 +8,17 @@ export default function AgentRunStatus({ runId, onComplete }) {
   useEffect(() => {
     if (!runId) return;
 
+    let isStopped = false;
+
     const fetchStatus = async () => {
+      if (isStopped) return;
       try {
         const response = await api.get(`/pipeline/status/${runId}`);
         setStatusData(response.data);
 
         if (response.data.status === 'COMPLETED' || response.data.status === 'FAILED') {
+          isStopped = true;
+          clearInterval(intervalRef);
           if (onComplete) onComplete(response.data);
         }
       } catch (error) {
@@ -22,8 +27,11 @@ export default function AgentRunStatus({ runId, onComplete }) {
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 2500);
-    return () => clearInterval(interval);
+    const intervalRef = setInterval(fetchStatus, 2500);
+    return () => {
+      isStopped = true;
+      clearInterval(intervalRef);
+    };
   }, [runId]);
 
   if (!statusData) return null;

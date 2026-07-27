@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, ExternalLink, Send, Mail, Copy, Check, Clock } from 'lucide-react';
-import api from '../api/client';
+import api, { API_BASE_URL } from '../api/client';
 
 export default function ReportsPanel({ selectedCompetitorId }) {
   const [reports, setReports] = useState([]);
@@ -97,7 +97,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
 
             <div className="flex items-center gap-2">
               <a
-                href={r.html_url}
+                href={`${API_BASE_URL}${r.html_url}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-lg border border-indigo-500/30 transition text-[11px] font-medium"

@@ -58,7 +58,7 @@ def list_reports(
             "id": str(r.id),
             "competitor_id": str(r.competitor_id),
             "competitor_name": comp.name if comp else "Unknown",
-            "model_used": getattr(r, "model_used", "openai/gpt-oss-120b:free"),
+            "model_used": r.model_used or "unknown",
             "generated_at": r.generated_at.isoformat(),
             "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M UTC"),
             "content_snippet": (r.summary or "")[:200] + "...",
@@ -105,7 +105,8 @@ def deliver_slack_notification(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     webhook_url = payload.webhook_url or os.getenv("SLACK_WEBHOOK_URL") or "https://hooks.slack.com/services/mock/test/webhook"
-    html_url = f"http://localhost:8000/reports/{report.id}/html"
+    backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
+    html_url = f"{backend_url}/reports/{report.id}/html"
 
     res = send_slack_notification(
         webhook_url=webhook_url,
@@ -134,7 +135,8 @@ def deliver_email_notification(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     target_email = payload.recipient_email or current_user.email
-    html_url = f"http://localhost:8000/reports/{report.id}/html"
+    backend_url = (settings.BACKEND_URL or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
+    html_url = f"{backend_url}/reports/{report.id}/html"
 
     res = send_email_notification(
         recipient_email=target_email,

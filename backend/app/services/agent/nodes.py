@@ -297,13 +297,26 @@ def report_writer_node(state: AgentState) -> AgentState:
                 user_id=user_id,
                 competitor_id=competitor_id,
                 pdf_url=None,
-                html_url=f"/reports/{competitor_id}/latest.html",
-                summary=report_md[:500],
+                summary=report_md,  # Full report markdown, not truncated
+                model_used=model_used,
                 generated_at=datetime.now(timezone.utc),
                 delivered_channels=["dashboard"],
             )
             db.add(report_row)
             db.commit()
+            db.refresh(report_row)
+
+            # Set correct html_url using report_row.id (not competitor_id)
+            report_row.html_url = f"/reports/{report_row.id}/html"
+            db.commit()
+
+            # Auto-render HTML report immediately so first click is instant
+            try:
+                from app.services.reports_service import render_html_report
+                render_html_report(str(report_row.id), competitor.name if competitor else "Competitor", report_md)
+                print(f"[Report-Writer] HTML report rendered: /reports/{report_row.id}/html", flush=True)
+            except Exception as html_exc:
+                print(f"[Report-Writer] HTML render warning: {html_exc}", flush=True)
     finally:
         db.close()
 

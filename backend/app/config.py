@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     LANGSMITH_API_KEY: Optional[str] = None
     LANGSMITH_PROJECT: Optional[str] = "competitive-intel"
 
+    # Backend public URL (for Slack/email report links)
+    BACKEND_URL: Optional[str] = "http://localhost:8000"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

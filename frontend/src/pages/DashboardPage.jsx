@@ -12,7 +12,7 @@ import ReportsPanel from '../components/ReportsPanel';
 import ComparativeMatrix from '../components/ComparativeMatrix';
 
 import {
-  LogOut, Plus, Sparkles, Building2, 
+  LogOut, Plus, Sparkles, Building2,
   AlertCircle, LayoutDashboard, Globe, FileText, Activity,
   DollarSign, Clock, CheckCircle2
 } from 'lucide-react';
@@ -239,11 +239,10 @@ export default function DashboardPage() {
 
               <button
                 onClick={() => setShowChat(!showChat)}
-                className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-300 hover:scale-[1.03] active:scale-95 ${
-                  showChat
+                className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all duration-300 hover:scale-[1.03] active:scale-95 ${showChat
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25'
                     : 'bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20'
-                }`}
+                  }`}
               >
                 <Sparkles className="w-4 h-4" />
                 RAG Chat

@@ -62,8 +62,8 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
   };
 
   return (
-    <div className="glass-card rounded-2xl neon-border shadow-2xl flex flex-col h-[550px] w-full max-w-lg animate-spring-in"
-      style={{ boxShadow: '0 25px 80px -20px rgba(99, 102, 241, 0.2), 0 0 40px rgba(0, 0, 0, 0.5)' }}
+    <div className="bg-[#0a0a14]/98 backdrop-blur-2xl rounded-2xl border border-indigo-500/25 shadow-2xl flex flex-col h-[550px] w-full max-w-lg animate-spring-in overflow-hidden"
+      style={{ boxShadow: '0 25px 80px -20px rgba(99, 102, 241, 0.3), 0 0 50px rgba(0, 0, 0, 0.8)' }}
     >
       {/* Header */}
       <div className="p-4 border-b border-white/[0.04] flex items-center justify-between bg-white/[0.02] rounded-t-2xl">

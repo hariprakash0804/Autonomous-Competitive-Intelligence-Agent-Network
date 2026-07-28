@@ -15,10 +15,10 @@
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
       "position": [
-        -320,
-        352
+        -304,
+        800
       ],
-      "id": "5abd3296-e735-4e8e-8d55-502d71b01375"
+      "id": "d525be16-0752-49c3-9415-84444656a246"
     },
     {
       "parameters": {
@@ -37,10 +37,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        -112,
-        352
+        -96,
+        800
       ],
-      "id": "3efc6547-a9ef-4289-8355-84c6ba3c445b"
+      "id": "7f88e8cb-a75a-4135-95e2-f9f44e593fe2"
     },
     {
       "parameters": {
@@ -50,10 +50,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        96,
-        352
+        112,
+        800
       ],
-      "id": "49c0bbbb-536e-4c1c-bc0d-3c20c32f3730"
+      "id": "624ca874-1e7e-4881-bb9a-db7861c79bdc"
     },
     {
       "parameters": {
@@ -73,10 +73,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        288,
-        352
+        304,
+        800
       ],
-      "id": "f4a9232a-e29d-4209-8152-e95d6d81585b"
+      "id": "f827e057-5e1b-4b68-84ed-2c866ac0ba29"
     },
     {
       "parameters": {
@@ -87,10 +87,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [
-        512,
-        352
+        528,
+        800
       ],
-      "id": "5173fa2c-a3f6-4b74-aecb-6b8b3be7b96c",
+      "id": "aff7aa40-bbe4-4767-8c09-d01f67296bf9",
       "webhookId": "40163839-7110-4980-b84d-9eeec919c697"
     },
     {
@@ -110,10 +110,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        720,
-        352
+        736,
+        800
       ],
-      "id": "ed7f2a8f-dd11-4db5-991e-85138c7cc19f"
+      "id": "7e70942d-bbee-460d-8691-8e4e0cd477d2"
     },
     {
       "parameters": {
@@ -123,10 +123,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        944,
-        352
+        960,
+        800
       ],
-      "id": "9d817680-77d6-4c37-8730-d8362ac58b0f"
+      "id": "7067bb2e-9da1-4ea1-a466-1751f1cd619d"
     },
     {
       "parameters": {
@@ -136,7 +136,7 @@
         "headerParametersUi": {
           "parameter": [
             {
-              "name": "X-Internal-Api-Key",
+              "name": "=X-Internal-Api-Key",
               "value": "={{ $env.INTERNAL_API_KEY }}"
             }
           ]
@@ -146,10 +146,24 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1168,
-        352
+        1392,
+        800
       ],
-      "id": "a6bea03c-56db-48ee-a8d2-f6b688f104f4"
+      "id": "7665bd8f-7658-4b38-80ed-15ad6a081c14"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract ONLY the single newest report (first item), handling all n8n input modes\nconst allItems = $input.all();\nif (allItems && allItems.length > 0) {\n  const firstData = allItems[0].json;\n  if (Array.isArray(firstData)) {\n    return firstData.length > 0 ? [{ json: firstData[0] }] : [];\n  } else if (firstData && typeof firstData === 'object') {\n    return [{ json: firstData }];\n  }\n}\nreturn [];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        800
+      ],
+      "id": "c118fba7-11be-44e7-be53-f076f80b10f3",
+      "name": "Extract Latest Report Only",
+      "alwaysOutputData": false
     }
   ],
   "connections": {
@@ -220,6 +234,17 @@
       ]
     },
     "Split Reports Into Items": {
+      "main": [
+        [
+          {
+            "node": "Extract Latest Report Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Latest Report Only": {
       "main": [
         [
           {

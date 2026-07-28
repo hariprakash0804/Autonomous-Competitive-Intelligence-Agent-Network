@@ -179,8 +179,9 @@ def deliver_slack_notification(
     if not comp or comp.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    target_webhook = payload.webhook_url.strip() if payload and payload.webhook_url and payload.webhook_url.strip() else None
-    user_webhook = (current_user.slack_webhook_url or "").strip() if getattr(current_user, "slack_webhook_url", None) else None
+    user_webhook = (payload.webhook_url.strip() if payload and payload.webhook_url and payload.webhook_url.strip() else None) or (
+        (current_user.slack_webhook_url or "").strip() if getattr(current_user, "slack_webhook_url", None) else None
+    )
     env_webhook = (
         os.getenv("SLACK_WEBHOOK_URL")
         or os.getenv("WEBHOOK_URL")
@@ -189,23 +190,39 @@ def deliver_slack_notification(
         or ""
     ).strip() or None
 
-    webhook_url = target_webhook or user_webhook or env_webhook
-    if not webhook_url:
+    # Collect unique valid webhooks to deliver to both user and default system webhooks
+    target_webhooks = []
+    if user_webhook and user_webhook.startswith("http"):
+        target_webhooks.append(user_webhook)
+    if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
+        target_webhooks.append(env_webhook)
+
+    if not target_webhooks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Slack webhook URL is missing. Set WEBHOOK_URL / SLACK_WEBHOOK_URL in environment, save it in your Profile settings, or provide 'webhook_url' in request payload.",
         )
+
     backend_url = get_public_backend_url()
     html_url = f"{backend_url}/reports/{report.id}/html"
 
-    res = send_slack_notification(
-        webhook_url=webhook_url,
-        competitor_name=comp.name,
-        report_summary=report.summary or "",
-        html_report_url=html_url,
-    )
+    # Send notifications to all configured target webhooks (user + system default)
+    slack_results = []
+    for w_url in target_webhooks:
+        res = send_slack_notification(
+            webhook_url=w_url,
+            competitor_name=comp.name,
+            report_summary=report.summary or "",
+            html_report_url=html_url,
+        )
+        slack_results.append(res)
 
-    return {"status": "success", "slack_result": res}
+    return {
+        "status": "success",
+        "delivered_count": len(slack_results),
+        "slack_results": slack_results,
+        "slack_result": slack_results[0] if slack_results else None,
+    }
 
 
 @router.post("/deliver-email/{report_id}")

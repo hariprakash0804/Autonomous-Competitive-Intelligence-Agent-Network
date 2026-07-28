@@ -14,7 +14,7 @@ from app.models.price_change import PriceChange
 from app.models.sentiment_score import SentimentScore
 from app.models.report import Report
 from app.services.scraper import scrape_url
-from app.services.diff_pricing import diff_pricing, extract_plan_prices
+from app.services.diff_pricing import diff_pricing, extract_plan_prices, smart_extract_plan_prices
 from app.services.sentiment import sentiment_score
 from app.services.vector_store import vector_store
 from app.services.llm import generate_executive_report
@@ -168,14 +168,30 @@ def change_detector_node(state: AgentState) -> AgentState:
                 )
                 db.add(pc)
 
-        # 2. On initial run (no prior price changes), extract real plan tier prices from scraped text
+        # 2. Extract real plan tier prices for both Competitor and User's Company
         existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0
         if existing_changes == 0 and snapshots and valid_pages:
             extracted_plans = []
+            seen_tiers = set()
+
+            user_comp_url = competitor.company_url or ""
+            if competitor.user and competitor.user.company_url:
+                user_comp_url = competitor.user.company_url
+
             for p in valid_pages:
-                extracted = extract_plan_prices(p.get("clean_text", ""))
-                if extracted:
-                    extracted_plans.extend(extracted)
+                page_url = p.get("url", "")
+                is_user_page = bool(user_comp_url and (user_comp_url in page_url or page_url in user_comp_url))
+
+                extracted = smart_extract_plan_prices(p.get("clean_text", ""))
+                for plan in extracted:
+                    t_name = plan.get("tier_name", "General")
+                    if is_user_page:
+                        t_name = f"(Our Company) {t_name}"
+
+                    if t_name not in seen_tiers:
+                        seen_tiers.add(t_name)
+                        plan["tier_name"] = t_name
+                        extracted_plans.append(plan)
 
             for plan in extracted_plans:
                 price_val = plan.get("price") if isinstance(plan.get("price"), (int, float)) else None

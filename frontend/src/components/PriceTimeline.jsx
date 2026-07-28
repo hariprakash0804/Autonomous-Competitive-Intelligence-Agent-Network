@@ -22,6 +22,8 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
   const firstPrice = prices[0];
   const trend = latestPrice >= firstPrice ? 'up' : 'down';
 
+  const hasUserCompanyPlans = priceHistory.some(p => p.tier_name && p.tier_name.includes('(Our Company)'));
+
   return (
     <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
@@ -33,7 +35,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
             Pricing & Tier History
           </h2>
           <p className="text-[10px] text-slate-500 mt-0.5">
-            Detected tiers for <span className="text-indigo-400 font-medium">{competitorName}</span>
+            Detected tiers for <span className="text-indigo-400 font-medium">{competitorName}</span> {hasUserCompanyPlans && '& Our Company'}
           </p>
         </div>
 
@@ -49,8 +51,13 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           </div>
 
           <div className="flex items-center gap-2 text-[10px]">
+            {hasUserCompanyPlans && (
+              <span className="inline-flex items-center gap-1 bg-sky-500/10 text-sky-400 px-2 py-1 rounded-lg border border-sky-500/20 font-medium">
+                <span className="w-2 h-2 rounded-full bg-sky-400" /> Our Company
+              </span>
+            )}
             <span className="inline-flex items-center gap-1 bg-white/[0.03] text-slate-400 px-2 py-1 rounded-lg border border-white/[0.05]">
-              <span className="w-2 h-2 rounded-full bg-slate-500" /> Baseline
+              <span className="w-2 h-2 rounded-full bg-indigo-400" /> Baseline
             </span>
             <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/10">
               <span className="w-2 h-2 rounded-full bg-emerald-400" /> Changed
@@ -72,6 +79,10 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
                 <stop offset="0%" stopColor="#34d399" stopOpacity={1} />
                 <stop offset="100%" stopColor="#10b981" stopOpacity={0.6} />
               </linearGradient>
+              <linearGradient id="barGradientUserComp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity={1} />
+                <stop offset="100%" stopColor="#818cf8" stopOpacity={0.7} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
             <XAxis dataKey="tier_name" stroke="#475569" fontSize={10} tick={{ fill: '#64748b' }} />
@@ -81,9 +92,17 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               content={({ active, payload }) => {
                 if (active && Array.isArray(payload) && payload.length > 0) {
                   const data = payload[0].payload;
+                  const isUserComp = data.tier_name && data.tier_name.includes('(Our Company)');
                   return (
                     <div className="glass-card p-3 rounded-xl shadow-2xl text-xs space-y-1 animate-scale-in border border-white/[0.06]">
-                      <p className="font-bold text-white font-display">{data.tier_name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold text-white font-display">{data.tier_name}</p>
+                        {isUserComp && (
+                          <span className="bg-sky-500/20 text-sky-300 text-[9px] px-1.5 py-0.2 rounded border border-sky-500/30">
+                            Our Company
+                          </span>
+                        )}
+                      </div>
                       <p className="text-emerald-400 font-semibold">${data.new_price}</p>
                       {data.is_baseline ? (
                         <p className="text-slate-500 italic text-[10px]">Initial Baseline</p>
@@ -104,9 +123,12 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               animationDuration={800}
               animationEasing="ease-out"
             >
-              {priceHistory.map((entry, index) => (
-                <Cell key={index} fill={entry.is_baseline ? 'url(#barGradient)' : 'url(#barGradientChanged)'} />
-              ))}
+              {priceHistory.map((entry, index) => {
+                const isUserComp = entry.tier_name && entry.tier_name.includes('(Our Company)');
+                let fillUrl = entry.is_baseline ? 'url(#barGradient)' : 'url(#barGradientChanged)';
+                if (isUserComp) fillUrl = 'url(#barGradientUserComp)';
+                return <Cell key={index} fill={fillUrl} />;
+              })}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -118,27 +140,41 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           <Tag className="w-3 h-3 text-indigo-400" /> Extracted Records
         </h4>
         <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-          {(Array.isArray(priceHistory) ? priceHistory : []).map((item, idx) => (
-            <div
-              key={item.id}
-              style={{ '--i': idx }}
-              className="stagger-item flex items-center justify-between bg-white/[0.02] hover:bg-white/[0.04] px-3 py-2.5 rounded-xl text-xs transition-all duration-200 border border-white/[0.03]"
-            >
-              <span className="font-medium text-slate-200">{item.tier_name}</span>
-              <div className="flex items-center gap-3">
-                <span className="text-white font-bold counter-number">${item.new_price}</span>
-                {item.is_baseline ? (
-                  <span className="bg-white/[0.04] text-slate-500 text-[10px] px-2 py-0.5 rounded-lg border border-white/[0.06] flex items-center gap-1">
-                    <Info className="w-3 h-3" /> Baseline
-                  </span>
-                ) : (
-                  <span className="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/10 font-medium">
-                    ← ${item.old_price}
-                  </span>
-                )}
+          {(Array.isArray(priceHistory) ? priceHistory : []).map((item, idx) => {
+            const isUserComp = item.tier_name && item.tier_name.includes('(Our Company)');
+            return (
+              <div
+                key={item.id}
+                style={{ '--i': idx }}
+                className={`stagger-item flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all duration-200 border ${
+                  isUserComp
+                    ? 'bg-sky-500/[0.04] border-sky-500/20 hover:bg-sky-500/[0.08]'
+                    : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.03]'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-200">{item.tier_name}</span>
+                  {isUserComp && (
+                    <span className="bg-sky-500/20 text-sky-300 text-[9px] px-1.5 py-0.5 rounded font-mono border border-sky-500/30">
+                      Our Company
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-white font-bold counter-number">${item.new_price}</span>
+                  {item.is_baseline ? (
+                    <span className="bg-white/[0.04] text-slate-500 text-[10px] px-2 py-0.5 rounded-lg border border-white/[0.06] flex items-center gap-1">
+                      <Info className="w-3 h-3" /> Baseline
+                    </span>
+                  ) : (
+                    <span className="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/10 font-medium">
+                      ← ${item.old_price}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

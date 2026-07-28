@@ -7,15 +7,22 @@ from app.config import settings
 # Core plan tier names commonly used in software/SaaS pricing pages
 TARGET_TIERS = [
     "Free",
-    "Team",
-    "Pro",
-    "Enterprise",
-    "Basic",
     "Starter",
+    "Basic",
+    "Standard",
+    "Plus",
+    "Pro",
+    "Team",
     "Business",
+    "Enterprise",
     "Developer",
     "Growth",
     "Premium",
+    "Ultra",
+    "Lite",
+    "Flex",
+    "Pay-As-You-Go",
+    "API",
 ]
 
 # Regex patterns to detect price values following a tier header
@@ -226,6 +233,22 @@ If no pricing is found, return an empty array: []"""
     except Exception as e:
         print(f"[LLM Pricing] LLM call failed: {e}. Falling back to regex.", flush=True)
         return extract_plan_prices(text)
+
+
+def smart_extract_plan_prices(text: str) -> List[Dict[str, Any]]:
+    """
+    Unified smart pricing plan extractor.
+    Uses LLM extraction if LLM_API_KEY is present, otherwise falls back to regex.
+    """
+    provider = (settings.LLM_PROVIDER or "").lower().strip()
+    api_key = settings.LLM_API_KEY or ""
+
+    if provider == "openrouter" and api_key:
+        plans = _llm_extract_pricing(text)
+        if plans:
+            return plans
+
+    return extract_plan_prices(text)
 
 
 def diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:

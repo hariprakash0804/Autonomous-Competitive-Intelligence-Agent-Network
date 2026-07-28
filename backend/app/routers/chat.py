@@ -19,6 +19,11 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     competitor_id: Optional[str] = None
     question: str
+    chat_history: Optional[List[Dict[str, Any]]] = None
+    image_url: Optional[str] = None
+    media_filename: Optional[str] = None
+    media_type: Optional[str] = None  # "image" | "document" | "pdf" | "text"
+    media_content: Optional[str] = None  # Extracted text content from attached document
 
 
 @router.post("/")
@@ -30,7 +35,8 @@ def chat_query(
     """
     RAG Endpoint: Retrieves top-k FAISS vector chunks for a competitor,
     enforces prompt context boundaries, and returns the grounded answer
-    plus cited snapshot timestamps. Falls back to DB reports & snapshots if FAISS is unindexed.
+    plus cited snapshot timestamps.
+    Supports Conversation Memory (chat history), Image Attachments, and Document Attachments.
     """
     if not payload.question or not payload.question.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
@@ -87,14 +93,23 @@ def chat_query(
                 "chunk_text": text,
             })
 
-    # Generate grounded RAG answer
-    answer, cited_snapshots = generate_rag_answer(payload.question, retrieved_chunks)
+    # Generate grounded RAG answer with Chat Memory, Image, and Document Context
+    answer, cited_snapshots = generate_rag_answer(
+        question=payload.question,
+        retrieved_chunks=retrieved_chunks,
+        chat_history=payload.chat_history,
+        image_url=payload.image_url,
+        media_filename=payload.media_filename,
+        media_type=payload.media_type,
+        media_content=payload.media_content,
+    )
 
     return {
         "question": payload.question,
         "competitor_id": comp_id_str,
         "answer": answer,
         "cited_snapshots": cited_snapshots,
+        "media_attached": bool(payload.image_url or payload.media_filename or payload.media_content),
     }
 
 

@@ -412,11 +412,19 @@ Automated multi-agent intelligence analysis completed between **{user_company_na
     return structured_report, "instant/structured_comparative_generator"
 
 
-def generate_rag_answer(question: str, retrieved_chunks: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
+def generate_rag_answer(
+    question: str,
+    retrieved_chunks: List[Dict[str, Any]],
+    chat_history: Optional[List[Dict[str, str]]] = None,
+    image_url: Optional[str] = None,
+    media_filename: Optional[str] = None,
+    media_type: Optional[str] = None,
+    media_content: Optional[str] = None,
+) -> Tuple[str, List[Dict[str, Any]]]:
     """
-    Grounded RAG Answer Generator using strict context boundaries.
-    Answers strictly from retrieved snapshot chunks or explicitly states if context is insufficient.
-    Returns (answer_string, list_of_cited_snapshots).
+    Generates grounded RAG answer from retrieved FAISS vector chunks.
+    Supports chat memory (conversation history context), image attachments, and document text attachments.
+    Returns (answer_markdown, cited_snapshots_list).
     """
     if not retrieved_chunks:
         return "I cannot answer this question based on the available competitive snapshots.", []
@@ -439,12 +447,35 @@ def generate_rag_answer(question: str, retrieved_chunks: List[Dict[str, Any]]) -
             "snippet": chunk_text[:150] + "...",
         })
 
+    # Conversation History Memory Context
+    history_context = ""
+    if chat_history:
+        history_lines = []
+        for msg in chat_history[-6:]:
+            role = "User" if (msg.get("role") == "user" or msg.get("sender") == "user") else "Assistant"
+            text = msg.get("content") or msg.get("text") or ""
+            if text:
+                history_lines.append(f"{role}: {text}")
+        if history_lines:
+            history_context = "CONVERSATION MEMORY (PRIOR DIALOGUE TURNS):\n" + "\n".join(history_lines) + "\n\n"
+
+    # Media & Document Attachment Context
+    media_context = ""
+    if image_url or media_filename or media_content:
+        m_label = (media_type or "attachment").upper()
+        media_context = f"ATTACHED {m_label} / MEDIA CONTEXT:\n- File Name: {media_filename or 'Attached File'}\n"
+        if media_content:
+            media_context += f"- Extracted Document Text:\n{media_content[:3500]}\n"
+        if image_url:
+            media_context += f"- Visual Media: Attached image file ({media_filename or 'Screenshot'})\n"
+        media_context += "- Instruction: Analyze and incorporate specific details from this attached document/media into your response.\n\n"
+
     prompt = f"""You are an Executive Competitive Intelligence RAG Assistant.
 
 CRITICAL INSTRUCTIONS:
-1. Answer the user's question STRICTLY and ONLY using the provided retrieved snapshot context below.
-2. DO NOT use internal general knowledge or make assumptions beyond what is explicitly stated in the context.
-3. If the retrieved context does NOT contain sufficient information to answer the question, respond EXACTLY: "I cannot answer this question based on the available competitive snapshots."
+1. Answer the user's question STRICTLY using the provided retrieved snapshot context and conversation memory below.
+2. DO NOT make assumptions beyond what is explicitly stated in the context or attached media.
+3. If the retrieved context does NOT contain sufficient information, respond EXACTLY: "I cannot answer this question based on the available competitive snapshots."
 4. FORMAT YOUR ANSWER BEAUTIFULLY:
    - Use bold section headings (e.g. ### Executive Summary, ### Key Analysis, ### Pricing & Features).
    - Use bullet points with bold lead labels (e.g. - **Feature**: details).

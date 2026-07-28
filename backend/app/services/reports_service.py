@@ -26,8 +26,35 @@ def _convert_markdown_to_slack_mrkdwn(text: str) -> str:
     return cleaned.strip()
 
 
+def _format_inline_markdown(text: str) -> str:
+    """Formats inline Markdown elements: bold (**), code (`), links ([text](url)), and auto-links."""
+    if not text:
+        return ""
+    # Bold: **text** -> <strong>text</strong>
+    res = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+    # Inline code: `text` -> <code style="...">text</code>
+    res = re.sub(
+        r"`(.*?)`",
+        r"<code style='background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em;'>\1</code>",
+        res,
+    )
+    # Markdown links: [text](url) -> <a href="url">text</a>
+    res = re.sub(
+        r"\[(.*?)\]\((.*?)\)",
+        r"<a href='\2' target='_blank' style='color: #818cf8; text-decoration: underline;'>\1</a>",
+        res,
+    )
+    # Auto-link raw URLs: https://... -> <a href="https://...">https://...</a>
+    res = re.sub(
+        r"(?<!href=['\"])(https?://[^\s<]+)",
+        r"<a href='\1' target='_blank' style='color: #818cf8; text-decoration: underline;'>\1</a>",
+        res,
+    )
+    return res
+
+
 def _convert_markdown_to_html(md_text: str) -> str:
-    """Converts raw Markdown text (including tables, headers, bold text, lists) to HTML."""
+    """Converts raw Markdown text (including tables, headers, bold text, inline code, lists) to HTML."""
     if not md_text:
         return "<p>No report summary available.</p>"
 
@@ -50,13 +77,13 @@ def _convert_markdown_to_html(md_text: str) -> str:
             body = [r for r in table_rows[1:] if not all(c.strip().startswith("-") for c in r)]
             table_html = ["<table><thead><tr>"]
             for h in header:
-                clean_h = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", h.strip())
+                clean_h = _format_inline_markdown(h.strip())
                 table_html.append(f"<th>{clean_h}</th>")
             table_html.append("</tr></thead><tbody>")
             for row in body:
                 table_html.append("<tr>")
                 for cell in row:
-                    clean_c = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", cell.strip())
+                    clean_c = _format_inline_markdown(cell.strip())
                     table_html.append(f"<td>{clean_c}</td>")
                 table_html.append("</tr>")
             table_html.append("</tbody></table>")
@@ -66,10 +93,10 @@ def _convert_markdown_to_html(md_text: str) -> str:
 
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith("|") and stripped.endswith("|"):
+        if stripped.startswith("|"):
             flush_list()
             in_table = True
-            cells = [c for c in stripped.split("|")[1:-1]]
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
             table_rows.append(cells)
             continue
         else:
@@ -80,28 +107,28 @@ def _convert_markdown_to_html(md_text: str) -> str:
             if not in_list:
                 html_parts.append("<ul>")
                 in_list = True
-            item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            item_text = _format_inline_markdown(stripped[2:])
             html_parts.append(f"<li>{item_text}</li>")
             continue
         else:
             flush_list()
 
         if stripped.startswith("### "):
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[4:])
+            text = _format_inline_markdown(stripped[4:])
             html_parts.append(f"<h3>{text}</h3>")
         elif stripped.startswith("## "):
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[3:])
+            text = _format_inline_markdown(stripped[3:])
             html_parts.append(f"<h2>{text}</h2>")
         elif stripped.startswith("# "):
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            text = _format_inline_markdown(stripped[2:])
             html_parts.append(f"<h1>{text}</h1>")
         elif stripped.startswith("> "):
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            text = _format_inline_markdown(stripped[2:])
             html_parts.append(f"<blockquote>{text}</blockquote>")
         elif stripped == "---":
             html_parts.append("<hr style='border: 0; border-top: 1px solid #1e293b; margin: 24px 0;'>")
         elif stripped:
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", stripped)
+            text = _format_inline_markdown(stripped)
             html_parts.append(f"<p>{text}</p>")
 
     if in_table:
@@ -270,7 +297,7 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
   <div class="container">
     <div class="header-bar">
       <div class="brand-badge">⚡ Competitive Intelligence Network</div>
-      <a href="/static/reports/{report_id}.pdf" download="{competitor_name}_Executive_Report.pdf" class="btn-download-pdf">
+      <a href="/reports/{report_id}/pdf" download="{competitor_name}_Executive_Report.pdf" class="btn-download-pdf">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
@@ -290,6 +317,12 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
     file_path = REPORTS_DIR / f"{report_id}.html"
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(html_full)
+
+    # Pre-render PDF as well so file exists on disk immediately
+    try:
+        render_pdf_report(report_id, competitor_name, markdown_content)
+    except Exception as pdf_err:
+        print(f"[HTML Report Render] Pre-rendering PDF warning: {pdf_err}", flush=True)
 
     return f"/static/reports/{report_id}.html"
 

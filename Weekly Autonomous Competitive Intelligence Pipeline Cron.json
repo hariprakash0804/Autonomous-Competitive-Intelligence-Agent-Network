@@ -1,5 +1,4 @@
 {
-  "name": "Weekly Autonomous Competitive Intelligence Pipeline Cron",
   "nodes": [
     {
       "parameters": {
@@ -16,10 +15,10 @@
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
       "position": [
-        880,
-        224
+        -320,
+        352
       ],
-      "id": "d6b2e220-6dcf-45bb-8f19-970318e4d30e"
+      "id": "5abd3296-e735-4e8e-8d55-502d71b01375"
     },
     {
       "parameters": {
@@ -38,10 +37,23 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1104,
-        224
+        -112,
+        352
       ],
-      "id": "403a4eb1-1980-4a50-828a-8db6fad00a41"
+      "id": "3efc6547-a9ef-4289-8355-84c6ba3c445b"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch Tracked Competitors List returns an array of competitor objects\n// as a single item. Split each competitor into its own n8n item so\n// Trigger Agent Pipeline Run fires once PER competitor instead of only\n// once for the whole array (which previously hardcoded index [0]).\nconst competitors = $input.first().json;\nreturn competitors.map(c => ({ json: c }));"
+      },
+      "name": "Split Competitors Into Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        352
+      ],
+      "id": "49c0bbbb-536e-4c1c-bc0d-3c20c32f3730"
     },
     {
       "parameters": {
@@ -61,10 +73,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1328,
-        224
+        288,
+        352
       ],
-      "id": "bb65ba11-0cc3-4d98-b530-74a1ba41226b"
+      "id": "f4a9232a-e29d-4209-8152-e95d6d81585b"
     },
     {
       "parameters": {
@@ -75,10 +87,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [
-        1552,
-        224
+        512,
+        352
       ],
-      "id": "d90b4cf7-e12d-48cb-b01b-b80c26650412",
+      "id": "5173fa2c-a3f6-4b74-aecb-6b8b3be7b96c",
       "webhookId": "40163839-7110-4980-b84d-9eeec919c697"
     },
     {
@@ -98,10 +110,23 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1760,
-        224
+        720,
+        352
       ],
-      "id": "adee62c1-20e6-4bd9-874b-ded3892b5821"
+      "id": "ed7f2a8f-dd11-4db5-991e-85138c7cc19f"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch Generated Reports returns an array of report objects as a single item.\n// Split each report into its own n8n item so Post Latest Report to Slack\n// fires once per report instead of only once for the whole array.\nconst reports = $input.first().json;\nreturn reports.map(report => ({ json: report }));"
+      },
+      "name": "Split Reports Into Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        352
+      ],
+      "id": "9d817680-77d6-4c37-8730-d8362ac58b0f"
     },
     {
       "parameters": {
@@ -121,13 +146,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1984,
-        224
+        1168,
+        352
       ],
-      "id": "f5d227a6-9794-4fdc-a07c-cfd1cde0cbb9"
+      "id": "a6bea03c-56db-48ee-a8d2-f6b688f104f4"
     }
   ],
-  "pinData": {},
   "connections": {
     "Weekly Cron Trigger (Mondays 9 AM)": {
       "main": [
@@ -141,6 +165,17 @@
       ]
     },
     "Fetch Tracked Competitors List": {
+      "main": [
+        [
+          {
+            "node": "Split Competitors Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Competitors Into Items": {
       "main": [
         [
           {
@@ -177,6 +212,17 @@
       "main": [
         [
           {
+            "node": "Split Reports Into Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Reports Into Items": {
+      "main": [
+        [
+          {
             "node": "Post Latest Report to Slack",
             "type": "main",
             "index": 0
@@ -185,16 +231,8 @@
       ]
     }
   },
-  "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate"
-  },
-  "versionId": "50acfd9e-3b1f-4827-ac84-7bbbfd51723e",
+  "pinData": {},
   "meta": {
     "instanceId": "5434baa7bbb9e0869169353c4bdc4c256dc615de241b55e789abe313a97ae2fc"
-  },
-  "nodeGroups": [],
-  "id": "aNVCeek68YzWZmJy",
-  "tags": []
+  }
 }

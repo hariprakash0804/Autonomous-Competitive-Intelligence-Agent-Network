@@ -57,12 +57,10 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     client = _get_cached_client(api_key)
 
     models_to_try = [
-        "google/gemma-2-9b-it:free",
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-        "qwen/qwen-2.5-72b-instruct:free",
-        "openchat/openchat-7b:free",
-        "gryphe/mythomax-l2-13b:free",
+        "nvidia/nemotron-4-40b-a3b-instruct:free",
+        "nvidia/nemotron-3-nano-30b-a3b:free",
+        "google/gemini-2.5-flash:free",
+        "openrouter/free",
     ]
     
     last_exception = None

@@ -68,6 +68,8 @@ def update_profile(
         current_user.company_name = body.company_name.strip()
     if body.company_url is not None:
         current_user.company_url = body.company_url.strip()
+    if body.slack_webhook_url is not None:
+        current_user.slack_webhook_url = body.slack_webhook_url.strip()
 
     db.commit()
     db.refresh(current_user)

@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     name: str
     company_name: Optional[str] = None
     company_url: Optional[str] = None
+    slack_webhook_url: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -37,4 +38,5 @@ class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     company_name: Optional[str] = None
     company_url: Optional[str] = None
+    slack_webhook_url: Optional[str] = None
 

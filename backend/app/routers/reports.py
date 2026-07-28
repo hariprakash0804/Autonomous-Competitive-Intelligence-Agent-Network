@@ -180,11 +180,12 @@ def deliver_slack_notification(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     target_webhook = payload.webhook_url if payload and payload.webhook_url else None
-    webhook_url = target_webhook or os.getenv("SLACK_WEBHOOK_URL")
+    user_webhook = getattr(current_user, "slack_webhook_url", None)
+    webhook_url = target_webhook or user_webhook or os.getenv("SLACK_WEBHOOK_URL") or os.getenv("WEBHOOK_URL")
     if not webhook_url:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Slack webhook URL is missing. Provide 'webhook_url' in request payload or set SLACK_WEBHOOK_URL environment variable.",
+            detail="Slack webhook URL is missing. Save your Webhook URL in your Profile settings, or provide 'webhook_url' in request payload.",
         )
     backend_url = get_public_backend_url()
     html_url = f"{backend_url}/reports/{report.id}/html"

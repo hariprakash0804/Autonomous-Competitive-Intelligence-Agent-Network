@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Search,
+  Bell,
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [name, setName] = useState(user?.name || '');
   const [companyName, setCompanyName] = useState(user?.company_name || '');
   const [companyUrl, setCompanyUrl] = useState(user?.company_url || '');
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState(user?.slack_webhook_url || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
 
@@ -70,6 +72,7 @@ export default function ProfilePage() {
       setName(res.data.name || '');
       setCompanyName(res.data.company_name || '');
       setCompanyUrl(res.data.company_url || '');
+      setSlackWebhookUrl(res.data.slack_webhook_url || '');
     } catch (err) {
       console.error('Failed to fetch profile:', err);
     }
@@ -101,8 +104,9 @@ export default function ProfilePage() {
         name,
         company_name: companyName,
         company_url: companyUrl,
+        slack_webhook_url: slackWebhookUrl,
       });
-      setProfileMsg({ type: 'success', text: 'Profile & Company details updated successfully!' });
+      setProfileMsg({ type: 'success', text: 'Profile & Webhook settings updated successfully!' });
     } catch (err) {
       console.error('Failed to update profile:', err);
       setProfileMsg({ type: 'error', text: err.response?.data?.detail || 'Failed to update profile.' });
@@ -392,6 +396,20 @@ export default function ProfilePage() {
                         placeholder="https://mycompany.com"
                         className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider">
+                        <Bell className="w-3 h-3 text-violet-400" /> Slack / Notification Webhook URL
+                      </label>
+                      <input
+                        type="url"
+                        value={slackWebhookUrl}
+                        onChange={(e) => setSlackWebhookUrl(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300 font-mono text-[11px]"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">Configure your personal Slack/Discord webhook URL for report deliveries</p>
                     </div>
 
                     <button

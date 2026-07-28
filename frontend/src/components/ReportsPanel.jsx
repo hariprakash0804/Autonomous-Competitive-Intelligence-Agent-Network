@@ -31,14 +31,25 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleSendSlack = async (reportId) => {
+  const handleSendSlack = async (reportId, customWebhookUrl = null) => {
     setSendingSlackId(reportId);
     try {
-      await api.post(`/reports/deliver-slack/${reportId}`, {});
+      const payload = customWebhookUrl ? { webhook_url: customWebhookUrl } : {};
+      await api.post(`/reports/deliver-slack/${reportId}`, payload);
       alert('Slack notification sent successfully!');
     } catch (err) {
       console.error('Failed to send Slack alert:', err);
-      alert('Failed to send Slack alert.');
+      const detail = err.response?.data?.detail || '';
+      if (err.response?.status === 400 && detail.toLowerCase().includes('webhook url is missing')) {
+        const inputUrl = window.prompt(
+          'No Webhook URL configured in your profile settings.\n\nPlease enter your Slack/Discord Webhook URL to deliver this report:'
+        );
+        if (inputUrl && inputUrl.trim()) {
+          return handleSendSlack(reportId, inputUrl.trim());
+        }
+      } else {
+        alert(detail || 'Failed to send Slack alert.');
+      }
     } finally {
       setSendingSlackId(null);
     }

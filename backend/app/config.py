@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Internal API Key (for n8n / service-to-service auth without JWT)
     INTERNAL_API_KEY: Optional[str] = None
 
+    # Webhook Notifications
+    SLACK_WEBHOOK_URL: Optional[str] = None
+    WEBHOOK_URL: Optional[str] = None
+
     # Backend public URL (for Slack/email report links)
     BACKEND_URL: Optional[str] = "http://localhost:8000"
 

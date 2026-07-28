@@ -791,8 +791,22 @@ a:focus-visible {
 }
 
 /* ═══════════════════════════════════════════════════
-   §33  RESPECT REDUCED MOTION
+   §34  TOAST & NOTIFICATION ANIMATIONS
    ═══════════════════════════════════════════════════ */
+@keyframes toast-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+@keyframes slide-in-right {
+  0%   { transform: translateX(100%) scale(0.9); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

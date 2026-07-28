@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Calendar, Sparkles, X, Download, Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 import api from '../api/client';
 
 function parseInlineMarkdown(str) {
@@ -262,10 +263,19 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
     URL.revokeObjectURL(url);
   };
 
-  const handleClearMemory = () => {
-    if (confirm('Clear chat history for this competitor?')) {
+  const toast = useToast();
+
+  const handleClearMemory = async () => {
+    const isConfirmed = await toast.confirm({
+      title: 'Clear Chat History',
+      message: 'Are you sure you want to clear conversation history for this competitor?',
+      confirmText: 'Clear Memory',
+      type: 'danger',
+    });
+    if (isConfirmed) {
       setMessages([defaultIntro]);
       localStorage.removeItem(memoryStorageKey);
+      toast.info('Chat history cleared', 'Memory Reset');
     }
   };
 

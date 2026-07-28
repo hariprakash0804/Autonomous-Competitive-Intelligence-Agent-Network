@@ -113,9 +113,7 @@ export default function CompetitorList({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Delete "${comp.name}" and all associated data?`)) {
-                      onDeleteCompetitor(comp.id);
-                    }
+                    onDeleteCompetitor(comp.id);
                   }}
                   title="Delete Competitor"
                   className="p-2 bg-rose-500/[0.06] hover:bg-rose-600 text-rose-400 hover:text-white rounded-lg border border-rose-500/15 transition-all duration-200 hover:scale-110 active:scale-95"

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 import api, { API_BASE_URL } from '../api/client';
 
 export default function ReportsPanel({ selectedCompetitorId }) {
+  const toast = useToast();
   const [reports, setReports] = useState([]);
   const [copiedId, setCopiedId] = useState(null);
   const [sendingSlackId, setSendingSlackId] = useState(null);
@@ -28,6 +30,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     const link = `${window.location.origin}/reports/${reportId}/html`;
     navigator.clipboard.writeText(link);
     setCopiedId(reportId);
+    toast.success('Report link copied to clipboard!', 'Link Copied');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -36,19 +39,22 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     try {
       const payload = customWebhookUrl ? { webhook_url: customWebhookUrl } : {};
       await api.post(`/reports/deliver-slack/${reportId}`, payload);
-      alert('Slack notification sent successfully!');
+      toast.success('Slack notification dispatched successfully!', 'Slack Delivered');
     } catch (err) {
       console.error('Failed to send Slack alert:', err);
       const detail = err.response?.data?.detail || '';
       if (err.response?.status === 400 && detail.toLowerCase().includes('webhook url is missing')) {
-        const inputUrl = window.prompt(
-          'No Webhook URL configured in your profile settings.\n\nPlease enter your Slack/Discord Webhook URL to deliver this report:'
-        );
+        const inputUrl = await toast.prompt({
+          title: 'Slack Webhook Required',
+          message: 'No Webhook URL configured in your profile settings. Enter your Slack/Discord Webhook URL below:',
+          placeholder: 'https://hooks.slack.com/services/...',
+          confirmText: 'Deliver Slack Alert',
+        });
         if (inputUrl && inputUrl.trim()) {
           return handleSendSlack(reportId, inputUrl.trim());
         }
       } else {
-        alert(detail || 'Failed to send Slack alert.');
+        toast.error(detail || 'Failed to send Slack alert.');
       }
     } finally {
       setSendingSlackId(null);
@@ -60,15 +66,15 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     try {
       const res = await api.post(`/reports/deliver-email/${reportId}`, {});
       if (res.data.email_result?.status === 'skipped') {
-        alert(res.data.email_result.reason);
+        toast.warning(res.data.email_result.reason, 'SMTP Not Configured');
       } else if (res.data.email_result?.status === 'sent') {
-        alert(`Email successfully sent to ${res.data.email_result.recipient}!`);
+        toast.success(`Email report sent to ${res.data.email_result.recipient}!`, 'Email Delivered');
       } else {
-        alert(`Email failed: ${res.data.email_result?.reason}`);
+        toast.error(`Email delivery failed: ${res.data.email_result?.reason || 'Unknown error'}`);
       }
     } catch (err) {
       console.error('Failed to send email:', err);
-      alert('Failed to send email report.');
+      toast.error('Failed to send email report.');
     } finally {
       setSendingEmailId(null);
     }

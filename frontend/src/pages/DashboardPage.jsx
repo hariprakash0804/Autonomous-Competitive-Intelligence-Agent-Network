@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import Sidebar from '../components/Sidebar';
@@ -42,6 +43,7 @@ function LiveClock() {
    ════════════════════════════════════════════ */
 export default function DashboardPage() {
   const { user, logout } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   const [competitors, setCompetitors] = useState([]);
@@ -120,18 +122,28 @@ export default function DashboardPage() {
     try {
       const res = await api.post(`/pipeline/run/${compId}`);
       setActiveRunId(res.data.agent_run_id);
+      toast.info('Background multi-agent run launched', 'Agent Pipeline');
     } catch (err) {
       console.error('Failed to start agent run:', err);
-      alert('Failed to launch agent run. Please check backend connection.');
+      toast.error('Failed to launch agent run. Please check backend connection.');
     }
   };
 
   const handleRunComplete = () => {
     fetchCompetitors();
     if (selectedCompId) fetchDetails(selectedCompId);
+    toast.success('Agent pipeline completed successfully!', 'Pipeline Finished');
   };
 
   const handleDeleteCompetitor = async (compId) => {
+    const isConfirmed = await toast.confirm({
+      title: 'Delete Competitor Target',
+      message: 'Are you sure you want to delete this competitor target and all associated snapshots?',
+      confirmText: 'Delete Target',
+      type: 'danger',
+    });
+    if (!isConfirmed) return;
+
     try {
       await api.delete(`/competitors/${compId}`);
       if (selectedCompId === compId) {
@@ -140,10 +152,11 @@ export default function DashboardPage() {
         setSentimentHistory([]);
         setReports([]);
       }
+      toast.success('Competitor target deleted.');
       await fetchCompetitors();
     } catch (err) {
       console.error('Failed to delete competitor:', err);
-      alert('Failed to delete competitor.');
+      toast.error('Failed to delete competitor target.');
     }
   };
 

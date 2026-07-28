@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import Sidebar from '../components/Sidebar';
@@ -22,6 +23,7 @@ import {
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
+  const toast = useToast();
   const navigate = useNavigate();
 
   // Profile Form state
@@ -195,24 +197,32 @@ export default function ProfilePage() {
   };
 
   const handleDelete = async (compId) => {
-    if (!window.confirm('Are you sure you want to delete this competitor target?')) return;
+    const isConfirmed = await toast.confirm({
+      title: 'Delete Competitor Target',
+      message: 'Are you sure you want to delete this competitor target? All associated snapshots and data will be permanently removed.',
+      confirmText: 'Delete Target',
+      type: 'danger',
+    });
+    if (!isConfirmed) return;
+
     try {
       await api.delete(`/competitors/${compId}`);
+      toast.success('Competitor target deleted successfully');
       await fetchCompetitors();
     } catch (err) {
       console.error('Failed to delete competitor:', err);
-      alert('Failed to delete competitor.');
+      toast.error('Failed to delete competitor target.');
     }
   };
 
   const handleTriggerRun = async (compId) => {
     try {
       await api.post(`/pipeline/run/${compId}`);
-      alert('Background multi-agent run launched successfully!');
+      toast.success('Background multi-agent run launched successfully!', 'Agent Network');
       navigate('/dashboard');
     } catch (err) {
       console.error('Failed to launch run:', err);
-      alert('Failed to launch agent run.');
+      toast.error('Failed to launch background agent run.');
     }
   };
 

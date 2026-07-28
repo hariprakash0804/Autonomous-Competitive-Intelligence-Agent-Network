@@ -15,8 +15,16 @@ from app.dependencies.auth import get_current_user, get_current_user_or_api_key
 from app.models.user import User
 from app.models.competitor import Competitor
 from app.models.agent_run import AgentRun
+from app.models.report import Report
+from app.config import settings
 from app.services.agent.graph import invoke_pipeline_graph, flush_langsmith_tracers
 from app.services.agent.state import AgentState
+from app.services.reports_service import (
+    render_html_report,
+    render_pdf_report,
+    send_slack_notification,
+    send_email_notification,
+)
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
@@ -82,6 +90,84 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
             db.commit()
             elapsed = _time.time() - pipeline_start
             print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED in {elapsed:.1f}s!", flush=True)
+
+            # Automated Multi-Channel Report Delivery on Pipeline Completion
+            try:
+                latest_report = (
+                    db.query(Report)
+                    .filter(Report.competitor_id == uuid.UUID(competitor_id_str))
+                    .order_by(Report.generated_at.desc())
+                    .first()
+                )
+                if latest_report:
+                    comp = db.get(Competitor, uuid.UUID(competitor_id_str))
+                    comp_name = comp.name if comp else "Competitor"
+                    user_obj = comp.user if comp else None
+
+                    # 1. Render HTML report file
+                    try:
+                        render_html_report(str(latest_report.id), comp_name, latest_report.summary or "")
+                        print(f"[Auto-Deliver] HTML report generated for {latest_report.id}", flush=True)
+                    except Exception as e_html:
+                        print(f"[Auto-Deliver Note] HTML render exception: {e_html}", flush=True)
+
+                    # 2. Render PDF report file
+                    try:
+                        render_pdf_report(str(latest_report.id), comp_name, latest_report.summary or "")
+                        print(f"[Auto-Deliver] PDF report generated for {latest_report.id}", flush=True)
+                    except Exception as e_pdf:
+                        print(f"[Auto-Deliver Note] PDF render exception: {e_pdf}", flush=True)
+
+                    # 3. Deliver Slack / Webhook notifications (dual-webhook: user profile + system env)
+                    try:
+                        from app.routers.reports import get_public_backend_url
+                        backend_url = get_public_backend_url()
+                        html_url = f"{backend_url}/reports/{latest_report.id}/html"
+
+                        user_webhook = (user_obj.slack_webhook_url or "").strip() if user_obj and getattr(user_obj, "slack_webhook_url", None) else None
+                        env_webhook = (
+                            os.getenv("SLACK_WEBHOOK_URL")
+                            or os.getenv("WEBHOOK_URL")
+                            or getattr(settings, "SLACK_WEBHOOK_URL", None)
+                            or getattr(settings, "WEBHOOK_URL", None)
+                            or ""
+                        ).strip() or None
+
+                        target_webhooks = []
+                        if user_webhook and user_webhook.startswith("http"):
+                            target_webhooks.append(user_webhook)
+                        if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
+                            target_webhooks.append(env_webhook)
+
+                        for w_url in target_webhooks:
+                            send_slack_notification(
+                                webhook_url=w_url,
+                                competitor_name=comp_name,
+                                report_summary=latest_report.summary or "",
+                                html_report_url=html_url,
+                            )
+                        if target_webhooks:
+                            print(f"[Auto-Deliver] Slack notifications sent to {len(target_webhooks)} webhooks.", flush=True)
+                    except Exception as e_slack:
+                        print(f"[Auto-Deliver Note] Slack delivery exception: {e_slack}", flush=True)
+
+                    # 4. Deliver Email notification if user email exists
+                    if user_obj and user_obj.email:
+                        try:
+                            from app.routers.reports import get_public_backend_url
+                            backend_url = get_public_backend_url()
+                            html_url = f"{backend_url}/reports/{latest_report.id}/html"
+                            send_email_notification(
+                                recipient_email=user_obj.email,
+                                competitor_name=comp_name,
+                                markdown_report=latest_report.summary or "",
+                                html_report_url=html_url,
+                            )
+                            print(f"[Auto-Deliver] Email report dispatched to {user_obj.email}.", flush=True)
+                        except Exception as e_email:
+                            print(f"[Auto-Deliver Note] Email delivery note: {e_email}", flush=True)
+            except Exception as e_auto:
+                print(f"[Auto-Deliver Error] Automated delivery task exception: {e_auto}", flush=True)
 
     except Exception as exc:
         elapsed = _time.time() - pipeline_start

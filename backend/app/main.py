@@ -91,3 +91,44 @@ app.include_router(pipeline.router)
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/faiss-status")
+def global_faiss_status():
+    """
+    Public Status Endpoint: Returns live FAISS vector store status on Render.
+    Can be opened directly in any browser tab without auth headers.
+    """
+    from app.services.vector_store import vector_store
+
+    total_vectors = vector_store.index.ntotal if vector_store.index is not None else 0
+    active_dim = vector_store.index.d if vector_store.index is not None else 0
+    embedding_mode = getattr(vector_store, "_embedding_mode", "unknown")
+
+    competitor_counts = {}
+    source_type_counts = {}
+
+    for meta in getattr(vector_store, "metadata", []):
+        comp_id = meta.get("competitor_id", "unknown")
+        src_type = meta.get("source_type", "unknown")
+        competitor_counts[comp_id] = competitor_counts.get(comp_id, 0) + 1
+        source_type_counts[src_type] = source_type_counts.get(src_type, 0) + 1
+
+    return {
+        "status": "active" if total_vectors > 0 else "empty",
+        "total_vectors": total_vectors,
+        "embedding_dimension": active_dim,
+        "embedding_mode": embedding_mode,
+        "source_type_distribution": source_type_counts,
+        "indexed_competitors_count": len(competitor_counts),
+        "recent_chunks": [
+            {
+                "snapshot_id": m.get("snapshot_id"),
+                "competitor_id": m.get("competitor_id"),
+                "source_type": m.get("source_type"),
+                "fetched_at": m.get("fetched_at"),
+                "chunk_snippet": (m.get("chunk_text") or "")[:120] + "...",
+            }
+            for m in getattr(vector_store, "metadata", [])[-5:]
+        ],
+    }

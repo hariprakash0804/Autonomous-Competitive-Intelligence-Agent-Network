@@ -17,8 +17,8 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 |                              FASTAPI BACKEND SERVICE                              |
 |                                                                                   |
 |  +---------------------+   +---------------------+   +--------------------------+ |
-|  | Playwright Scraper  |   | Diff Pricing Engine |   | VADER Sentiment Analyzer | |
-|  | Dynamic / JS Shell  |   | Regex + Currency    |   | NLTK + Topic Extraction  | |
+|  | HTTPX / BS4 Scraper |   | Diff Pricing Engine |   | VADER Sentiment Analyzer | |
+|  | Rotating UA / Shell |   | Regex + Currency    |   | NLTK + Topic Extraction  | |
 |  +----------+----------+   +----------+----------+   +------------+-------------+ |
 |             |                         |                           |               |
 |             +-------------------------+---------------------------+               |
@@ -54,8 +54,11 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 - 🤖 **Autonomous LangGraph Agent Pipeline**: 4-node sequential multi-agent network (`Researcher` with reflection loop for missing content, `Change-Detector` for pricing diffs, `Sentiment-Analyst` for NLP & VADER sentiment, `Report-Writer` for OpenRouter LLM report synthesis).
 - 🔌 **FastMCP Tool Server (`mcp_server.py`)**: Model Context Protocol (MCP) server providing standard stdio tool bindings (`scrape`, `diff_pricing_tool`, `sentiment_score_tool`) for external AI agents and orchestration.
 - 💬 **RAG AI Chat Assistant**: Interactive context-bounded chat endpoint (`/chat/`) leveraging FAISS vector search, chat history memory, image attachments, and document/PDF text analysis.
-- 📊 **FAISS Vector Store with Startup Auto-Rehydration**: Vector database holding section-aware document chunks. Automatically rehydrates index from PostgreSQL snapshots upon startup. Public monitoring endpoint at `/faiss-status`.
-- 🔍 **Resilient Web Scraping & Pricing Diff Engine**: Playwright browser integration handling JavaScript-heavy competitor sites, fallback HTTP fetching, currency symbol preservation, and tier extraction.
+- 🔄 **FAISS Vector Store with Startup Auto-Rehydration**: Vector database storing section-aware document embeddings. On startup (e.g. server boot or Render restart), `vector_store.rehydrate_from_db()` automatically queries all historical PostgreSQL snapshot records, regenerates missing embeddings, and rebuilds the in-memory FAISS index so vector search continuity is preserved without manual re-indexing.
+- 🌐 **Public Operational Monitoring Endpoints**:
+  - `GET /faiss-status`: Live vector store status endpoint returning total vector count, embedding dimensionality, embedding mode (`sentence-transformers` vs fallback), index distribution across tracked competitors, source type distribution, and recent vector chunk snippets.
+  - `GET /health`: Lightweight health check endpoint returning `{"status": "ok"}` for deployment health probes and uptime monitoring.
+- 🔍 **Resilient Scraping & Pricing Diff Engine**: HTTPX and BeautifulSoup4 web scraping with rotating User-Agent headers, anti-bot detection heuristics, currency symbol preservation, and tier extraction.
 - 📈 **Modern Analytics Dashboard**: Dark-themed React 19 dashboard featuring Recharts price history timelines, sentiment score radar/bar charts, multi-competitor comparative matrix, real-time agent run status modal, and report center.
 - 📑 **Multi-Channel Report Delivery**: Standalone rendered HTML reports, PDF downloads, automated Slack Webhook integration, and SMTP Email delivery.
 - 🛡️ **LangSmith Telemetry & Tracing**: Native LangSmith integration for monitoring agent execution traces and latency with automatic tracer flushing.
@@ -64,11 +67,11 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 
 ## 🛠️ Tech Stack
 
-- **Backend**: Python 3.10+, FastAPI, SQLAlchemy ORM, Alembic, LangGraph, Playwright, NLTK VADER, FAISS Vector Store, FastMCP.
+- **Backend**: Python 3.10+, FastAPI, SQLAlchemy ORM, Alembic, LangGraph, HTTPX, BeautifulSoup4, LXML, NLTK VADER, FAISS Vector Store, FastMCP.
 - **LLM Orchestration**: OpenRouter API (`google/gemma-4-31b-it:free`, `nvidia/nemotron-3-nano-30b-a3b:free`) with proactive 3-second rate-limit guard and automatic 429/404 model fallback handling.
 - **Frontend**: React 19, Vite, Tailwind CSS, Recharts, Lucide React, Axios, React Router.
 - **Database**: PostgreSQL with SQLAlchemy ORM and Alembic migrations.
-- **Vector Store**: Local FAISS index file store (`faiss_index.bin`) with PostgreSQL metadata sync.
+- **Vector Store**: Local FAISS index file store (`faiss_index.bin`) with PostgreSQL metadata sync and startup rehydration.
 - **Telemetry**: LangSmith tracing (`LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_ENDPOINT`).
 - **Automation & Delivery**: n8n weekly cron workflow (`n8n_workflow.json`), Slack Webhooks, SMTP Email.
 - **Containerization**: Docker Compose (`docker-compose.yml`) with persistent volumes for database (`pgdata`), FAISS store (`faissdata`), and static reports (`reportsdata`).
@@ -79,7 +82,7 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/auth/register` | `POST` | Register a new user account |
+| `/auth/signup` | `POST` | Register a new user account & receive initial JWT token |
 | `/auth/login` | `POST` | Authenticate user & receive JWT bearer token |
 | `/auth/me` | `GET` | Retrieve current authenticated user profile |
 | `/competitors/` | `GET` / `POST` | List or create tracked competitors |
@@ -91,10 +94,10 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 | `/reports/` | `GET` | List generated intelligence reports |
 | `/reports/{id}` | `GET` | Fetch specific report details |
 | `/reports/deliver-slack/{id}` | `POST` | Dispatch report summary to Slack Webhook |
-| `/reports/send-email/{id}` | `POST` | Send report via SMTP Email |
+| `/reports/deliver-email/{id}` | `POST` | Send report via SMTP Email |
 | `/chat/` | `POST` | Perform RAG vector search & AI chat query |
-| `/health` | `GET` | Backend health check |
-| `/faiss-status` | `GET` | Live vector store indexing status |
+| `/health` | `GET` | Backend health check probe (`{"status": "ok"}`) |
+| `/faiss-status` | `GET` | Live vector store status, index count & chunk distribution |
 
 ---
 
@@ -122,9 +125,6 @@ pip install -r requirements.txt
 
 # Download NLTK VADER lexicon
 python -c "import nltk; nltk.download('vader_lexicon')"
-
-# Install Playwright Chromium browser binary
-playwright install chromium
 
 # Create environment file (.env)
 cp .env.example .env
@@ -182,6 +182,13 @@ Import `n8n_workflow.json` into your n8n instance for automated competitive moni
 2. **Fetch Competitors**: `GET /competitors/`.
 3. **Execute Pipeline**: `POST /pipeline/run/{competitor_id}` for each target.
 4. **Slack Notification**: `POST /reports/deliver-slack/{report_id}` to publish updates.
+
+---
+
+## 🔮 Future Roadmap
+
+- 🎭 **Headless Browser Scraping (Playwright)**: Planned integration of headless Playwright chromium rendering to support JavaScript-heavy Single Page Applications (SPAs) requiring dynamic client-side DOM rendering.
+- 📊 **Custom Alert Webhooks**: Webhook triggers for instant notifications when competitor price shifts exceed user-defined percentage thresholds.
 
 ---
 

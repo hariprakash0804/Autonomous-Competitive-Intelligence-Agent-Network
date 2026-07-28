@@ -2,6 +2,91 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Calendar, Sparkles, X } from 'lucide-react';
 import api from '../api/client';
 
+function parseInlineMarkdown(str) {
+  if (typeof str !== 'string') return str;
+  const parts = [];
+  let lastIndex = 0;
+  const regex = /(\*\*(.*?)\*\*|【(.*?)】)/g;
+  let match;
+
+  while ((match = regex.exec(str)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(str.substring(lastIndex, match.index));
+    }
+    if (match[2] !== undefined) {
+      parts.push(<strong key={match.index} className="font-bold text-white">{match[2]}</strong>);
+    } else if (match[3] !== undefined) {
+      parts.push(
+        <span key={match.index} className="inline-block px-1.5 py-0.5 mx-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[10px] font-mono border border-indigo-500/30">
+          {match[3]}
+        </span>
+      );
+    }
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < str.length) {
+    parts.push(str.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : str;
+}
+
+function FormattedMessage({ text }) {
+  if (!text) return null;
+
+  const cleanText = text.replace(/\u2011/g, '-');
+  const blocks = cleanText.split(/\n\n+/);
+
+  return (
+    <div className="space-y-2.5 leading-relaxed text-xs">
+      {blocks.map((block, bIdx) => {
+        const trimmed = block.trim();
+        if (!trimmed) return null;
+
+        if (trimmed.startsWith('#')) {
+          const headingText = trimmed.replace(/^#+\s*/, '');
+          return (
+            <h4 key={bIdx} className="font-bold text-xs text-indigo-300 font-display mt-2 mb-1 border-b border-indigo-500/15 pb-1">
+              {parseInlineMarkdown(headingText)}
+            </h4>
+          );
+        }
+
+        const lines = trimmed.split('\n');
+        const isListBlock = lines.every(l => /^\s*[-*•\d+.]\s+/.test(l));
+
+        if (isListBlock) {
+          return (
+            <ul key={bIdx} className="space-y-1.5 my-1 pl-1">
+              {lines.map((line, lIdx) => {
+                const itemText = line.replace(/^\s*[-*•\d+.]\s+/, '');
+                return (
+                  <li key={lIdx} className="flex items-start gap-2 text-slate-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                    <span className="flex-1">{parseInlineMarkdown(itemText)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={bIdx} className="text-slate-200">
+            {lines.map((line, lIdx) => (
+              <span key={lIdx}>
+                {parseInlineMarkdown(line)}
+                {lIdx < lines.length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ChatWidget({ selectedCompetitor, onClose }) {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([
@@ -109,7 +194,11 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
                   : 'bg-white/[0.04] border border-white/[0.06] text-slate-200 rounded-bl-sm space-y-2 hover:border-white/[0.1]'
               }`}
             >
-              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+              {msg.sender === 'user' ? (
+                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+              ) : (
+                <FormattedMessage text={msg.text} />
+              )}
 
               {/* Citations */}
               {Array.isArray(msg.citations) && msg.citations.length > 0 && (

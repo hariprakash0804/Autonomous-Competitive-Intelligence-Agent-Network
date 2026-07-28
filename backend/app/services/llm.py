@@ -57,6 +57,7 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     client = _get_cached_client(api_key)
 
     models_to_try = [
+        "inclusionai/ling-3.0-flash:free",
         "nvidia/nemotron-4-40b-a3b-instruct:free",
         "nvidia/nemotron-3-nano-30b-a3b:free",
         "google/gemini-2.5-flash:free",

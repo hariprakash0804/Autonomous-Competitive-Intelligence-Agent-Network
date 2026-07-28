@@ -100,6 +100,97 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     raise last_exception if last_exception else RuntimeError("All OpenRouter candidate models failed.")
 
 
+def _build_rich_context(pages_summary: list[dict], user_company_name: str, user_company_url: Optional[str]) -> str:
+    """
+    Builds a rich structured context string from scraped pages for the LLM prompt.
+    Extracts and formats: metadata, headings, content snippets, social links, CTA signals.
+    """
+    sections = []
+    for idx, p in enumerate(pages_summary, 1):
+        if p.get("is_stale"):
+            continue
+
+        url = p.get("url", "Unknown")
+        metadata = p.get("metadata", {})
+        headings = p.get("headings", [])
+        social = p.get("social_links", {})
+        ctas = p.get("cta_signals", [])
+        content = p.get("clean_text", "")
+
+        # Determine if this is the user's own company page
+        is_user_page = bool(user_company_url and (
+            user_company_url.rstrip("/") in url or url in user_company_url
+        ))
+        label = f"[YOUR COMPANY PAGE]" if is_user_page else "[COMPETITOR PAGE]"
+
+        page_ctx = f"--- Page {idx} {label}: {url} ---\n"
+
+        # Metadata
+        title = metadata.get("title") or metadata.get("og_title") or ""
+        description = metadata.get("description") or metadata.get("og_description") or ""
+        site_name = metadata.get("og_site_name") or ""
+        if title:
+            page_ctx += f"Title: {title}\n"
+        if site_name:
+            page_ctx += f"Site Name: {site_name}\n"
+        if description:
+            page_ctx += f"Description: {description}\n"
+        keywords = metadata.get("keywords", [])
+        if keywords:
+            page_ctx += f"Keywords: {', '.join(keywords[:15])}\n"
+
+        # JSON-LD highlights
+        jsonld_items = metadata.get("jsonld", [])
+        for ld in jsonld_items[:3]:
+            ld_type = ld.get("@type", "")
+            if ld_type:
+                page_ctx += f"Schema.org Type: {ld_type}\n"
+            ld_desc = ld.get("description", "")
+            if ld_desc and len(ld_desc) > 10:
+                page_ctx += f"Schema Description: {ld_desc[:300]}\n"
+            ld_name = ld.get("name", "")
+            if ld_name:
+                page_ctx += f"Schema Name: {ld_name}\n"
+
+        # Headings hierarchy (captures feature sections, product areas)
+        if headings:
+            heading_strs = [f"{'#' * h['level']} {h['text']}" for h in headings[:15]]
+            page_ctx += f"Page Structure (Headings):\n" + "\n".join(heading_strs) + "\n"
+
+        # Social presence
+        if social:
+            social_strs = [f"{k}: {v}" for k, v in social.items()]
+            page_ctx += f"Social/Contact: {' | '.join(social_strs)}\n"
+
+        # Technographics / Tech Stack
+        tech_stack = p.get("tech_stack", [])
+        if tech_stack:
+            page_ctx += f"Detected Tech Stack: {', '.join(tech_stack)}\n"
+
+        # CTA signals
+        if ctas:
+            page_ctx += f"Call-to-Action Signals: {' | '.join(ctas[:10])}\n"
+
+        # Markdown Tables (Pricing matrices, Feature comparison tables)
+        tables = p.get("markdown_tables", [])
+        if tables:
+            page_ctx += f"Scraped Comparison/Pricing Tables:\n" + "\n\n".join(tables[:3]) + "\n"
+
+        # FAQs
+        faqs = p.get("faqs", [])
+        if faqs:
+            faq_strs = [f"Q: {f.get('question')}\nA: {f.get('answer')}" for f in faqs[:5]]
+            page_ctx += f"Extracted FAQs:\n" + "\n\n".join(faq_strs) + "\n"
+
+        # Actual page content (first 2500 chars)
+        if content:
+            page_ctx += f"Page Content:\n{content[:2500]}\n"
+
+        sections.append(page_ctx)
+
+    return "\n\n".join(sections) if sections else "No valid page content was extracted."
+
+
 def generate_executive_report(
     competitor_name: str,
     diffs: list[dict],
@@ -111,48 +202,66 @@ def generate_executive_report(
 ) -> Tuple[str, str]:
     """
     Generates a structured comparative competitive intelligence report.
-    Includes Features, Pricing, Advantages, and Disadvantages.
+    Uses rich scraped content (metadata, headings, CTAs, actual text) to produce
+    data-driven analysis. Includes Features, Pricing, Advantages, and Disadvantages.
     Returns (report_markdown, model_info_string).
     """
     provider = (settings.LLM_PROVIDER or "").lower().strip()
     api_key = settings.LLM_API_KEY or ""
 
+    # Build rich context from all scraped pages
+    rich_context = _build_rich_context(pages_summary, user_company_name, user_company_url)
+
     prompt = f"""
-You are an expert Competitive Intelligence Analyst. Generate a detailed comparative intelligence report comparing '{user_company_name}' vs '{competitor_name}'.
+You are an expert Competitive Intelligence Analyst. Generate a detailed, data-driven comparative intelligence report comparing '{user_company_name}' vs '{competitor_name}'.
 
-Data Context:
-- User Company: {user_company_name} ({user_company_url or 'N/A'})
-- Competitor: {competitor_name}
-- Price Changes & Tiers Detected: {diffs}
-- Sentiment & Topic Analysis: {sentiment_results}
-- Scraped Page Summaries: {pages_summary}
-- Incompleteness Flag: {is_incomplete}
+IMPORTANT: Base your analysis STRICTLY on the scraped page data provided below. Do NOT fabricate features, prices, or capabilities that are not present in the data.
 
-Report Structure MUST include:
+═══════════════════════════════════════════════
+SCRAPED PAGE DATA (Use this as your primary source)
+═══════════════════════════════════════════════
+{rich_context}
+
+═══════════════════════════════════════════════
+PRICING CHANGES & TIERS DETECTED
+═══════════════════════════════════════════════
+{diffs if diffs else "No pricing tier changes detected."}
+
+═══════════════════════════════════════════════
+SENTIMENT & TOPIC ANALYSIS
+═══════════════════════════════════════════════
+{sentiment_results if sentiment_results else "No sentiment data available."}
+
+═══════════════════════════════════════════════
+Data Quality: {'INCOMPLETE - some pages were stale after retries' if is_incomplete else 'Complete'}
+═══════════════════════════════════════════════
+
+Report Structure MUST include ALL 6 sections:
+
 # Competitive Intelligence Executive Summary: {user_company_name} vs {competitor_name}
 
 ## Executive Brief
-Brief high-level comparative summary of both companies.
+Brief high-level comparative summary of both companies based on the scraped data.
 
 ## 1. Feature & Capability Comparison Matrix
-Compare product capabilities, developer experience, scalability, and target market between {user_company_name} and {competitor_name}. Include a complete Markdown table with rows for Core Models, Developer Experience, Scalability, and Enterprise Governance.
+Compare product capabilities, developer experience, scalability, and target market. Use a Markdown table comparing dimensions like Core Product, Key Features, Target Audience, Technology, and Integrations.
 
 ## 2. Pricing & Tier Structure Comparison
-Compare pricing plans, tiers, free offerings, enterprise pricing, and recent cost movements.
+Compare pricing plans, tiers, free offerings, enterprise pricing. Quote actual prices from the scraped data.
 
 ## 3. Key Advantages of {user_company_name} over {competitor_name}
-Bullet list of clear value props, advantages, cost benefits, or superior features where {user_company_name} wins.
+Bullet list of advantages derived from the scraped content.
 
 ## 4. Key Disadvantages & Gaps of {user_company_name} vs {competitor_name}
-Bullet list of competitor strengths, missing features, or areas where {competitor_name} holds an advantage.
+Bullet list of areas where {competitor_name} has an edge.
 
 ## 5. Sentiment & Market Perception Analysis
-{sentiment_results}
+Analysis based on the sentiment scores and topics provided.
 
 ## 6. Strategic Recommendations & Action Plan
 Actionable steps for marketing, product roadmap, and sales positioning.
 
-CRITICAL REQUIREMENT: Output ALL 6 sections completely. Do NOT stop mid-table or truncate mid-sentence.
+CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-table or truncate mid-sentence. Reference specific data points from the scraped content.
 """
 
     if is_incomplete:
@@ -166,30 +275,99 @@ CRITICAL REQUIREMENT: Output ALL 6 sections completely. Do NOT stop mid-table or
         except Exception as exc:
             print(f"[OpenRouter API Failure] {exc}. Falling back to instant structured comparative generator.")
 
-    # 2. Keyless Fallback Instant Comparative Report Generator
+    # 2. Keyless Fallback — Data-Driven Structured Report Generator
+    # Extract real information from scraped pages instead of using generic placeholders
     stale_notice = (
         "> [!WARNING]\n> **Data Collection Incomplete**: One or more source pages were flagged stale after retries.\n\n"
         if is_incomplete
         else ""
     )
 
+    # ── Build company profiles from extracted metadata ────────────────────
+    user_profile = {"title": user_company_name, "description": "", "headings": [], "ctas": [], "social": {}}
+    competitor_profile = {"title": competitor_name, "description": "", "headings": [], "ctas": [], "social": {}}
+
+    for p in pages_summary:
+        if p.get("is_stale"):
+            continue
+        url = p.get("url", "")
+        metadata = p.get("metadata", {})
+        is_user_page = bool(user_company_url and (
+            user_company_url.rstrip("/") in url or url in user_company_url
+        ))
+        target = user_profile if is_user_page else competitor_profile
+
+        # Take the best description available
+        desc = metadata.get("description") or metadata.get("og_description") or ""
+        if desc and (not target["description"] or len(desc) > len(target["description"])):
+            target["description"] = desc
+
+        title = metadata.get("title") or metadata.get("og_title") or ""
+        if title and (not target["title"] or target["title"] in (user_company_name, competitor_name)):
+            target["title"] = title
+
+        target["headings"].extend(p.get("headings", []))
+        target["ctas"].extend(p.get("cta_signals", []))
+        target["social"].update(p.get("social_links", {}))
+
+    # ── Build feature comparison from headings ────────────────────────────
+    def _extract_feature_bullets(profile: dict, name: str) -> str:
+        bullets = []
+        if profile["description"]:
+            bullets.append(f"**Description**: {profile['description']}")
+        # Extract h2/h3 headings as feature categories
+        feature_headings = [h["text"] for h in profile["headings"] if h.get("level") in (2, 3)][:8]
+        if feature_headings:
+            bullets.append(f"**Key Sections**: {', '.join(feature_headings)}")
+        if profile["ctas"]:
+            unique_ctas = list(dict.fromkeys(profile["ctas"]))[:5]
+            bullets.append(f"**CTA Signals**: {', '.join(unique_ctas)}")
+        if profile["social"]:
+            social_items = [f"{k.title()}" for k in profile["social"].keys() if k not in ("email", "phone")]
+            if social_items:
+                bullets.append(f"**Social Presence**: {', '.join(social_items)}")
+            if profile["social"].get("email"):
+                bullets.append(f"**Contact Email**: {profile['social']['email']}")
+        if not bullets:
+            bullets.append(f"Web presence analyzed from scraped content.")
+        return "\n".join(f"- {b}" for b in bullets)
+
+    user_features = _extract_feature_bullets(user_profile, user_company_name)
+    comp_features = _extract_feature_bullets(competitor_profile, competitor_name)
+
+    # ── Pricing section ──────────────────────────────────────────────────
     pricing_section = ""
     if diffs:
         for d in diffs:
-            pricing_section += f"- **{d.get('tier_name', 'General')}**: Old Price: `${d.get('old_price', 'None')}` -> New Price: `${d.get('new_price', 'None')}` ({d.get('details', '')})\n"
+            tier = d.get('tier_name', 'General')
+            old_p = d.get('old_price')
+            new_p = d.get('new_price')
+            details = d.get('details', '')
+            if old_p is not None:
+                pricing_section += f"- **{tier}**: `${old_p}` → `${new_p}` ({details})\n"
+            else:
+                pricing_section += f"- **{tier}**: `${new_p}` — {details}\n"
     else:
-        pricing_section = f"- Baseline pricing active. {competitor_name} pricing structures analyzed across scraped pages.\n"
+        pricing_section = f"- No pricing tier changes detected in this scan cycle.\n"
 
+    # ── Sentiment section ────────────────────────────────────────────────
     sentiment_section = ""
     if sentiment_results:
         for s in sentiment_results:
-            sentiment_section += f"- **Source ({s.get('source_type')})**: Score `{s.get('score')}` ({s.get('sentiment_category')}) | Key Topics: {', '.join(s.get('topics', []))}\n"
+            topics = ', '.join(s.get('topics', [])) if s.get('topics') else 'general'
+            sentiment_section += f"- **Source ({s.get('source_type', 'web')})**: Score `{s.get('score')}` ({s.get('sentiment_category', 'neutral')}) | Topics: {topics}\n"
     else:
-        sentiment_section = "- Public sentiment and review indicators evaluated at positive baseline (+0.75).\n"
+        sentiment_section = "- No sentiment data available for this analysis cycle.\n"
 
+    # ── Pages analyzed ───────────────────────────────────────────────────
     pages_section = ""
     for p in pages_summary:
-        pages_section += f"- **URL**: {p.get('url')} | Status: `{'Stale' if p.get('is_stale') else 'Valid'}` | Length: {p.get('content_length')} chars\n"
+        status = "Stale" if p.get("is_stale") else "Valid"
+        pages_section += f"- **{p.get('url')}**: `{status}` | {p.get('content_length', 0)} chars\n"
+
+    # ── Executive brief from metadata ────────────────────────────────────
+    user_desc_brief = user_profile["description"][:200] if user_profile["description"] else f"{user_company_name}'s web presence"
+    comp_desc_brief = competitor_profile["description"][:200] if competitor_profile["description"] else f"{competitor_name}'s web presence"
 
     structured_report = f"""# Competitive Intelligence Executive Summary: {user_company_name} vs {competitor_name}
 
@@ -197,33 +375,39 @@ CRITICAL REQUIREMENT: Output ALL 6 sections completely. Do NOT stop mid-table or
 ## Executive Brief
 Automated multi-agent intelligence analysis completed between **{user_company_name}** ({user_company_url or 'Primary Site'}) and **{competitor_name}**.
 
-## 1. Feature & Capability Comparison Matrix
-- **{user_company_name}**: Offers high performance, custom integrations, real-time telemetry, and streamlined workflow management.
-- **{competitor_name}**: Features robust ecosystem support, established enterprise branding, and standard API access.
+- **{user_company_name}**: {user_desc_brief}
+- **{competitor_name}**: {comp_desc_brief}
+
+## 1. Feature & Capability Comparison
+
+### {user_company_name}
+{user_features}
+
+### {competitor_name}
+{comp_features}
 
 ## 2. Pricing & Tier Structure Comparison
 {pricing_section}
-- **{user_company_name}**: Flexible user-based tiers and transparent usage pricing.
-- **{competitor_name}**: Tiered monthly packages with custom enterprise quotes.
 
 ## 3. Key Advantages of {user_company_name} over {competitor_name}
-- **Faster Onboarding**: Lower time-to-value for small and medium teams compared to {competitor_name}'s complex setup.
-- **Cost Efficiency**: Competitive price-to-performance ratio with no hidden add-on fees.
-- **Modern User Experience**: Intuitive web platform interface with integrated automated workflow triggers.
-- **Superior Support**: Direct channel support and rapid issue resolution.
+- Analysis based on {len([p for p in pages_summary if not p.get('is_stale')])} successfully scraped pages.
+- Refer to the feature comparison above for detailed capability differences.
+- CTA signals suggest go-to-market positioning: {', '.join(list(dict.fromkeys(user_profile['ctas']))[:3]) if user_profile['ctas'] else 'N/A'}
 
 ## 4. Key Disadvantages & Gaps of {user_company_name} vs {competitor_name}
-- **Ecosystem Breadth**: {competitor_name} currently provides more pre-built 3rd-party marketplace plugins.
-- **Brand Awareness**: {competitor_name} has a legacy presence and larger existing enterprise customer base.
-- **Compliance Certifications**: {competitor_name} advertises additional specialized compliance standard badges.
+- Competitor CTA signals indicate: {', '.join(list(dict.fromkeys(competitor_profile['ctas']))[:3]) if competitor_profile['ctas'] else 'N/A'}
+- Competitor social presence: {', '.join(k.title() for k in competitor_profile['social'].keys() if k not in ('email', 'phone')) if competitor_profile['social'] else 'Not detected'}
 
 ## 5. Sentiment & Market Perception Analysis
 {sentiment_section}
 
 ## 6. Strategic Recommendations & Action Plan
-1. **Highlight Advantage Positioning**: Emphasize {user_company_name}'s faster implementation and transparent pricing in sales demos against {competitor_name}.
-2. **Address Feature Gaps**: Prioritize expanding top 3 requested third-party marketplace integrations in the upcoming product sprint.
-3. **Monitor Competitor Changes**: Set weekly monitoring cadences to immediately capture price adjustments or new feature rollouts by {competitor_name}.
+1. **Monitor Competitor Changes**: Set weekly monitoring cadences to capture price adjustments or feature rollouts by {competitor_name}.
+2. **Leverage Intelligence Data**: Use the scraped content and extracted metadata to inform marketing positioning and sales battle cards.
+3. **Run LLM-Powered Analysis**: Configure an OpenRouter API key (LLM_PROVIDER=openrouter) to enable AI-generated deep analysis with specific competitive insights.
+
+### Data Sources Analyzed
+{pages_section}
 """
     return structured_report, "instant/structured_comparative_generator"
 

@@ -21,6 +21,49 @@ from app.services.llm import generate_executive_report
 from app.services.agent.state import AgentState
 
 
+def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
+    """
+    Determines the SourceType for a scraped page using multiple signals:
+    1. URL path keywords
+    2. Page title and meta description
+    3. Heading content
+    4. Body text signals
+    Falls back to NEWS if no strong signal is detected.
+    """
+    url = scrape_res.get("url", "").lower()
+    metadata = scrape_res.get("metadata", {})
+    headings = scrape_res.get("headings", [])
+    clean_text = (scrape_res.get("clean_text", "")[:2000]).lower()
+
+    # Combine metadata text for keyword matching
+    title = (metadata.get("title", "") or "").lower()
+    description = (metadata.get("description", "") or "").lower()
+    og_title = (metadata.get("og_title", "") or "").lower()
+    heading_texts = " ".join(h.get("text", "").lower() for h in headings[:10])
+    combined_meta = f"{title} {description} {og_title} {heading_texts}"
+
+    # Pricing signals
+    pricing_url_kw = any(kw in url for kw in ["pricing", "plans", "packages", "subscription", "billing", "quote", "calculator", "cost", "tier"])
+    pricing_meta_kw = any(kw in combined_meta for kw in ["pricing", "plans", "per month", "per user", "free tier", "enterprise pricing", "subscription", "quote"])
+    pricing_text_kw = any(kw in clean_text for kw in ["$/mo", "per month", "per user", "free plan", "pricing", "billed annually", "billed monthly", "custom pricing"])
+    if pricing_url_kw or (pricing_meta_kw and pricing_text_kw):
+        return SourceType.PRICING
+
+    # Review / Product / Company signals
+    review_url_kw = any(kw in url for kw in [
+        "review", "about", "docs", "features", "product", "solutions", "customers",
+        "testimonial", "case-stud", "enterprise", "security", "trust", "integrations", "marketplace", "compare", "vs"
+    ])
+    review_meta_kw = any(kw in combined_meta for kw in [
+        "review", "features", "about us", "our product", "solutions", "documentation",
+        "customer", "testimonial", "enterprise", "security", "integrations", "capabilities"
+    ])
+    if review_url_kw or review_meta_kw:
+        return SourceType.REVIEW
+
+    return SourceType.NEWS
+
+
 def researcher_node(state: AgentState) -> AgentState:
     """
     1. Researcher Node:
@@ -44,14 +87,43 @@ def researcher_node(state: AgentState) -> AgentState:
         if competitor:
             state["competitor_name"] = competitor.name
 
-        # Parallel scraping using ThreadPoolExecutor
+        # Pass 1: Parallel seed URL scraping
         scrape_start = time.time()
+        scraped_urls = set()
+        raw_pages = []
+
         if urls:
             with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
-                raw_pages = list(executor.map(scrape_url, urls))
-        else:
-            raw_pages = []
-        print(f"[Researcher Node] Scraping {len(urls)} URLs completed in {time.time() - scrape_start:.2f}s", flush=True)
+                pass1_results = list(executor.map(scrape_url, urls))
+            for res in pass1_results:
+                raw_pages.append(res)
+                scraped_urls.add(res.get("url", "").rstrip("/"))
+
+        print(f"[Researcher Node] Pass 1 scraping ({len(urls)} seed URLs) completed in {time.time() - scrape_start:.2f}s", flush=True)
+
+        # Pass 2: Automatic discovery of key sub-pages (pricing, features, about, docs, reviews, news)
+        discovered_urls = []
+        for page in raw_pages:
+            if page.get("is_stale"):
+                continue
+            internal_links = page.get("key_internal_links", [])
+            for link_item in internal_links:
+                target_url = link_item.get("url", "").rstrip("/")
+                if target_url and target_url not in scraped_urls and target_url not in [u.rstrip("/") for u in discovered_urls]:
+                    discovered_urls.append(link_item.get("url"))
+
+        # Cap discovered URLs to 6 pages per run for optimal speed & complete coverage
+        discovered_urls = discovered_urls[:6]
+
+        if discovered_urls:
+            print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)
+            pass2_start = time.time()
+            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 5)) as executor:
+                pass2_results = list(executor.map(scrape_url, discovered_urls))
+            for res in pass2_results:
+                raw_pages.append(res)
+                scraped_urls.add(res.get("url", "").rstrip("/"))
+            print(f"[Researcher Node] Pass 2 sub-page scraping completed in {time.time() - pass2_start:.2f}s", flush=True)
 
         # Record snapshots in DB & FAISS if valid — batched commits
         db_start = time.time()
@@ -59,9 +131,7 @@ def researcher_node(state: AgentState) -> AgentState:
         for scrape_res in raw_pages:
             url = scrape_res.get("url", "")
             if competitor and not scrape_res["is_stale"] and scrape_res["clean_text"]:
-                source_type = SourceType.PRICING if "pricing" in url.lower() else (
-                    SourceType.REVIEW if "review" in url.lower() or "about" in url.lower() or "docs" in url.lower() else SourceType.NEWS
-                )
+                source_type = _detect_source_type(scrape_res)
 
                 snapshot = Snapshot(
                     competitor_id=competitor.id,
@@ -100,7 +170,7 @@ def researcher_node(state: AgentState) -> AgentState:
         db.close()
 
     state["raw_pages"] = raw_pages
-    print(f"[Researcher Node] TOTAL: {time.time() - node_start:.2f}s", flush=True)
+    print(f"[Researcher Node] TOTAL: {time.time() - node_start:.2f}s (Analyzed {len(raw_pages)} total pages)", flush=True)
     return state
 
 
@@ -239,8 +309,22 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
 
         for page in valid_pages:
             url = page.get("url", "")
-            sent_res = sentiment_score(page["clean_text"])
-            source_type = "review" if "review" in url.lower() or "about" in url.lower() or "docs" in url.lower() else "web"
+
+            # Build enriched text: prepend metadata context for better topic extraction
+            metadata = page.get("metadata", {})
+            meta_prefix = ""
+            meta_title = metadata.get("title") or metadata.get("og_title") or ""
+            meta_desc = metadata.get("description") or metadata.get("og_description") or ""
+            if meta_title:
+                meta_prefix += f"{meta_title}. "
+            if meta_desc:
+                meta_prefix += f"{meta_desc}. "
+
+            enriched_text = meta_prefix + page["clean_text"]
+            sent_res = sentiment_score(enriched_text)
+
+            # Use the shared source type detector for consistency
+            source_type = _detect_source_type(page).value
             
             result_item = {
                 "url": url,
@@ -301,14 +385,24 @@ def report_writer_node(state: AgentState) -> AgentState:
     node_start = time.time()
     print(f"[Report-Writer] Starting...", flush=True)
 
-    pages_summary = [
-        {
+    pages_summary = []
+    for p in state.get("raw_pages", []):
+        page_entry = {
             "url": p.get("url"),
             "is_stale": p.get("is_stale"),
             "content_length": len(p.get("clean_text", "")),
+            # Include actual scraped content (capped at 3000 chars per page)
+            "clean_text": p.get("clean_text", "")[:3000],
+            # Include structured metadata, tables, FAQs, and tech stack for the LLM
+            "metadata": p.get("metadata", {}),
+            "headings": p.get("headings", [])[:20],
+            "social_links": p.get("social_links", {}),
+            "cta_signals": p.get("cta_signals", []),
+            "markdown_tables": p.get("markdown_tables", []),
+            "faqs": p.get("faqs", []),
+            "tech_stack": p.get("tech_stack", []),
         }
-        for p in state.get("raw_pages", [])
-    ]
+        pages_summary.append(page_entry)
 
     user_company_name = "Our Company"
     user_company_url = None

@@ -19,16 +19,29 @@ def ingest_url_for_competitor(
     competitor: Competitor,
     source_type: SourceType,
     url: str,
+    discover_subpages: bool = True,
 ) -> Dict[str, Any]:
     """
     Scrapes a single URL for a competitor, checks for content hash duplicates,
     creates Snapshot in Postgres, vectors in FAISS, sentiment scores, and price changes.
+    If discover_subpages is True, auto-discovers and ingests key sub-pages on the same domain.
     """
     scrape_res = scrape_url(url)
     clean_text = scrape_res["clean_text"]
     content_hash = scrape_res["content_hash"]
     is_stale = scrape_res["is_stale"]
     stale_reason = scrape_res["stale_reason"]
+
+    # Enrich clean_text with metadata context for better FAISS indexing
+    metadata = scrape_res.get("metadata", {})
+    meta_title = metadata.get("title") or metadata.get("og_title") or ""
+    meta_desc = metadata.get("description") or metadata.get("og_description") or ""
+    meta_prefix = ""
+    if meta_title:
+        meta_prefix += f"{meta_title}. "
+    if meta_desc:
+        meta_prefix += f"{meta_desc}. "
+    enriched_text = (meta_prefix + clean_text) if meta_prefix else clean_text
 
     # Retrieve latest snapshot for this competitor and source_type
     stmt = (
@@ -51,11 +64,11 @@ def ingest_url_for_competitor(
             "url": url,
         }
 
-    # Create new snapshot record
+    # Create new snapshot record — store enriched text for better retrieval
     snapshot = Snapshot(
         competitor_id=competitor.id,
         source_type=source_type,
-        raw_content=clean_text if clean_text else scrape_res.get("raw_content", ""),
+        raw_content=enriched_text if enriched_text else scrape_res.get("raw_content", ""),
         content_hash=content_hash,
         is_stale=is_stale,
         fetched_at=datetime.now(timezone.utc),
@@ -66,13 +79,13 @@ def ingest_url_for_competitor(
 
     chunks_added = 0
     # Process vector embeddings if content is clean and valid
-    if not is_stale and clean_text:
+    if not is_stale and enriched_text:
         chunks_added = vector_store.add_snapshot_chunks(
             snapshot_id=str(snapshot.id),
             competitor_id=str(competitor.id),
             source_type=source_type.value,
             fetched_at=snapshot.fetched_at.isoformat(),
-            text=clean_text,
+            text=enriched_text,
         )
 
         # Handle PRICING source type diffs
@@ -108,6 +121,21 @@ def ingest_url_for_competitor(
             db.add(sent_record)
             db.commit()
 
+    # Auto-discover and ingest key sub-pages (pricing, features, about, docs)
+    subpages_ingested = 0
+    if discover_subpages and not is_stale:
+        internal_links = scrape_res.get("key_internal_links", [])
+        for link_item in internal_links[:4]:
+            target_url = link_item.get("url")
+            if target_url and target_url.rstrip("/") != url.rstrip("/"):
+                cat = link_item.get("category", "review")
+                st = SourceType.PRICING if cat == "pricing" else (SourceType.NEWS if cat == "news" else SourceType.REVIEW)
+                try:
+                    ingest_url_for_competitor(db, competitor, st, target_url, discover_subpages=False)
+                    subpages_ingested += 1
+                except Exception as sub_exc:
+                    print(f"[Ingestion] Sub-page auto-ingestion warning for {target_url}: {sub_exc}")
+
     return {
         "status": "ingested",
         "snapshot_id": str(snapshot.id),
@@ -115,7 +143,13 @@ def ingest_url_for_competitor(
         "is_stale": is_stale,
         "stale_reason": stale_reason,
         "chunks_added": chunks_added,
-        "content_length": len(clean_text),
+        "content_length": len(enriched_text),
+        "meta_title": meta_title,
+        "meta_description": meta_desc[:200] if meta_desc else "",
+        "social_links_count": len(scrape_res.get("social_links", {})),
+        "headings_count": len(scrape_res.get("headings", [])),
+        "cta_count": len(scrape_res.get("cta_signals", [])),
+        "subpages_auto_ingested": subpages_ingested,
     }
 
 
@@ -128,6 +162,11 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
         raise ValueError(f"Competitor with ID {competitor_id} not found")
 
     results = []
+
+    # 0. Company Homepage URL (captures About, Features, etc.)
+    if competitor.company_url:
+        res = ingest_url_for_competitor(db, competitor, SourceType.REVIEW, competitor.company_url)
+        results.append(res)
 
     # 1. Pricing URL
     if competitor.pricing_url:

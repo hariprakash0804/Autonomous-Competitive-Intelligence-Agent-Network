@@ -130,23 +130,40 @@ def _detect_content_type(response: httpx.Response) -> str:
         return "text"
 
 
+def _parse_html(html_content: str) -> Optional[BeautifulSoup]:
+    """Safely parses HTML into a BeautifulSoup tree. Returns None on failure."""
+    if not html_content:
+        return None
+    try:
+        return BeautifulSoup(html_content, "lxml")
+    except Exception:
+        try:
+            return BeautifulSoup(html_content, "html.parser")
+        except Exception:
+            return None
+
+
 def clean_html(html_content: str) -> str:
-    """Strips script, style tags, and extracts visible text content from HTML."""
+    """
+    Extracts visible text content from HTML while preserving text from
+    structural elements (header, footer, nav, buttons) that carry company
+    identity, contact info, and CTA signals.
+    Only strips elements that never contain useful readable text.
+    """
     if not html_content:
         return ""
-    try:
-        soup = BeautifulSoup(html_content, "lxml")
-    except Exception:
-        # Fallback to html.parser if lxml is not available or fails
-        try:
-            soup = BeautifulSoup(html_content, "html.parser")
-        except Exception:
-            return ""
+    soup = _parse_html(html_content)
+    if soup is None:
+        return ""
 
+    # Strip elements that NEVER contain useful readable text.
+    # Keep: header, footer, nav (company name, tagline, contact, social links)
+    # Keep: button (CTA text like "Start Free Trial", "Book a Demo")
+    # Keep: form labels (contact form fields reveal product capabilities)
     for tag in soup([
-        "script", "style", "noscript", "svg", "header", "footer", "nav",
-        "iframe", "template", "code", "pre", "symbol", "canvas", "object",
-        "embed", "link", "meta", "form", "button", "input", "select", "textarea"
+        "script", "style", "noscript", "svg", "iframe", "template",
+        "code", "pre", "symbol", "canvas", "object", "embed",
+        "link", "meta",
     ]):
         tag.decompose()
 
@@ -214,6 +231,496 @@ def clean_xml_content(xml_text: str) -> str:
     return text
 
 
+# ── Social media domain patterns ─────────────────────────────────────────────
+_SOCIAL_DOMAINS = {
+    "linkedin": ["linkedin.com"],
+    "twitter": ["twitter.com", "x.com"],
+    "facebook": ["facebook.com", "fb.com"],
+    "instagram": ["instagram.com"],
+    "youtube": ["youtube.com", "youtu.be"],
+    "github": ["github.com"],
+    "discord": ["discord.gg", "discord.com"],
+    "slack": ["slack.com"],
+    "tiktok": ["tiktok.com"],
+    "reddit": ["reddit.com"],
+    "crunchbase": ["crunchbase.com"],
+}
+
+
+def extract_structured_metadata(soup: BeautifulSoup, url: str) -> Dict[str, Any]:
+    """
+    Extracts structured metadata from HTML:
+    - <title>, <meta description>, <meta keywords>
+    - Open Graph tags (og:title, og:description, og:image, og:site_name, og:type)
+    - Twitter Card tags
+    - JSON-LD / schema.org structured data
+    - Canonical URL
+    """
+    meta = {
+        "title": "",
+        "description": "",
+        "keywords": [],
+        "og_title": "",
+        "og_description": "",
+        "og_image": "",
+        "og_site_name": "",
+        "og_type": "",
+        "twitter_title": "",
+        "twitter_description": "",
+        "twitter_image": "",
+        "jsonld": [],
+        "canonical_url": "",
+    }
+
+    # <title>
+    title_tag = soup.find("title")
+    if title_tag and title_tag.string:
+        meta["title"] = title_tag.string.strip()
+
+    # <meta name="description">
+    desc_tag = soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})
+    if desc_tag and desc_tag.get("content"):
+        meta["description"] = desc_tag["content"].strip()
+
+    # <meta name="keywords">
+    kw_tag = soup.find("meta", attrs={"name": re.compile(r"^keywords$", re.I)})
+    if kw_tag and kw_tag.get("content"):
+        meta["keywords"] = [k.strip() for k in kw_tag["content"].split(",") if k.strip()]
+
+    # Open Graph tags
+    og_mappings = {
+        "og:title": "og_title",
+        "og:description": "og_description",
+        "og:image": "og_image",
+        "og:site_name": "og_site_name",
+        "og:type": "og_type",
+    }
+    for og_prop, key in og_mappings.items():
+        og_tag = soup.find("meta", attrs={"property": og_prop})
+        if og_tag and og_tag.get("content"):
+            meta[key] = og_tag["content"].strip()
+
+    # Twitter Card tags
+    tw_mappings = {
+        "twitter:title": "twitter_title",
+        "twitter:description": "twitter_description",
+        "twitter:image": "twitter_image",
+    }
+    for tw_name, key in tw_mappings.items():
+        tw_tag = soup.find("meta", attrs={"name": tw_name}) or soup.find("meta", attrs={"property": tw_name})
+        if tw_tag and tw_tag.get("content"):
+            meta[key] = tw_tag["content"].strip()
+
+    # JSON-LD structured data (schema.org)
+    for ld_script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            ld_text = ld_script.string or ld_script.get_text()
+            if ld_text:
+                ld_data = json.loads(ld_text)
+                # Normalize to list
+                if isinstance(ld_data, dict):
+                    meta["jsonld"].append(ld_data)
+                elif isinstance(ld_data, list):
+                    meta["jsonld"].extend(ld_data)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Canonical URL
+    canon_tag = soup.find("link", attrs={"rel": "canonical"})
+    if canon_tag and canon_tag.get("href"):
+        meta["canonical_url"] = urljoin(url, canon_tag["href"].strip())
+
+    return meta
+
+
+def extract_headings(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    Extracts all heading tags (h1–h6) preserving their hierarchy.
+    Captures company tagline (h1), section titles, feature categories, etc.
+    Returns [{"level": 1, "text": "..."}, ...]
+    """
+    headings = []
+    for level in range(1, 7):
+        for tag in soup.find_all(f"h{level}"):
+            text = tag.get_text(separator=" ", strip=True)
+            if text and len(text) > 1:
+                headings.append({"level": level, "text": text})
+    # Sort by document order (find_all returns in order per level, re-sort by position)
+    # Re-scan in document order for accuracy
+    headings_ordered = []
+    for tag in soup.find_all(re.compile(r"^h[1-6]$")):
+        text = tag.get_text(separator=" ", strip=True)
+        if text and len(text) > 1:
+            level = int(tag.name[1])
+            headings_ordered.append({"level": level, "text": text})
+    return headings_ordered
+
+
+def extract_social_links(soup: BeautifulSoup, base_url: str) -> Dict[str, str]:
+    """
+    Scans all <a> tags for social media and contact links.
+    Returns {"linkedin": "https://...", "twitter": "https://...", "email": "...", "phone": "...", ...}
+    """
+    social = {}
+    email = ""
+    phone = ""
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"].strip()
+
+        # Email
+        if href.startswith("mailto:") and not email:
+            email = href.replace("mailto:", "").split("?")[0].strip()
+            continue
+
+        # Phone
+        if href.startswith("tel:") and not phone:
+            phone = href.replace("tel:", "").strip()
+            continue
+
+        # Social platforms
+        href_lower = href.lower()
+        for platform, domains in _SOCIAL_DOMAINS.items():
+            if platform not in social:
+                for domain in domains:
+                    if domain in href_lower:
+                        social[platform] = href
+                        break
+
+    if email:
+        social["email"] = email
+    if phone:
+        social["phone"] = phone
+
+    return social
+
+
+def extract_key_images(soup: BeautifulSoup, base_url: str, max_images: int = 10) -> List[Dict[str, str]]:
+    """
+    Extracts key images with meaningful alt text:
+    - Logo (from header, og:image, link[rel=icon])
+    - Hero and feature images with descriptive alt text
+    Returns [{"src": "...", "alt": "...", "context": "logo|hero|feature"}, ...]
+    """
+    images = []
+    seen_srcs = set()
+
+    def _add_image(src: str, alt: str, context: str):
+        if not src or src in seen_srcs or len(images) >= max_images:
+            return
+        # Skip data URIs, tracking pixels, and tiny spacer images
+        if src.startswith("data:") or "pixel" in src.lower() or "spacer" in src.lower():
+            return
+        full_src = urljoin(base_url, src)
+        seen_srcs.add(src)
+        images.append({"src": full_src, "alt": alt.strip(), "context": context})
+
+    # 1. Favicon / apple-touch-icon
+    for icon_link in soup.find_all("link", attrs={"rel": re.compile(r"icon|apple-touch", re.I)}):
+        if icon_link.get("href"):
+            _add_image(icon_link["href"], "favicon", "logo")
+            break
+
+    # 2. Logo inside <header>
+    header = soup.find("header")
+    if header:
+        header_img = header.find("img")
+        if header_img and header_img.get("src"):
+            _add_image(header_img["src"], header_img.get("alt", "logo"), "logo")
+
+    # 3. OG image (already in metadata, but also listed here for completeness)
+    og_img = soup.find("meta", attrs={"property": "og:image"})
+    if og_img and og_img.get("content"):
+        _add_image(og_img["content"], "og:image", "hero")
+
+    # 4. Body images with meaningful alt text (skip decorative/empty-alt images)
+    for img in soup.find_all("img", src=True):
+        alt = img.get("alt", "").strip()
+        if alt and len(alt) > 3 and not alt.lower().startswith(("icon", "arrow", "dot", "line")):
+            _add_image(img["src"], alt, "feature")
+
+    return images
+
+
+def extract_cta_signals(soup: BeautifulSoup) -> List[str]:
+    """
+    Extracts Call-To-Action text from buttons and prominent links.
+    Captures signals like "Start Free Trial", "Book a Demo", "Contact Sales", etc.
+    """
+    cta_texts = []
+    seen = set()
+
+    # CTA keyword patterns to filter for genuinely informative CTAs
+    cta_keywords = re.compile(
+        r"(start|try|get|sign|log|register|subscribe|book|schedule|request|contact|"
+        r"download|upgrade|buy|order|free|demo|trial|pricing|plan|quote|learn more|"
+        r"see .* in action|watch|explore|compare|join)",
+        re.IGNORECASE,
+    )
+
+    # 1. <button> elements
+    for btn in soup.find_all("button"):
+        text = btn.get_text(separator=" ", strip=True)
+        if text and len(text) > 2 and len(text) < 80 and text.lower() not in seen:
+            if cta_keywords.search(text):
+                seen.add(text.lower())
+                cta_texts.append(text)
+
+    # 2. <a> elements with CTA-like classes or text
+    for a_tag in soup.find_all("a"):
+        text = a_tag.get_text(separator=" ", strip=True)
+        css_class = " ".join(a_tag.get("class", [])).lower()
+        is_cta_class = any(kw in css_class for kw in ["btn", "button", "cta", "action", "hero"])
+
+        if text and len(text) > 2 and len(text) < 80 and text.lower() not in seen:
+            if is_cta_class or cta_keywords.search(text):
+                seen.add(text.lower())
+                cta_texts.append(text)
+
+    # 3. <input type="submit"> values
+    for inp in soup.find_all("input", attrs={"type": "submit"}):
+        val = inp.get("value", "").strip()
+        if val and len(val) > 2 and val.lower() not in seen:
+            seen.add(val.lower())
+            cta_texts.append(val)
+
+    return cta_texts[:20]  # Cap at 20
+
+
+# ── Key internal sub-page discovery patterns (Comprehensive SaaS & B2B Web Taxonomy) ──
+_KEY_LINK_CATEGORIES = {
+    "pricing": [
+        r"pricing", r"plans?", r"tiers?", r"costs?", r"billing", r"packages", r"subscriptions?",
+        r"quote", r"calculator", r"pricing-plans"
+    ],
+    "features": [
+        r"features?", r"products?", r"platform", r"solutions?", r"use-cases?", r"capabilities",
+        r"integrations?", r"marketplace", r"ecosystem", r"apps?", r"plugins?", r"technology", r"services?"
+    ],
+    "enterprise": [
+        r"enterprise", r"security", r"trust", r"compliance", r"soc2", r"privacy", r"governance"
+    ],
+    "about": [
+        r"about", r"company", r"team", r"who-we-are", r"story", r"leadership", r"careers", r"jobs",
+        r"culture", r"overview"
+    ],
+    "docs": [
+        r"docs?", r"documentation", r"api", r"developers?", r"help", r"support", r"kb",
+        r"knowledge-base", r"guides?", r"tutorials?", r"references?"
+    ],
+    "reviews": [
+        r"customers?", r"case-studies", r"testimonials?", r"reviews?", r"stories", r"clients?",
+        r"compare", r"versus", r"vs", r"alternatives?"
+    ],
+    "news": [
+        r"blog", r"news", r"press", r"updates?", r"changelog", r"resources?", r"events?", r"webinars?"
+    ],
+}
+
+
+def extract_key_internal_links(soup: BeautifulSoup, base_url: str, max_links_per_category: int = 2) -> List[Dict[str, str]]:
+    """
+    Scans HTML <a> tags and discovers key internal sub-page URLs on the same domain.
+    Categorizes discovered links into pricing, features, about, docs, reviews, news.
+    Returns a list of dicts: [{"url": "https://...", "category": "pricing", "anchor_text": "..."}, ...]
+    """
+    discovered = []
+    seen_urls = set()
+
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc.lower()
+
+    if not base_domain:
+        return []
+
+    category_counts = {cat: 0 for cat in _KEY_LINK_CATEGORIES}
+
+    for a_tag in soup.find_all("a", href=True):
+        href = a_tag["href"].strip()
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:", "data:")):
+            continue
+
+        # Resolve relative URL to absolute URL
+        full_url = urljoin(base_url, href)
+        parsed_target = urlparse(full_url)
+
+        # Enforce same root domain
+        target_domain = parsed_target.netloc.lower()
+        if not target_domain or (target_domain != base_domain and not target_domain.endswith("." + base_domain)):
+            continue
+
+        # Strip fragments/query params for clean page URL comparison
+        clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}{parsed_target.path.rstrip('/')}"
+        if not parsed_target.path or parsed_target.path == "/":
+            clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}/"
+
+        if clean_target_url in seen_urls or clean_target_url.rstrip("/") == base_url.rstrip("/"):
+            continue
+
+        anchor_text = a_tag.get_text(separator=" ", strip=True)
+        path_and_anchor = f"{parsed_target.path} {anchor_text}".lower()
+
+        # Check matching category
+        for cat, patterns in _KEY_LINK_CATEGORIES.items():
+            if category_counts[cat] >= max_links_per_category:
+                continue
+
+            for pattern in patterns:
+                if re.search(r"\b" + pattern + r"\b", path_and_anchor) or pattern in parsed_target.path.lower():
+                    seen_urls.add(clean_target_url)
+                    category_counts[cat] += 1
+                    discovered.append({
+                        "url": clean_target_url,
+                        "category": cat,
+                        "anchor_text": anchor_text[:60],
+                    })
+                    break
+            if clean_target_url in seen_urls:
+                break
+
+    return discovered
+
+
+# ── Technographic / Tech Stack Signatures ────────────────────────────────────
+_TECH_SIGNATURES = {
+    "Stripe": [r"stripe\.com", r"stripe-js", r"js\.stripe\.com"],
+    "HubSpot": [r"hs-scripts", r"hubspot\.com", r"hs-analytics"],
+    "Google Analytics / GA4": [r"googletagmanager", r"google-analytics", r"gtag"],
+    "Segment": [r"cdn\.segment\.com", r"analytics\.js"],
+    "Intercom": [r"widget\.intercom\.io", r"intercomSettings"],
+    "Drift": [r"driftt\.com", r"js\.driftt\.com"],
+    "Hotjar": [r"static\.hotjar\.com", r"hj\("],
+    "Mixpanel": [r"cdn\.mxpnl\.com", r"mixpanel"],
+    "Webflow": [r"webflow\.css", r"w-custom-widget", r"webflow\.com"],
+    "WordPress": [r"wp-content", r"wp-includes"],
+    "React": [r"react\.production\.min", r"_reactListening", r"data-reactroot"],
+    "Next.js": [r"/_next/static", r"__NEXT_DATA__"],
+    "Vue.js": [r"vue\.min\.js", r"data-v-"],
+    "Shopify": [r"cdn\.shopify\.com", r"Shopify\.theme"],
+    "TailwindCSS": [r"tailwind", r"tw-"],
+    "Cloudflare": [r"cloudflare", r"cf-ray"],
+    "Zendesk": [r"static\.zdassets\.com", r"zendesk"],
+}
+
+
+def extract_tables(soup: BeautifulSoup) -> List[str]:
+    """
+    Converts HTML <table> elements into formatted Markdown tables.
+    Preserves pricing feature comparison matrices and tier comparison tables.
+    """
+    markdown_tables = []
+    for table in soup.find_all("table")[:5]:
+        rows = []
+        for tr in table.find_all("tr"):
+            cells = [td.get_text(separator=" ", strip=True) for td in tr.find_all(["th", "td"])]
+            if cells:
+                rows.append(cells)
+        if not rows or len(rows) < 2:
+            continue
+        col_count = max(len(r) for r in rows)
+        rows = [r + [""] * (col_count - len(r)) for r in rows]
+
+        header = "| " + " | ".join(rows[0]) + " |"
+        separator = "| " + " | ".join(["---"] * col_count) + " |"
+        body = ["| " + " | ".join(r) + " |" for r in rows[1:]]
+        md_table = "\n".join([header, separator] + body)
+        markdown_tables.append(md_table)
+    return markdown_tables
+
+
+def extract_faqs(soup: BeautifulSoup) -> List[Dict[str, str]]:
+    """
+    Extracts Question & Answer pairs from <details><summary> tags and FAQPage JSON-LD schema.
+    """
+    faqs = []
+    # 1. HTML <details><summary>
+    for details in soup.find_all("details"):
+        summary = details.find("summary")
+        if summary:
+            q = summary.get_text(strip=True)
+            ans = details.get_text(strip=True).replace(q, "").strip()
+            if q and ans:
+                faqs.append({"question": q, "answer": ans[:300]})
+
+    # 2. JSON-LD FAQPage schema
+    for ld in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        try:
+            data = json.loads(ld.string or ld.get_text() or "{}")
+            if isinstance(data, dict) and data.get("@type") == "FAQPage":
+                for item in data.get("mainEntity", []):
+                    q = item.get("name", "")
+                    a = item.get("acceptedAnswer", {}).get("text", "")
+                    if q and a:
+                        faqs.append({"question": q, "answer": BeautifulSoup(a, "html.parser").get_text(strip=True)[:300]})
+        except Exception:
+            pass
+    return faqs[:10]
+
+
+def extract_tech_stack(raw_html: str) -> List[str]:
+    """
+    Detects technographic signatures (Stripe, HubSpot, React, Next.js, Segment, Intercom, etc.)
+    from raw HTML script tags, link tags, and meta tags.
+    """
+    detected = []
+    lower_html = raw_html.lower() if raw_html else ""
+    for tech, patterns in _TECH_SIGNATURES.items():
+        for p in patterns:
+            if re.search(p, lower_html, re.I):
+                detected.append(tech)
+                break
+    return detected
+
+
+def extract_all_structured_data(html_content: str, url: str) -> Dict[str, Any]:
+    """
+    Master extraction function that runs all structured extractors on raw HTML.
+    Returns a dict with keys: metadata, headings, social_links, key_images, cta_signals,
+    key_internal_links, markdown_tables, faqs, tech_stack.
+    For non-HTML content, returns empty defaults.
+    """
+    empty = {
+        "metadata": {
+            "title": "", "description": "", "keywords": [],
+            "og_title": "", "og_description": "", "og_image": "",
+            "og_site_name": "", "og_type": "",
+            "twitter_title": "", "twitter_description": "", "twitter_image": "",
+            "jsonld": [], "canonical_url": "",
+        },
+        "headings": [],
+        "social_links": {},
+        "key_images": [],
+        "cta_signals": [],
+        "key_internal_links": [],
+        "markdown_tables": [],
+        "faqs": [],
+        "tech_stack": [],
+    }
+
+    if not html_content:
+        return empty
+
+    soup = _parse_html(html_content)
+    if soup is None:
+        return empty
+
+    try:
+        return {
+            "metadata": extract_structured_metadata(soup, url),
+            "headings": extract_headings(soup),
+            "social_links": extract_social_links(soup, url),
+            "key_images": extract_key_images(soup, url),
+            "cta_signals": extract_cta_signals(soup),
+            "key_internal_links": extract_key_internal_links(soup, url),
+            "markdown_tables": extract_tables(soup),
+            "faqs": extract_faqs(soup),
+            "tech_stack": extract_tech_stack(html_content),
+        }
+    except Exception as exc:
+        print(f"[Scraper] Structured extraction warning: {exc}")
+        return empty
+
+
 def compute_content_hash(text: str) -> str:
     """Returns SHA-256 hash of string content."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -269,6 +776,25 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
     - URL validation and normalization (adds https:// if missing)
     - Response size cap (10MB) to avoid memory issues
     """
+    # Empty structured data defaults for error/non-HTML paths
+    _empty_structured = {
+        "metadata": {
+            "title": "", "description": "", "keywords": [],
+            "og_title": "", "og_description": "", "og_image": "",
+            "og_site_name": "", "og_type": "",
+            "twitter_title": "", "twitter_description": "", "twitter_image": "",
+            "jsonld": [], "canonical_url": "",
+        },
+        "headings": [],
+        "social_links": {},
+        "key_images": [],
+        "cta_signals": [],
+        "key_internal_links": [],
+        "markdown_tables": [],
+        "faqs": [],
+        "tech_stack": [],
+    }
+
     # 1. Validate and normalize URL
     is_valid, url_or_error = _validate_url(url)
     if not is_valid:
@@ -280,6 +806,7 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
             "is_stale": True,
             "stale_reason": f"Invalid URL: {url_or_error}",
             "status_code": 0,
+            **_empty_structured,
         }
     url = url_or_error
 
@@ -329,6 +856,12 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
                 content_type = _detect_content_type(response)
                 clean_text = _extract_text_by_content_type(response, content_type)
 
+                # Extract structured data from HTML pages
+                if content_type == "html":
+                    structured = extract_all_structured_data(raw_content, url)
+                else:
+                    structured = _empty_structured
+
                 is_stale, stale_reason = check_is_stale(raw_content, clean_text, status_code)
                 content_hash = compute_content_hash(clean_text)
 
@@ -341,6 +874,7 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
                     "stale_reason": stale_reason,
                     "status_code": status_code,
                     "content_type": content_type,
+                    **structured,
                 }
 
         except httpx.ConnectError as exc:
@@ -383,6 +917,7 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
         "is_stale": True,
         "stale_reason": f"Failed after {max_retries + 1} attempts: {type(last_error).__name__}: {str(last_error)[:200]}",
         "status_code": 0,
+        **_empty_structured,
     }
 
 

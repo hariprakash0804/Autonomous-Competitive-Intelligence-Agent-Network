@@ -113,19 +113,37 @@ def start_pipeline_run(
 
     # Collect URLs to scrape (both user's company URL and competitor URLs)
     urls = []
+    seen_urls = set()
+
+    def _add_url(u: str):
+        u = u.strip()
+        if u and u not in seen_urls:
+            seen_urls.add(u)
+            urls.append(u)
+
+    # User's own company URL (for comparison analysis)
     user_comp_url = competitor.company_url or getattr(current_user, "company_url", None)
-    if user_comp_url and user_comp_url.strip():
-        urls.append(user_comp_url.strip())
+    if user_comp_url:
+        _add_url(user_comp_url)
+
+    # Competitor's homepage — derive from pricing_url domain if not explicitly set
     if competitor.pricing_url:
-        urls.append(competitor.pricing_url)
+        _add_url(competitor.pricing_url)
+        # Also scrape competitor's root homepage for company-level data
+        from urllib.parse import urlparse
+        parsed = urlparse(competitor.pricing_url.strip())
+        if parsed.netloc:
+            competitor_homepage = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
+            _add_url(competitor_homepage)
+
     if competitor.review_urls:
         for ru in competitor.review_urls:
-            if ru and ru.strip() and ru.strip() not in urls:
-                urls.append(ru.strip())
+            if ru:
+                _add_url(ru)
     if competitor.news_keywords:
         for kw in competitor.news_keywords:
-            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")) and kw.strip() not in urls:
-                urls.append(kw.strip())
+            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")):
+                _add_url(kw)
 
     if not urls:
         raise HTTPException(

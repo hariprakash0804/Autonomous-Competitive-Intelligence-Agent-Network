@@ -862,7 +862,14 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2, use_pl
         }
     url = url_or_error
 
-    # 2. Retry loop with exponential backoff
+    # 2. Primary Engine: Playwright Headless Chromium Browser Rendering
+    if use_playwright:
+        pw_res = scrape_with_playwright(url, timeout_sec=timeout_sec * 1.5)
+        if pw_res and not pw_res.get("is_stale"):
+            return pw_res
+        print(f"[Scraper] Playwright primary attempt finished for {url}. Continuing with HTTPX fallback...")
+
+    # 3. Fallback Engine: HTTPX Client with Browser Headers & Retry Loop
     last_error = None
     verify_ssl = True
 

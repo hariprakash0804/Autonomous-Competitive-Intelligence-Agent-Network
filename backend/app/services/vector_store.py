@@ -503,6 +503,7 @@ class VectorStoreService:
         self,
         query: str,
         competitor_id: Optional[str] = None,
+        allowed_competitor_ids: Optional[List[str]] = None,
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
         if not query or self.index is None or self.index.ntotal == 0:
@@ -510,17 +511,26 @@ class VectorStoreService:
 
         query_vec = self._encode_text([query])
 
-        search_k = min(top_k * 5 if competitor_id else top_k, self.index.ntotal)
+        search_k = min(top_k * 8 if (competitor_id or allowed_competitor_ids) else top_k, self.index.ntotal)
         scores, indices = self.index.search(query_vec, search_k)
 
         results = []
+        allowed_set = set(allowed_competitor_ids) if allowed_competitor_ids is not None else None
+
         for score, idx in zip(scores[0], indices[0]):
             if idx < 0 or idx >= len(self.metadata):
                 continue
             meta = self.metadata[idx]
-            if competitor_id and meta.get("competitor_id") != str(competitor_id):
+            c_id = meta.get("competitor_id")
+
+            # Filter by specific competitor ID
+            if competitor_id and c_id != str(competitor_id):
                 continue
-            
+
+            # Strict User Isolation: Filter by current user's allowed competitor IDs
+            if allowed_set is not None and c_id not in allowed_set:
+                continue
+
             res = dict(meta)
             res["similarity_score"] = float(score)
             results.append(res)

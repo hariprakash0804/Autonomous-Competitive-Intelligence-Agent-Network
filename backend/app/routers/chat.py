@@ -33,13 +33,26 @@ def chat_query(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     """
-    RAG Endpoint: Retrieves top-k FAISS vector chunks for a competitor,
-    enforces prompt context boundaries, and returns the grounded answer
+    RAG Endpoint: Retrieves top-k FAISS vector chunks for current user's tracked competitors ONLY.
+    Enforces strict multi-tenant isolation, prompt context boundaries, and returns grounded answer
     plus cited snapshot timestamps.
     Supports Conversation Memory (chat history), Image Attachments, and Document Attachments.
     """
     if not payload.question or not payload.question.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Question cannot be empty")
+
+    # Fetch current user's competitors
+    user_competitors = db.query(Competitor).filter(Competitor.user_id == current_user.id).all()
+    if not user_competitors:
+        return {
+            "question": payload.question,
+            "competitor_id": None,
+            "answer": "You do not have any tracked competitors yet. Please add a competitor in your dashboard before querying the competitive intelligence assistant.",
+            "cited_snapshots": [],
+            "media_attached": False,
+        }
+
+    user_comp_ids = [str(c.id) for c in user_competitors]
 
     comp_id_str = None
     target_competitor = None
@@ -53,42 +66,45 @@ def chat_query(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid competitor UUID")
 
-    # Retrieve top-6 FAISS chunks matching query (section-aware chunks for coherent context)
+    # Retrieve FAISS chunks matching query STRICTLY filtered by current user's allowed competitor IDs
     retrieved_chunks = vector_store.search(
         query=payload.question,
         competitor_id=comp_id_str,
+        allowed_competitor_ids=user_comp_ids,
         top_k=6,
     )
 
-    # Context enrichment: If FAISS index has 0 chunks for this competitor, query DB reports/snapshots
-    if not retrieved_chunks and target_competitor:
-        reports = db.query(Report).filter(Report.competitor_id == target_competitor.id).order_by(Report.generated_at.desc()).all()
-        snapshots = db.query(Snapshot).filter(Snapshot.competitor_id == target_competitor.id).order_by(Snapshot.fetched_at.desc()).all()
-
+    # Context enrichment: If FAISS index has 0 chunks, fallback to DB reports/snapshots for user's competitors
+    if not retrieved_chunks:
+        relevant_competitors = [target_competitor] if target_competitor else user_competitors[:3]
         fallback_texts = []
-        if reports:
-            for r in reports[:2]:
-                if r.summary:
-                    fallback_texts.append(f"Executive Analysis Report for {target_competitor.name}:\n{r.summary}")
-        if snapshots:
-            for s in snapshots[:3]:
-                if s.raw_content:
-                    fallback_texts.append(f"Snapshot ({s.source_type.value if hasattr(s.source_type, 'value') else s.source_type} fetched {s.fetched_at}):\n{s.raw_content[:1500]}")
 
-        # If no reports or snapshots exist yet, construct target profile intelligence context
-        if not fallback_texts:
-            fallback_texts.append(
-                f"Competitor Target Profile: {target_competitor.name}\n"
-                f"Domain: {target_competitor.domain or 'N/A'}\n"
-                f"Pricing Page URL: {target_competitor.pricing_url or 'N/A'}\n"
-                f"Company URL: {target_competitor.company_url or 'N/A'}\n"
-                f"Tracked Keywords: {', '.join(target_competitor.news_keywords or [target_competitor.name])}"
-            )
+        for comp in relevant_competitors:
+            reports = db.query(Report).filter(Report.competitor_id == comp.id).order_by(Report.generated_at.desc()).all()
+            snapshots = db.query(Snapshot).filter(Snapshot.competitor_id == comp.id).order_by(Snapshot.fetched_at.desc()).all()
 
-        for idx, text in enumerate(fallback_texts):
+            if reports:
+                for r in reports[:1]:
+                    if r.summary:
+                        fallback_texts.append(f"Executive Analysis Report for {comp.name}:\n{r.summary}")
+            if snapshots:
+                for s in snapshots[:2]:
+                    if s.raw_content:
+                        fallback_texts.append(f"Snapshot ({s.source_type.value if hasattr(s.source_type, 'value') else s.source_type} fetched {s.fetched_at}) for {comp.name}:\n{s.raw_content[:1200]}")
+
+            if not reports and not snapshots:
+                fallback_texts.append(
+                    f"Competitor Target Profile: {comp.name}\n"
+                    f"Domain: {comp.domain or 'N/A'}\n"
+                    f"Pricing Page URL: {comp.pricing_url or 'N/A'}\n"
+                    f"Company URL: {comp.company_url or 'N/A'}\n"
+                    f"Tracked Keywords: {', '.join(comp.news_keywords or [comp.name])}"
+                )
+
+        for idx, text in enumerate(fallback_texts[:5]):
             retrieved_chunks.append({
                 "snapshot_id": f"DB-RECORD-{idx+1}",
-                "fetched_at": str(target_competitor.created_at.strftime("%Y-%m-%d %H:%M") if hasattr(target_competitor.created_at, "strftime") else target_competitor.created_at),
+                "fetched_at": "Database Intelligence",
                 "source_type": "database_intelligence",
                 "chunk_text": text,
             })

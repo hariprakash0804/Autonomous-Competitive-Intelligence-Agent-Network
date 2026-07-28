@@ -185,11 +185,11 @@ def start_pipeline_run(
 def get_pipeline_status(
     agent_run_id: uuid.UUID,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
-    """Retrieves status of a background agent run for UI polling."""
+    """Retrieves status of a background agent run for UI polling with strict user ownership check."""
     agent_run = db.get(AgentRun, agent_run_id)
-    if not agent_run:
+    if not agent_run or not agent_run.competitor or agent_run.competitor.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent run not found")
 
     return {

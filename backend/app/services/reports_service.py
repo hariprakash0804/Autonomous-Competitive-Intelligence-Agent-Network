@@ -257,11 +257,28 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
     .sentiment-track {{ width: 100%; height: 10px; background: rgba(255,255,255,0.06); border-radius: 5px; overflow: hidden; }}
     .sentiment-fill {{ height: 100%; background: linear-gradient(90deg, #34d399, #38bdf8); border-radius: 5px; }}
 
+    /* Header Bar & Download Button Styles */
+    .header-bar {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #1e293b; }}
+    .brand-badge {{ display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #818cf8; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .btn-download-pdf {{ display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #6366f1, #4f46e5); color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35); transition: all 0.2s ease; }}
+    .btn-download-pdf:hover {{ background: linear-gradient(135deg, #4f46e5, #4338ca); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5); }}
+
     .footer {{ margin-top: 40px; pt: 20px; border-top: 1px solid #1e293b; font-size: 12px; color: #64748b; text-align: center; }}
   </style>
 </head>
 <body>
   <div class="container">
+    <div class="header-bar">
+      <div class="brand-badge">⚡ Competitive Intelligence Network</div>
+      <a href="/static/reports/{report_id}.pdf" download="{competitor_name}_Executive_Report.pdf" class="btn-download-pdf">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Download PDF Report
+      </a>
+    </div>
     {html_body}
     <div class="footer">
       Generated automatically by Autonomous Competitive Intelligence Agent Network • {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}

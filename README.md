@@ -43,7 +43,7 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 +-----------+                   +---------------+                 +---------------+
 | PostgreSQL|                   |  FAISS Index  |                 | Standalone    |
 |  Database |                   | Vector Store  |                 | HTML / PDF &  |
-| (Alembic) |                   | (Auto-Rehydrate)|               | Slack / Email |
+| (Alembic) |                   | Auto-Rehydrate|                 | Slack / Email |
 +-----------+                   +---------------+                 +---------------+
 ```
 

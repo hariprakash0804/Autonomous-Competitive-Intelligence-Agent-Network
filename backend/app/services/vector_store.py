@@ -25,7 +25,7 @@ OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
 # Fallback: HuggingFace Inference API
 HF_MODEL_NAME = "all-MiniLM-L6-v2"
 HF_EMBEDDING_DIM = 384
-HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{HF_MODEL_NAME}"
+HF_API_URL = f"https://router.huggingface.co/hf-inference/models/sentence-transformers/{HF_MODEL_NAME}/pipeline/feature-extraction"
 
 # Default dimension (set dynamically based on active embedding mode)
 EMBEDDING_DIM = OPENROUTER_EMBED_DIM
@@ -132,14 +132,19 @@ class VectorStoreService:
 
     def _check_hf_api_connectivity(self, hf_token: str) -> bool:
         """Quick connectivity check to HuggingFace API."""
+        if not hf_token or not hf_token.strip():
+            return False
         try:
             response = httpx.post(
                 HF_API_URL,
-                headers={"Authorization": f"Bearer {hf_token}"},
+                headers={"Authorization": f"Bearer {hf_token.strip()}"},
                 json={"inputs": "test", "options": {"wait_for_model": False}},
                 timeout=5.0,
             )
-            return True
+            is_ok = response.status_code in (200, 503)
+            if not is_ok:
+                print(f"[Vector Store] HF API connectivity check returned HTTP {response.status_code}: {response.text[:100]}", flush=True)
+            return is_ok
         except Exception as e:
             print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
             return False
@@ -356,7 +361,7 @@ class VectorStoreService:
         if self.index is not None and self.index.d != required_dim:
             old_dim = self.index.d
             old_count = self.index.ntotal
-            print(f"[Vector Store] FAISS dimension mismatch ({old_dim} → {required_dim}). Rebuilding index ({old_count} vectors discarded).", flush=True)
+            print(f"[Vector Store] FAISS dimension mismatch ({old_dim} -> {required_dim}). Rebuilding index ({old_count} vectors discarded).", flush=True)
             self.index = faiss.IndexFlatIP(required_dim)
             self.metadata = []
             self._save_index()

@@ -765,18 +765,66 @@ def _extract_text_by_content_type(response: httpx.Response, content_type: str) -
         return re.sub(r"\s+", " ", raw_text).strip()[:10000]
 
 
-def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dict[str, Any]:
+def scrape_with_playwright(url: str, timeout_sec: float = 15.0) -> Optional[Dict[str, Any]]:
     """
-    Robust synchronous HTTP scraper that handles any URL type:
+    Headless Browser Scraping (Playwright):
+    Renders JavaScript-heavy Single Page Applications (SPAs) requiring dynamic client-side DOM rendering
+    using headless Playwright Chromium.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[Scraper] Playwright not installed. Skipping headless browser rendering.")
+        return None
+
+    try:
+        print(f"[Scraper] Launching Playwright Chromium headless browser for SPA rendering: {url}")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=_get_random_ua(),
+                viewport={"width": 1280, "height": 800},
+            )
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=int(timeout_sec * 1000))
+            page.wait_for_timeout(1500)
+            raw_content = page.content()
+            browser.close()
+
+            clean_text = clean_html(raw_content)
+            if not clean_text or len(clean_text) < MIN_CONTENT_LENGTH:
+                return None
+
+            structured = extract_all_structured_data(raw_content, url)
+            content_hash = compute_content_hash(clean_text)
+
+            return {
+                "url": url,
+                "raw_content": raw_content,
+                "clean_text": clean_text,
+                "content_hash": content_hash,
+                "is_stale": False,
+                "stale_reason": None,
+                "status_code": 200,
+                "content_type": "html",
+                "scraped_by": "playwright_chromium",
+                **structured,
+            }
+    except Exception as exc:
+        print(f"[Scraper] Playwright headless browser rendering exception: {exc}")
+        return None
+
+
+def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2, use_playwright: bool = True) -> Dict[str, Any]:
+    """
+    Robust HTTP & Headless Browser Scraper:
     - Static HTML pages, SPAs, API endpoints (JSON), RSS/XML feeds, plain text
+    - Dynamic JavaScript-heavy SPA rendering via Playwright Chromium fallback
     - Rotating User-Agents + full browser-like headers to avoid bot detection
-    - Automatic retry with backoff on transient failures (429, 500, 502, 503, 504, timeouts)
-    - SSL error fallback (retries without strict verification)
+    - Automatic retry with backoff on transient failures
     - Content-type auto-detection for HTML/JSON/XML/text
-    - URL validation and normalization (adds https:// if missing)
     - Response size cap (10MB) to avoid memory issues
     """
-    # Empty structured data defaults for error/non-HTML paths
     _empty_structured = {
         "metadata": {
             "title": "", "description": "", "keywords": [],
@@ -865,6 +913,12 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
                 is_stale, stale_reason = check_is_stale(raw_content, clean_text, status_code)
                 content_hash = compute_content_hash(clean_text)
 
+                # If content is flagged as JS shell or empty SPA, attempt Playwright Headless rendering
+                if is_stale and use_playwright and content_type == "html":
+                    pw_res = scrape_with_playwright(url, timeout_sec=timeout_sec * 1.5)
+                    if pw_res and not pw_res.get("is_stale"):
+                        return pw_res
+
                 return {
                     "url": url,
                     "raw_content": raw_content,
@@ -874,18 +928,17 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
                     "stale_reason": stale_reason,
                     "status_code": status_code,
                     "content_type": content_type,
+                    "scraped_by": "httpx",
                     **structured,
                 }
 
         except httpx.ConnectError as exc:
             last_error = exc
-            # SSL errors: retry once without strict verification
             if "SSL" in str(exc) or "certificate" in str(exc).lower():
                 if verify_ssl:
                     print(f"[Scraper] SSL error for {url}, retrying without strict SSL verification...")
                     verify_ssl = False
                     continue
-            # Connection refused / DNS failure: no point retrying immediately
             if attempt < max_retries:
                 time.sleep(1.0 * (attempt + 1))
                 continue
@@ -893,20 +946,25 @@ def scrape_url(url: str, timeout_sec: float = 10.0, max_retries: int = 2) -> Dic
         except httpx.TimeoutException as exc:
             last_error = exc
             if attempt < max_retries:
-                # Increase timeout on retry
                 timeout_sec = min(timeout_sec * 1.5, 20.0)
                 print(f"[Scraper] Timeout for {url}, retrying with {timeout_sec:.0f}s timeout (attempt {attempt + 1}/{max_retries})...")
                 continue
 
         except httpx.TooManyRedirects as exc:
             last_error = exc
-            break  # No point retrying redirect loops
+            break
 
         except Exception as exc:
             last_error = exc
             if attempt < max_retries:
                 time.sleep(1.0 * (attempt + 1))
                 continue
+
+    # Attempt Playwright if HTTP attempts failed
+    if use_playwright:
+        pw_res = scrape_with_playwright(url, timeout_sec=timeout_sec * 1.5)
+        if pw_res and not pw_res.get("is_stale"):
+            return pw_res
 
     # All retries exhausted
     return {

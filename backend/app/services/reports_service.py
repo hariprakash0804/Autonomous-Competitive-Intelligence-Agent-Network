@@ -706,3 +706,63 @@ def send_email_notification(
         return {"status": "sent", "recipient": recipient_email}
     except Exception as exc:
         return {"status": "failed", "reason": str(exc)}
+
+
+def send_custom_price_alert_webhook(
+    competitor_name: str,
+    tier_name: str,
+    old_price: Optional[float],
+    new_price: Optional[float],
+    user_webhook_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    📊 Custom Alert Webhooks:
+    Sends instant Slack/Discord webhook triggers when competitor price shifts occur.
+    Delivers to BOTH user-configured custom webhooks and default system webhooks.
+    """
+    from app.config import settings
+    env_webhook = (
+        os.getenv("SLACK_WEBHOOK_URL")
+        or os.getenv("WEBHOOK_URL")
+        or getattr(settings, "SLACK_WEBHOOK_URL", None)
+        or getattr(settings, "WEBHOOK_URL", None)
+        or ""
+    ).strip() or None
+
+    target_webhooks = []
+    if user_webhook_url and user_webhook_url.strip().startswith("http"):
+        target_webhooks.append(user_webhook_url.strip())
+    if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
+        target_webhooks.append(env_webhook)
+
+    if not target_webhooks:
+        return {"status": "skipped", "reason": "No webhook URLs configured"}
+
+    old_str = f"${old_price:.2f}" if isinstance(old_price, (int, float)) else "N/A"
+    new_str = f"${new_price:.2f}" if isinstance(new_price, (int, float)) else "N/A"
+
+    if isinstance(old_price, (int, float)) and isinstance(new_price, (int, float)) and old_price > 0:
+        pct_change = ((new_price - old_price) / old_price) * 100.0
+        direction = "INCREASED 📈" if new_price > old_price else "DECREASED 📉"
+        pct_str = f" ({direction} {abs(pct_change):.1f}%)"
+    else:
+        pct_str = ""
+
+    text = (
+        f"🚨 *Custom Price Shift Alert*: *{competitor_name}*\n"
+        f"• *Tier*: {tier_name}\n"
+        f"• *Old Price*: {old_str}\n"
+        f"• *New Price*: {new_str}{pct_str}\n"
+        f"• *Detected At*: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+    )
+
+    dispatched = []
+    for w_url in target_webhooks:
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.post(w_url, json={"text": text})
+                dispatched.append({"url": w_url, "status_code": res.status_code})
+        except Exception as exc:
+            dispatched.append({"url": w_url, "error": str(exc)})
+
+    return {"status": "success", "dispatched": dispatched}

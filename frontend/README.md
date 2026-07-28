@@ -127,6 +127,14 @@ npm run preview
 
 ---
 
+## 🔔 Notification System & Headless Scraping Features
+
+- 🎭 **Playwright Headless SPA Scraping**: Supported integration for dynamic Single Page Applications (SPAs) rendering client-side JavaScript content.
+- 📊 **Custom Alert Webhooks**: Self-service user webhook configuration in Profile settings for instant notification triggers whenever competitor price shifts occur.
+- 🎨 **Modern Dark Glassmorphism Toasts**: Custom confirmation dialogs and stackable toast notifications replacing native browser dialogs.
+
+---
+
 ## 📄 License
 
 Part of the **Autonomous Competitive Intelligence Agent Network**.

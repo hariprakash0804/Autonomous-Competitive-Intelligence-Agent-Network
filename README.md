@@ -52,13 +52,15 @@ An autonomous, multi-agent full-stack platform for competitive intelligence gath
 ## 🔑 Key Features
 
 - 🤖 **Autonomous LangGraph Agent Pipeline**: 4-node sequential multi-agent network (`Researcher` with reflection loop for missing content, `Change-Detector` for pricing diffs, `Sentiment-Analyst` for NLP & VADER sentiment, `Report-Writer` for OpenRouter LLM report synthesis).
+- 🎭 **Headless Browser Scraping (Playwright)**: Integrated Playwright Chromium headless rendering for dynamic JavaScript-heavy Single Page Applications (SPAs) requiring dynamic client-side DOM execution, with automatic HTTPX fallback.
+- 📊 **Custom Alert Webhooks**: Instant Slack and Discord Webhook triggers for immediate alerts whenever competitor price shifts occur, with dual delivery to both user-configured profile webhooks and default system environment webhooks.
 - 🔌 **FastMCP Tool Server (`mcp_server.py`)**: Model Context Protocol (MCP) server providing standard stdio tool bindings (`scrape`, `diff_pricing_tool`, `sentiment_score_tool`) for external AI agents and orchestration.
 - 💬 **RAG AI Chat Assistant**: Interactive context-bounded chat endpoint (`/chat/`) leveraging FAISS vector search, chat history memory, image attachments, and document/PDF text analysis.
 - 🔄 **FAISS Vector Store with Startup Auto-Rehydration**: Vector database storing section-aware document embeddings. On startup (e.g. server boot or Render restart), `vector_store.rehydrate_from_db()` automatically queries all historical PostgreSQL snapshot records, regenerates missing embeddings, and rebuilds the in-memory FAISS index so vector search continuity is preserved without manual re-indexing.
 - 🌐 **Public Operational Monitoring Endpoints**:
   - `GET /faiss-status`: Live vector store status endpoint returning total vector count, embedding dimensionality, embedding mode (`sentence-transformers` vs fallback), index distribution across tracked competitors, source type distribution, and recent vector chunk snippets.
   - `GET /health`: Lightweight health check endpoint returning `{"status": "ok"}` for deployment health probes and uptime monitoring.
-- 🔍 **Resilient Scraping & Pricing Diff Engine**: HTTPX and BeautifulSoup4 web scraping with rotating User-Agent headers, anti-bot detection heuristics, currency symbol preservation, and tier extraction.
+- 🔍 **Resilient Scraping & Pricing Diff Engine**: HTTPX, Playwright Chromium, and BeautifulSoup4 web scraping with rotating User-Agent headers, anti-bot detection heuristics, currency symbol preservation, and tier extraction.
 - 📈 **Modern Analytics Dashboard**: Dark-themed React 19 dashboard featuring Recharts price history timelines, sentiment score radar/bar charts, multi-competitor comparative matrix, real-time agent run status modal, and report center.
 - 📑 **Multi-Channel Report Delivery**: Standalone rendered HTML reports, PDF downloads, automated Slack Webhook integration, and SMTP Email delivery.
 - 🛡️ **LangSmith Telemetry & Tracing**: Native LangSmith integration for monitoring agent execution traces and latency with automatic tracer flushing.
@@ -182,13 +184,6 @@ Import `n8n_workflow.json` into your n8n instance for automated competitive moni
 2. **Fetch Competitors**: `GET /competitors/`.
 3. **Execute Pipeline**: `POST /pipeline/run/{competitor_id}` for each target.
 4. **Slack Notification**: `POST /reports/deliver-slack/{report_id}` to publish updates.
-
----
-
-## 🔮 Future Roadmap
-
-- 🎭 **Headless Browser Scraping (Playwright)**: Planned integration of headless Playwright chromium rendering to support JavaScript-heavy Single Page Applications (SPAs) requiring dynamic client-side DOM rendering.
-- 📊 **Custom Alert Webhooks**: Webhook triggers for instant notifications when competitor price shifts exceed user-defined percentage thresholds.
 
 ---
 

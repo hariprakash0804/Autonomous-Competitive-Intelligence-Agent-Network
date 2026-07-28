@@ -19,6 +19,7 @@ from app.services.sentiment import sentiment_score
 from app.services.vector_store import vector_store
 from app.services.llm import generate_executive_report
 from app.services.agent.state import AgentState
+from app.services.reports_service import send_custom_price_alert_webhook
 
 
 def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
@@ -227,16 +228,29 @@ def change_detector_node(state: AgentState) -> AgentState:
 
             for d in detected_diffs:
                 price_val = d.get("new_price") if isinstance(d.get("new_price"), (int, float)) else None
+                old_val = d.get("old_price") if isinstance(d.get("old_price"), (int, float)) else None
+                tier = d.get("tier_name", "General")
+
                 pc = PriceChange(
                     competitor_id=competitor_id,
                     snapshot_before_id=snapshots[1].id if len(snapshots) > 1 else None,
                     snapshot_after_id=snapshots[0].id if len(snapshots) > 0 else None,
-                    tier_name=d.get("tier_name", "General"),
-                    old_price=d.get("old_price") if isinstance(d.get("old_price"), (int, float)) else None,
+                    tier_name=tier,
+                    old_price=old_val,
                     new_price=price_val,
                     detected_at=datetime.now(timezone.utc),
                 )
                 db.add(pc)
+
+                # Trigger custom alert webhooks for detected price shifts
+                user_webhook = (competitor.user.slack_webhook_url or "").strip() if competitor and competitor.user else None
+                send_custom_price_alert_webhook(
+                    competitor_name=competitor.name if competitor else "Competitor",
+                    tier_name=tier,
+                    old_price=old_val,
+                    new_price=price_val,
+                    user_webhook_url=user_webhook,
+                )
 
         # 2. Extract real plan tier prices for both Competitor and User's Company
         existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0

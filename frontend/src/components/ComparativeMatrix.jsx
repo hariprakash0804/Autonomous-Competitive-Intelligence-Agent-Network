@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 
-export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport }) {
+export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData }) {
   const [activeTab, setActiveTab] = useState('matrix');
 
   if (!selectedCompetitor) {
@@ -24,6 +24,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
   const competitorUrl = selectedCompetitor.pricing_url || selectedCompetitor.domain || 'N/A';
 
   const reportSummary = latestReport?.summary || '';
+  const technographics = intelligenceData?.technographics || [];
 
   return (
     <div className="glass-card rounded-2xl p-6 neon-border space-y-6 animate-fade-in-up">
@@ -111,6 +112,25 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
               >
                 {competitorUrl} <ExternalLink className="w-3 h-3 flex-shrink-0" />
               </a>
+
+              {/* Technographics Tech Stack Badges */}
+              {technographics.length > 0 && (
+                <div className="pt-2 border-t border-white/[0.04]">
+                  <p className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Detected Tech Stack ({technographics.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {technographics.map((tech, tIdx) => (
+                      <span
+                        key={tIdx}
+                        className="px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[9px] font-mono text-indigo-300"
+                      >
+                        {tech}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

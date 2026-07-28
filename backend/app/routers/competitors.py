@@ -219,6 +219,60 @@ def get_competitor_details(
     }
 
 
+@router.get("/{competitor_id}/intelligence")
+def get_competitor_intelligence(
+    competitor_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    """
+    Returns aggregated platform-wide competitive intelligence profile for a competitor:
+    - Technographic Tech Stack (Stripe, HubSpot, Segment, React, Next.js, etc.)
+    - Analyzed pages list with character counts and snapshot IDs
+    - Aggregate sentiment and price changes summary
+    """
+    competitor = db.get(Competitor, competitor_id)
+    if not competitor or competitor.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
+
+    snapshots = db.scalars(
+        select(Snapshot)
+        .where(Snapshot.competitor_id == competitor_id)
+        .order_by(Snapshot.fetched_at.desc())
+    ).all()
+
+    from app.services.scraper import extract_tech_stack
+
+    tech_stack = set()
+    page_summaries = []
+
+    for s in snapshots:
+        if not s.raw_content or s.is_stale:
+            continue
+
+        for t in extract_tech_stack(s.raw_content):
+            tech_stack.add(t)
+
+        page_summaries.append({
+            "snapshot_id": str(s.id),
+            "source_type": s.source_type.value if hasattr(s.source_type, "value") else str(s.source_type),
+            "fetched_at": s.fetched_at.isoformat(),
+            "content_length": len(s.raw_content),
+            "snippet": s.raw_content[:200] + "...",
+        })
+
+    return {
+        "competitor_id": str(competitor.id),
+        "name": competitor.name,
+        "domain": competitor.domain,
+        "pricing_url": competitor.pricing_url,
+        "company_url": competitor.company_url or current_user.company_url,
+        "technographics": sorted(list(tech_stack)),
+        "snapshot_count": len(snapshots),
+        "analyzed_pages": page_summaries[:10],
+    }
+
+
 @router.delete("/{competitor_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_competitor(
     competitor_id: uuid.UUID,

@@ -77,22 +77,27 @@ export default function DashboardPage() {
     }
   };
 
+  const [intelligenceData, setIntelligenceData] = useState(null);
+
   const fetchDetails = async (compId) => {
     if (!compId) return;
     try {
-      const [priceRes, sentRes, repRes] = await Promise.all([
+      const [priceRes, sentRes, repRes, intelRes] = await Promise.all([
         api.get(`/competitors/${compId}/price-history`),
         api.get(`/competitors/${compId}/sentiment-history`),
         api.get(`/reports/competitor/${compId}`),
+        api.get(`/competitors/${compId}/intelligence`).catch(() => ({ data: null })),
       ]);
       setPriceHistory(Array.isArray(priceRes.data) ? priceRes.data : []);
       setSentimentHistory(Array.isArray(sentRes.data) ? sentRes.data : []);
       setReports(Array.isArray(repRes.data) ? repRes.data : []);
+      setIntelligenceData(intelRes?.data || null);
     } catch (err) {
       console.error('Failed to fetch charts history:', err);
       setPriceHistory([]);
       setSentimentHistory([]);
       setReports([]);
+      setIntelligenceData(null);
     }
   };
 
@@ -382,6 +387,7 @@ export default function DashboardPage() {
                   selectedCompetitor={selectedCompetitor}
                   userProfile={user}
                   latestReport={latestReport}
+                  intelligenceData={intelligenceData}
                 />
 
                 <PriceTimeline

@@ -11,6 +11,8 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 # Copy requirements and install Python packages
 COPY backend/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+RUN playwright install --with-deps chromium
+
 
 # Copy backend codebase and Alembic migrations
 COPY backend/app ./app

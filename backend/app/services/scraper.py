@@ -811,7 +811,11 @@ def scrape_with_playwright(url: str, timeout_sec: float = 15.0) -> Optional[Dict
                 **structured,
             }
     except Exception as exc:
-        print(f"[Scraper] Playwright headless browser rendering exception: {exc}")
+        err_msg = str(exc)
+        if "Executable doesn't exist" in err_msg or "playwright install" in err_msg:
+            print("[Scraper] Playwright Chromium browser binary not installed (run 'playwright install chromium'). Falling back to HTTPX.")
+        else:
+            print(f"[Scraper] Playwright headless browser rendering note: {err_msg[:120]}")
         return None
 
 

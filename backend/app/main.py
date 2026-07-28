@@ -61,6 +61,14 @@ def on_startup():
             print(f"[Startup Warning] Legacy topics cleanup notice: {clean_err}")
 
         print("[Startup] Database tables and schema verified/migrated successfully.")
+
+        # Auto-rehydrate FAISS vector store on Render startup if empty
+        try:
+            from app.services.vector_store import vector_store
+            vector_store.rehydrate_from_db()
+        except Exception as rehydrate_err:
+            print(f"[Startup Warning] FAISS rehydration notice: {rehydrate_err}")
+
     except Exception as exc:
         print(f"[Startup Warning] Automatic table creation/migration error: {exc}")
 

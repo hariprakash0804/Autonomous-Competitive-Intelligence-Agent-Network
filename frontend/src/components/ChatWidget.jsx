@@ -39,30 +39,70 @@ function FormattedMessage({ text }) {
   const blocks = cleanText.split(/\n\n+/);
 
   return (
-    <div className="space-y-2.5 leading-relaxed text-xs">
+    <div className="space-y-3 leading-relaxed text-xs">
       {blocks.map((block, bIdx) => {
         const trimmed = block.trim();
         if (!trimmed) return null;
 
+        // Render Markdown Headings (#, ##, ###)
         if (trimmed.startsWith('#')) {
           const headingText = trimmed.replace(/^#+\s*/, '');
           return (
-            <h4 key={bIdx} className="font-bold text-xs text-indigo-300 font-display mt-2 mb-1 border-b border-indigo-500/15 pb-1">
-              {parseInlineMarkdown(headingText)}
-            </h4>
+            <div key={bIdx} className="flex items-center gap-2 pt-1 pb-0.5 border-b border-indigo-500/20">
+              <span className="w-1.5 h-3.5 bg-indigo-400 rounded-full" />
+              <h4 className="font-bold text-xs text-indigo-300 font-display uppercase tracking-wider">
+                {parseInlineMarkdown(headingText)}
+              </h4>
+            </div>
           );
         }
 
         const lines = trimmed.split('\n');
+
+        // Render Markdown Tables (| col 1 | col 2 |)
+        if (lines.length >= 2 && lines[0].trim().startsWith('|') && lines[0].trim().endsWith('|')) {
+          const tableRows = lines
+            .map(l => l.split('|').map(c => c.trim()).filter(Boolean))
+            .filter(r => r.length > 0 && !r.every(c => c.startsWith('-')));
+
+          if (tableRows.length > 0) {
+            const header = tableRows[0];
+            const body = tableRows.slice(1);
+            return (
+              <div key={bIdx} className="my-2 overflow-x-auto rounded-xl border border-white/[0.08] bg-black/20">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="bg-white/[0.04] text-indigo-300 font-bold border-b border-white/[0.06]">
+                      {header.map((h, i) => (
+                        <th key={i} className="px-2.5 py-1.5">{parseInlineMarkdown(h)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {body.map((row, rI) => (
+                      <tr key={rI} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+                        {row.map((cell, cI) => (
+                          <td key={cI} className="px-2.5 py-1.5 text-slate-300">{parseInlineMarkdown(cell)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
+        }
+
         const isListBlock = lines.every(l => /^\s*[-*•\d+.]\s+/.test(l));
 
+        // Render Bullet Lists
         if (isListBlock) {
           return (
             <ul key={bIdx} className="space-y-1.5 my-1 pl-1">
               {lines.map((line, lIdx) => {
                 const itemText = line.replace(/^\s*[-*•\d+.]\s+/, '');
                 return (
-                  <li key={lIdx} className="flex items-start gap-2 text-slate-200">
+                  <li key={lIdx} className="flex items-start gap-2 text-slate-200 bg-white/[0.015] hover:bg-white/[0.03] p-1.5 rounded-lg border border-white/[0.02] transition-colors">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
                     <span className="flex-1">{parseInlineMarkdown(itemText)}</span>
                   </li>

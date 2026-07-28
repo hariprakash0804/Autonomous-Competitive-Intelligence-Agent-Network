@@ -517,6 +517,66 @@ class VectorStoreService:
 
         return results
 
+    def rehydrate_from_db(self):
+        """
+        Auto-Rehydration for Ephemeral Cloud Deployments (Render Free Tier):
+        If FAISS index on disk is empty (0 vectors) after server restart,
+        rehydrates FAISS vector embeddings from stored PostgreSQL snapshots & reports.
+        """
+        if self.index is not None and self.index.ntotal > 0:
+            print(f"[FAISS Rehydration] FAISS index already has {self.index.ntotal} active vectors. Skipping rehydration.", flush=True)
+            return
+
+        print("[FAISS Rehydration] Empty FAISS index detected on startup. Rehydrating from PostgreSQL...", flush=True)
+        try:
+            from app.database import SessionLocal
+            from app.models.snapshot import Snapshot
+            from app.models.report import Report
+
+            db = SessionLocal()
+            try:
+                # 1. Rehydrate Reports
+                reports = db.query(Report).order_by(Report.generated_at.asc()).all()
+                report_count = 0
+                for r in reports:
+                    if r.summary:
+                        self.add_snapshot_chunks(
+                            snapshot_id=str(r.id),
+                            competitor_id=str(r.competitor_id),
+                            source_type="executive_report",
+                            fetched_at=r.generated_at.isoformat() if hasattr(r.generated_at, "isoformat") else str(r.generated_at),
+                            text=r.summary,
+                            defer_save=True,
+                        )
+                        report_count += 1
+
+                # 2. Rehydrate Snapshots
+                snapshots = db.query(Snapshot).order_by(Snapshot.fetched_at.asc()).all()
+                snapshot_count = 0
+                for s in snapshots:
+                    if s.raw_content and not s.is_stale:
+                        src_type = s.source_type.value if hasattr(s.source_type, "value") else str(s.source_type)
+                        self.add_snapshot_chunks(
+                            snapshot_id=str(s.id),
+                            competitor_id=str(s.competitor_id),
+                            source_type=src_type,
+                            fetched_at=s.fetched_at.isoformat() if hasattr(s.fetched_at, "isoformat") else str(s.fetched_at),
+                            text=s.raw_content,
+                            defer_save=True,
+                        )
+                        snapshot_count += 1
+
+                if report_count > 0 or snapshot_count > 0:
+                    self.flush()
+                    print(f"[FAISS Rehydration] Complete! Re-indexed {report_count} reports and {snapshot_count} snapshots into FAISS (Total vectors: {self.index.ntotal}).", flush=True)
+                else:
+                    print("[FAISS Rehydration] No database snapshots/reports found to rehydrate.", flush=True)
+
+            finally:
+                db.close()
+        except Exception as exc:
+            print(f"[FAISS Rehydration Notice] {exc}", flush=True)
+
 
 # Global singleton instance
 vector_store = VectorStoreService()

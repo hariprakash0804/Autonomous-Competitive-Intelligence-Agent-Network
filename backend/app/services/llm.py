@@ -255,13 +255,16 @@ def generate_rag_answer(question: str, retrieved_chunks: List[Dict[str, Any]]) -
             "snippet": chunk_text[:150] + "...",
         })
 
-    prompt = f"""You are a strict Competitive Intelligence RAG Assistant.
+    prompt = f"""You are an Executive Competitive Intelligence RAG Assistant.
 
 CRITICAL INSTRUCTIONS:
 1. Answer the user's question STRICTLY and ONLY using the provided retrieved snapshot context below.
-2. DO NOT use your internal general knowledge or make assumptions beyond what is explicitly stated in the context.
-3. If the retrieved context does NOT contain sufficient information to answer the question, you MUST respond exactly: "I cannot answer this question based on the available competitive snapshots."
-4. Include cited snapshot dates in your explanation when stating facts.
+2. DO NOT use internal general knowledge or make assumptions beyond what is explicitly stated in the context.
+3. If the retrieved context does NOT contain sufficient information to answer the question, respond EXACTLY: "I cannot answer this question based on the available competitive snapshots."
+4. FORMAT YOUR ANSWER BEAUTIFULLY:
+   - Use bold section headings (e.g. ### Executive Summary, ### Key Analysis, ### Pricing & Features).
+   - Use bullet points with bold lead labels (e.g. - **Feature**: details).
+   - Keep answers crisp, scannable, and directly focused on the user's query.
 
 RETRIEVED COMPETITOR SNAPSHOT CONTEXT:
 {formatted_context}
@@ -269,7 +272,7 @@ RETRIEVED COMPETITOR SNAPSHOT CONTEXT:
 USER QUESTION:
 {question}
 
-ANSWER:"""
+STRUCTURED ANSWER:"""
 
     provider = (settings.LLM_PROVIDER or "").lower().strip()
     api_key = settings.LLM_API_KEY or ""
@@ -297,26 +300,26 @@ ANSWER:"""
             sec_heading = sec.split("\n")[0].lower()
             if any(k in q_lower for k in ["strength", "advantage", "benefit", "better", "pro", "over"]):
                 if any(x in sec_heading for x in ["advantage", "3.", "feature", "1."]):
-                    extracted_content += f"## {sec.strip()}\n\n"
+                    extracted_content += f"### {sec.strip()}\n\n"
             elif any(k in q_lower for k in ["weakness", "gap", "disadvantage", "con", "lacking", "flaw"]):
                 if any(x in sec_heading for x in ["disadvantage", "gap", "4."]):
-                    extracted_content += f"## {sec.strip()}\n\n"
+                    extracted_content += f"### {sec.strip()}\n\n"
             elif any(k in q_lower for k in ["price", "cost", "tier", "plan", "fee", "rate"]):
                 if any(x in sec_heading for x in ["pricing", "2."]):
-                    extracted_content += f"## {sec.strip()}\n\n"
+                    extracted_content += f"### {sec.strip()}\n\n"
             elif any(k in q_lower for k in ["sentiment", "perception", "rating", "review", "score"]):
                 if any(x in sec_heading for x in ["sentiment", "5."]):
-                    extracted_content += f"## {sec.strip()}\n\n"
+                    extracted_content += f"### {sec.strip()}\n\n"
             elif any(k in q_lower for k in ["recommend", "action", "strategy", "plan"]):
                 if any(x in sec_heading for x in ["recommendation", "6."]):
-                    extracted_content += f"## {sec.strip()}\n\n"
+                    extracted_content += f"### {sec.strip()}\n\n"
 
     if not extracted_content.strip():
         extracted_content = first_chunk
 
     fallback_answer = (
-        f"Based on the competitive intelligence snapshot fetched on **{first_meta['fetched_at']}** ({first_meta['source_type']}), "
-        f"here is the targeted information for your query:\n\n"
+        f"### Executive Intelligence Summary\n"
+        f"Grounded in snapshot context fetched on **{first_meta['fetched_at']}** ({first_meta['source_type']}):\n\n"
         f"{extracted_content.strip()}"
     )
     return fallback_answer, cited_snapshots

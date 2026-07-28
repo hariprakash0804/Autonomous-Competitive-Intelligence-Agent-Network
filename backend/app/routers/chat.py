@@ -47,11 +47,11 @@ def chat_query(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid competitor UUID")
 
-    # Retrieve top-4 FAISS chunks matching query
+    # Retrieve top-6 FAISS chunks matching query (section-aware chunks for coherent context)
     retrieved_chunks = vector_store.search(
         query=payload.question,
         competitor_id=comp_id_str,
-        top_k=4,
+        top_k=6,
     )
 
     # Context enrichment: If FAISS index has 0 chunks for this competitor, query DB reports/snapshots

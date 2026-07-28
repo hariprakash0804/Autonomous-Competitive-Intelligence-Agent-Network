@@ -359,6 +359,20 @@ def report_writer_node(state: AgentState) -> AgentState:
                 print(f"[Report-Writer] PDF report rendered: /reports/{report_row.id}/pdf", flush=True)
             except Exception as html_exc:
                 print(f"[Report-Writer] Report render warning: {html_exc}", flush=True)
+
+            # Index executive report into FAISS for section-aware RAG retrieval
+            try:
+                faiss_start = time.time()
+                report_chunks_added = vector_store.add_snapshot_chunks(
+                    snapshot_id=str(report_row.id),
+                    competitor_id=str(competitor_id),
+                    source_type="executive_report",
+                    fetched_at=report_row.generated_at.isoformat(),
+                    text=report_md,
+                )
+                print(f"[Report-Writer] FAISS indexed executive report: {report_chunks_added} section chunks in {time.time() - faiss_start:.2f}s", flush=True)
+            except Exception as faiss_exc:
+                print(f"[Report-Writer] FAISS indexing warning: {faiss_exc}", flush=True)
     finally:
         db.close()
 

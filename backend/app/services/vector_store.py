@@ -15,19 +15,28 @@ from app.config import settings
 INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "faiss_data"
 INDEX_FILE = INDEX_DIR / "index.faiss"
 METADATA_FILE = INDEX_DIR / "metadata.json"
+DIM_FILE = INDEX_DIR / "dim.json"
 
-MODEL_NAME = "all-MiniLM-L6-v2"
-EMBEDDING_DIM = 384
+# Primary: OpenRouter free embedding model
+OPENROUTER_EMBED_MODEL = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
+OPENROUTER_EMBED_DIM = 2048
+OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
 
-# HuggingFace Inference API endpoint for the same model
-HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{MODEL_NAME}"
+# Fallback: HuggingFace Inference API
+HF_MODEL_NAME = "all-MiniLM-L6-v2"
+HF_EMBEDDING_DIM = 384
+HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{HF_MODEL_NAME}"
+
+# Default dimension (set dynamically based on active embedding mode)
+EMBEDDING_DIM = OPENROUTER_EMBED_DIM
 
 
 class VectorStoreService:
     def __init__(self):
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
         self.model = None  # Lazy load to conserve startup RAM
-        self._embedding_mode = None  # Will be set by _get_model: "local", "hf_api", or "hash"
+        self._embedding_mode = None  # Will be set by _get_model: "openrouter", "hf_api", "local", or "hash"
+        self._active_dim = OPENROUTER_EMBED_DIM  # Active embedding dimension
         self.index: Optional[faiss.IndexFlatIP] = None
         self.metadata: List[Dict[str, Any]] = []
         self._load_or_create_index()
@@ -35,12 +44,14 @@ class VectorStoreService:
     def _get_model(self):
         """
         Determines embedding mode in order of preference:
-        1. VECTOR_STORE_MODE=hf_api → HuggingFace Inference API (free, no download, real embeddings)
-        2. VECTOR_STORE_MODE=auto → tries HF API if token available, else local with 15s timeout, else hash
-        3. VECTOR_STORE_MODE=hash → instant hash vectorizer (no API calls, no downloads)
+        1. OpenRouter embedding API (nvidia/llama-nemotron-embed-vl-1b-v2:free) — if LLM_API_KEY is set
+        2. HuggingFace Inference API (all-MiniLM-L6-v2) — if HF_API_TOKEN is set
+        3. Local SentenceTransformer — if installable within 15s
+        4. Hash vectorizer fallback — instant, no API calls
         """
         if self.model is None:
             store_mode = (settings.VECTOR_STORE_MODE or os.environ.get("VECTOR_STORE_MODE", "auto")).lower().strip()
+            openrouter_key = settings.LLM_API_KEY or os.environ.get("LLM_API_KEY", "")
             hf_token = settings.HF_API_TOKEN or os.environ.get("HF_API_TOKEN", "")
 
             # ── Mode: hash (instant, no network) ────────────────────────────
@@ -48,53 +59,79 @@ class VectorStoreService:
                 print("[Vector Store] VECTOR_STORE_MODE=hash → using instant hash vectorizer.", flush=True)
                 self.model = "fallback"
                 self._embedding_mode = "hash"
+                self._active_dim = OPENROUTER_EMBED_DIM
                 return self.model
 
-            # ── Mode: hf_api (explicit) or auto with HF token ───────────────
-            if store_mode == "hf_api" or (store_mode == "auto" and hf_token):
-                if hf_token:
-                    # Quick connectivity check — detect DNS/network issues immediately
-                    if self._check_hf_api_connectivity(hf_token):
-                        print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {MODEL_NAME}).", flush=True)
-                        self.model = "hf_api"
-                        self._embedding_mode = "hf_api"
-                        return self.model
-                    else:
-                        print("[Vector Store] HF API unreachable (DNS/network issue). Using hash vectorizer.", flush=True)
-                        self.model = "fallback"
-                        self._embedding_mode = "hash"
-                        return self.model
-                else:
-                    print("[Vector Store] VECTOR_STORE_MODE=hf_api but HF_API_TOKEN not set. Falling back to hash.", flush=True)
-                    self.model = "fallback"
-                    self._embedding_mode = "hash"
+            # ── Priority 1: OpenRouter Embedding API (free, 2048-dim) ────────
+            if openrouter_key and store_mode in ("auto", "openrouter"):
+                if self._check_openrouter_embed_connectivity(openrouter_key):
+                    print(f"[Vector Store] Using OpenRouter Embedding API (model: {OPENROUTER_EMBED_MODEL}, dim: {OPENROUTER_EMBED_DIM}).", flush=True)
+                    self.model = "openrouter"
+                    self._embedding_mode = "openrouter"
+                    self._active_dim = OPENROUTER_EMBED_DIM
+                    self._ensure_index_dimension(OPENROUTER_EMBED_DIM)
                     return self.model
+                else:
+                    print("[Vector Store] OpenRouter Embedding API unreachable. Trying fallbacks...", flush=True)
 
-            # ── Mode: auto (try local SentenceTransformer with 15s timeout) ─
-            try:
-                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+            # ── Priority 2: HuggingFace Inference API (free, 384-dim) ────────
+            if hf_token and store_mode in ("auto", "hf_api"):
+                if self._check_hf_api_connectivity(hf_token):
+                    print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {HF_MODEL_NAME}).", flush=True)
+                    self.model = "hf_api"
+                    self._embedding_mode = "hf_api"
+                    self._active_dim = HF_EMBEDDING_DIM
+                    self._ensure_index_dimension(HF_EMBEDDING_DIM)
+                    return self.model
+                else:
+                    print("[Vector Store] HF API unreachable. Trying fallbacks...", flush=True)
 
-                def _load_model():
-                    from sentence_transformers import SentenceTransformer
-                    return SentenceTransformer(MODEL_NAME)
+            # ── Priority 3: Local SentenceTransformer (15s timeout) ──────────
+            if store_mode == "auto":
+                try:
+                    from concurrent.futures import ThreadPoolExecutor
 
-                print("[Vector Store] Loading SentenceTransformer model (15s timeout)...", flush=True)
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_load_model)
-                    self.model = future.result(timeout=15.0)
-                self._embedding_mode = "local"
-                print("[Vector Store] SentenceTransformer loaded successfully.", flush=True)
+                    def _load_model():
+                        from sentence_transformers import SentenceTransformer
+                        return SentenceTransformer(HF_MODEL_NAME)
 
-            except Exception as e:
-                timeout_msg = "TIMED OUT" if "TimeoutError" in type(e).__name__ or "timeout" in str(e).lower() else f"failed ({e})"
-                print(f"[Vector Store] SentenceTransformer {timeout_msg}. Using hash vectorizer.", flush=True)
-                self.model = "fallback"
-                self._embedding_mode = "hash"
+                    print("[Vector Store] Loading SentenceTransformer model (15s timeout)...", flush=True)
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(_load_model)
+                        self.model = future.result(timeout=15.0)
+                    self._embedding_mode = "local"
+                    self._active_dim = HF_EMBEDDING_DIM
+                    self._ensure_index_dimension(HF_EMBEDDING_DIM)
+                    print("[Vector Store] SentenceTransformer loaded successfully.", flush=True)
+                    return self.model
+                except Exception as e:
+                    timeout_msg = "TIMED OUT" if "TimeoutError" in type(e).__name__ or "timeout" in str(e).lower() else f"failed ({e})"
+                    print(f"[Vector Store] SentenceTransformer {timeout_msg}. Using hash vectorizer.", flush=True)
+
+            # ── Priority 4: Hash vectorizer fallback ─────────────────────────
+            print("[Vector Store] Using hash vectorizer fallback.", flush=True)
+            self.model = "fallback"
+            self._embedding_mode = "hash"
+            self._active_dim = OPENROUTER_EMBED_DIM
 
         return self.model
 
+    def _check_openrouter_embed_connectivity(self, api_key: str) -> bool:
+        """Quick connectivity check to OpenRouter Embedding API."""
+        try:
+            response = httpx.post(
+                OPENROUTER_EMBED_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": OPENROUTER_EMBED_MODEL, "input": ["connectivity test"]},
+                timeout=8.0,
+            )
+            return response.status_code == 200 and "data" in response.json()
+        except Exception as e:
+            print(f"[Vector Store] OpenRouter embed connectivity check failed: {e}", flush=True)
+            return False
+
     def _check_hf_api_connectivity(self, hf_token: str) -> bool:
-        """Quick connectivity check to HuggingFace API. Returns False if DNS/network is broken."""
+        """Quick connectivity check to HuggingFace API."""
         try:
             response = httpx.post(
                 HF_API_URL,
@@ -102,16 +139,9 @@ class VectorStoreService:
                 json={"inputs": "test", "options": {"wait_for_model": False}},
                 timeout=5.0,
             )
-            # Any HTTP response (even 503 model loading) means network is reachable
-            return True
-        except (httpx.ConnectError, OSError) as e:
-            print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
-            return False
-        except httpx.TimeoutException:
-            # Timeout is OK — server is reachable but slow
             return True
         except Exception as e:
-            print(f"[Vector Store] HF API connectivity check error: {e}", flush=True)
+            print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
             return False
 
     @staticmethod
@@ -130,6 +160,74 @@ class VectorStoreService:
         ]
         return any(pattern in err_msg for pattern in unrecoverable_patterns)
 
+    def _openrouter_encode(self, texts: List[str]) -> np.ndarray:
+        """
+        Calls OpenRouter Embedding API (nvidia/llama-nemotron-embed-vl-1b-v2:free) for
+        high-quality 2048-dim semantic embeddings. Batches texts in groups of 8.
+        Falls back to hash vectorizer on unrecoverable errors.
+        """
+        api_key = settings.LLM_API_KEY or os.environ.get("LLM_API_KEY", "")
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+        all_embeddings = []
+        batch_size = 8
+        use_hash_fallback = False
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+
+            if use_hash_fallback:
+                hash_vecs = self._hash_encode(batch)
+                all_embeddings.extend(hash_vecs)
+                continue
+
+            # Truncate to 512 chars per text for API efficiency
+            batch_truncated = [t[:512] for t in batch]
+            batch_succeeded = False
+
+            for attempt in range(3):
+                try:
+                    response = httpx.post(
+                        OPENROUTER_EMBED_URL,
+                        headers=headers,
+                        json={"model": OPENROUTER_EMBED_MODEL, "input": batch_truncated},
+                        timeout=15.0,
+                    )
+
+                    if response.status_code == 429:
+                        print("[Vector Store] OpenRouter embed rate limited, waiting 2s...", flush=True)
+                        time.sleep(2.0)
+                        continue
+
+                    response.raise_for_status()
+                    data = response.json()
+
+                    for item in data.get("data", []):
+                        vec = np.array(item["embedding"], dtype=np.float32)
+                        norm = np.linalg.norm(vec)
+                        if norm > 0:
+                            vec /= norm
+                        all_embeddings.append(vec)
+                    batch_succeeded = True
+                    break
+
+                except Exception as exc:
+                    if self._is_unrecoverable_error(exc):
+                        print(f"[Vector Store] OpenRouter embed unrecoverable error: {exc}. Switching to hash.", flush=True)
+                        use_hash_fallback = True
+                        break
+                    if attempt < 2:
+                        print(f"[Vector Store] OpenRouter embed attempt {attempt + 1} failed: {exc}. Retrying...", flush=True)
+                        time.sleep(1.0)
+                    else:
+                        print(f"[Vector Store] OpenRouter embed failed after 3 attempts: {exc}.", flush=True)
+
+            if not batch_succeeded:
+                hash_vecs = self._hash_encode(batch)
+                all_embeddings.extend(hash_vecs)
+
+        return np.array(all_embeddings, dtype=np.float32)
+
     def _hf_api_encode(self, texts: List[str]) -> np.ndarray:
         """
         Calls HuggingFace Inference API for real semantic embeddings.
@@ -141,12 +239,11 @@ class VectorStoreService:
 
         all_embeddings = []
         batch_size = 16
-        use_hash_fallback = False  # Flag to skip all remaining HF API calls
+        use_hash_fallback = False
 
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
 
-            # If we already detected an unrecoverable error, skip straight to hash
             if use_hash_fallback:
                 hash_vecs = self._hash_encode(batch)
                 all_embeddings.extend(hash_vecs)
@@ -189,7 +286,6 @@ class VectorStoreService:
 
                 except Exception as exc:
                     if self._is_unrecoverable_error(exc):
-                        # DNS/network failure — skip ALL remaining batches immediately
                         print(f"[Vector Store] HF API unrecoverable error: {exc}. Switching to hash for all batches.", flush=True)
                         use_hash_fallback = True
                         break
@@ -206,13 +302,14 @@ class VectorStoreService:
         return np.array(all_embeddings, dtype=np.float32)
 
     def _hash_encode(self, texts: List[str]) -> np.ndarray:
-        """Lightweight 384-dim normalized term hashing vectorizer for ultra-low RAM footprint (<10MB RAM)."""
+        """Lightweight normalized term hashing vectorizer using active dimension."""
+        dim = self._active_dim
         vectors = []
         for text in texts:
             words = re.findall(r"\w+", text.lower())
-            vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+            vec = np.zeros(dim, dtype=np.float32)
             for w in words:
-                h = hash(w) % EMBEDDING_DIM
+                h = hash(w) % dim
                 vec[h] += 1.0
             norm = np.linalg.norm(vec)
             if norm > 0:
@@ -224,6 +321,14 @@ class VectorStoreService:
         """Routes to the appropriate embedding backend based on current mode."""
         model = self._get_model()
 
+        # OpenRouter Embedding API path (primary)
+        if self._embedding_mode == "openrouter":
+            try:
+                return self._openrouter_encode(texts)
+            except Exception as exc:
+                print(f"[Vector Store] OpenRouter encode failed ({exc}). Falling back to hash.", flush=True)
+                return self._hash_encode(texts)
+
         # HuggingFace Inference API path
         if self._embedding_mode == "hf_api":
             try:
@@ -233,7 +338,7 @@ class VectorStoreService:
                 return self._hash_encode(texts)
 
         # Local SentenceTransformer path
-        if model not in ("fallback", "hf_api"):
+        if model not in ("fallback", "hf_api", "openrouter"):
             try:
                 embeddings = model.encode(texts, convert_to_numpy=True, normalize_embeddings=True)
                 return embeddings.astype(np.float32)
@@ -243,17 +348,31 @@ class VectorStoreService:
         # Hash vectorizer fallback
         return self._hash_encode(texts)
 
+    def _ensure_index_dimension(self, required_dim: int):
+        """Recreates FAISS index if current dimension doesn't match required dimension."""
+        if self.index is not None and self.index.d == required_dim:
+            return  # Dimension matches, no action needed
+
+        if self.index is not None and self.index.d != required_dim:
+            old_dim = self.index.d
+            old_count = self.index.ntotal
+            print(f"[Vector Store] FAISS dimension mismatch ({old_dim} → {required_dim}). Rebuilding index ({old_count} vectors discarded).", flush=True)
+            self.index = faiss.IndexFlatIP(required_dim)
+            self.metadata = []
+            self._save_index()
+
     def _load_or_create_index(self):
         if INDEX_FILE.exists() and METADATA_FILE.exists():
             try:
                 self.index = faiss.read_index(str(INDEX_FILE))
                 with open(METADATA_FILE, "r", encoding="utf-8") as f:
                     self.metadata = json.load(f)
+                print(f"[Vector Store] Loaded FAISS index: {self.index.ntotal} vectors, dim={self.index.d}", flush=True)
                 return
             except Exception as e:
                 print(f"Warning: Failed to load FAISS index ({e}). Creating a new one.")
 
-        self.index = faiss.IndexFlatIP(EMBEDDING_DIM)
+        self.index = faiss.IndexFlatIP(OPENROUTER_EMBED_DIM)
         self.metadata = []
         self._save_index()
 
@@ -263,10 +382,50 @@ class VectorStoreService:
             with open(METADATA_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.metadata, f, indent=2)
 
-    def chunk_text(self, text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> List[str]:
+    def chunk_text(self, text: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> List[str]:
+        """
+        Two-strategy text chunker:
+        1. Markdown section-aware: If text contains '## ' headings, split on headings
+           so each chunk is one complete report section (preserving heading context).
+        2. Paragraph-based fallback: For raw web pages, accumulate paragraphs up to
+           chunk_size (1000 chars) with overlap for long single paragraphs.
+        """
         if not text:
             return []
-        
+
+        # ── Strategy 1: Markdown section-aware chunking ──────────────────────
+        if "## " in text:
+            return self._chunk_by_sections(text, chunk_size)
+
+        # ── Strategy 2: Paragraph-based fallback ─────────────────────────────
+        return self._chunk_by_paragraphs(text, chunk_size, chunk_overlap)
+
+    def _chunk_by_sections(self, text: str, max_chunk_size: int = 2000) -> List[str]:
+        """
+        Splits markdown text on '## ' headings. Each chunk contains one complete
+        section with its heading. If a section exceeds max_chunk_size, it is
+        further split by paragraphs within that section.
+        Preamble text before the first '## ' heading is kept as a separate chunk.
+        """
+        chunks = []
+        parts = re.split(r'(?=^## )', text, flags=re.MULTILINE)
+
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            if len(part) <= max_chunk_size:
+                chunks.append(part)
+            else:
+                # Section too large — sub-split by paragraphs within it
+                sub_chunks = self._chunk_by_paragraphs(part, max_chunk_size, chunk_overlap=100)
+                chunks.extend(sub_chunks)
+
+        return [c for c in chunks if c.strip()]
+
+    def _chunk_by_paragraphs(self, text: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> List[str]:
+        """Accumulates paragraphs into chunks up to chunk_size. Long paragraphs are force-split with overlap."""
         paragraphs = text.split("\n\n")
         chunks = []
         current_chunk = ""

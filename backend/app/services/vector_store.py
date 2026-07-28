@@ -27,8 +27,9 @@ HF_MODEL_NAME = "all-MiniLM-L6-v2"
 HF_EMBEDDING_DIM = 384
 HF_API_URL = f"https://router.huggingface.co/hf-inference/models/sentence-transformers/{HF_MODEL_NAME}/pipeline/feature-extraction"
 
-# Default dimension (set dynamically based on active embedding mode)
-EMBEDDING_DIM = OPENROUTER_EMBED_DIM
+# Unified FAISS Vector Store Dimension (matches SentenceTransformers & HF API natively)
+UNIFIED_EMBED_DIM = 384
+EMBEDDING_DIM = UNIFIED_EMBED_DIM
 
 
 class VectorStoreService:
@@ -36,7 +37,7 @@ class VectorStoreService:
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
         self.model = None  # Lazy load to conserve startup RAM
         self._embedding_mode = None  # Will be set by _get_model: "openrouter", "hf_api", "local", or "hash"
-        self._active_dim = OPENROUTER_EMBED_DIM  # Active embedding dimension
+        self._active_dim = UNIFIED_EMBED_DIM  # Active embedding dimension (384)
         self.index: Optional[faiss.IndexFlatIP] = None
         self.metadata: List[Dict[str, Any]] = []
         self._load_or_create_index()
@@ -44,10 +45,10 @@ class VectorStoreService:
     def _get_model(self):
         """
         Determines embedding mode in order of preference:
-        1. OpenRouter embedding API (nvidia/llama-nemotron-embed-vl-1b-v2:free) — if LLM_API_KEY is set
-        2. HuggingFace Inference API (all-MiniLM-L6-v2) — if HF_API_TOKEN is set
-        3. Local SentenceTransformer — if installable within 15s
-        4. Hash vectorizer fallback — instant, no API calls
+        1. OpenRouter embedding API (nvidia/llama-nemotron-embed-vl-1b-v2:free) — if LLM_API_KEY is set (sliced to 384-dim)
+        2. HuggingFace Inference API (all-MiniLM-L6-v2) — if HF_API_TOKEN is set (native 384-dim)
+        3. Local SentenceTransformer — if installable within 15s (native 384-dim)
+        4. Hash vectorizer fallback — instant, no API calls (384-dim)
         """
         if self.model is None:
             store_mode = (settings.VECTOR_STORE_MODE or os.environ.get("VECTOR_STORE_MODE", "auto")).lower().strip()
@@ -56,20 +57,21 @@ class VectorStoreService:
 
             # ── Mode: hash (instant, no network) ────────────────────────────
             if store_mode == "hash":
-                print("[Vector Store] VECTOR_STORE_MODE=hash → using instant hash vectorizer.", flush=True)
+                print(f"[Vector Store] VECTOR_STORE_MODE=hash → using instant hash vectorizer (dim: {UNIFIED_EMBED_DIM}).", flush=True)
                 self.model = "fallback"
                 self._embedding_mode = "hash"
-                self._active_dim = OPENROUTER_EMBED_DIM
+                self._active_dim = UNIFIED_EMBED_DIM
+                self._ensure_index_dimension(UNIFIED_EMBED_DIM)
                 return self.model
 
-            # ── Priority 1: OpenRouter Embedding API (free, 2048-dim) ────────
+            # ── Priority 1: OpenRouter Embedding API (free, unified 384-dim) ────────
             if openrouter_key and store_mode in ("auto", "openrouter"):
                 if self._check_openrouter_embed_connectivity(openrouter_key):
-                    print(f"[Vector Store] Using OpenRouter Embedding API (model: {OPENROUTER_EMBED_MODEL}, dim: {OPENROUTER_EMBED_DIM}).", flush=True)
+                    print(f"[Vector Store] Using OpenRouter Embedding API (model: {OPENROUTER_EMBED_MODEL}, dim: {UNIFIED_EMBED_DIM}).", flush=True)
                     self.model = "openrouter"
                     self._embedding_mode = "openrouter"
-                    self._active_dim = OPENROUTER_EMBED_DIM
-                    self._ensure_index_dimension(OPENROUTER_EMBED_DIM)
+                    self._active_dim = UNIFIED_EMBED_DIM
+                    self._ensure_index_dimension(UNIFIED_EMBED_DIM)
                     return self.model
                 else:
                     print("[Vector Store] OpenRouter Embedding API unreachable. Trying fallbacks...", flush=True)
@@ -77,11 +79,11 @@ class VectorStoreService:
             # ── Priority 2: HuggingFace Inference API (free, 384-dim) ────────
             if hf_token and store_mode in ("auto", "hf_api"):
                 if self._check_hf_api_connectivity(hf_token):
-                    print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {HF_MODEL_NAME}).", flush=True)
+                    print(f"[Vector Store] Using HuggingFace Inference API for embeddings (model: {HF_MODEL_NAME}, dim: {UNIFIED_EMBED_DIM}).", flush=True)
                     self.model = "hf_api"
                     self._embedding_mode = "hf_api"
-                    self._active_dim = HF_EMBEDDING_DIM
-                    self._ensure_index_dimension(HF_EMBEDDING_DIM)
+                    self._active_dim = UNIFIED_EMBED_DIM
+                    self._ensure_index_dimension(UNIFIED_EMBED_DIM)
                     return self.model
                 else:
                     print("[Vector Store] HF API unreachable. Trying fallbacks...", flush=True)
@@ -95,13 +97,13 @@ class VectorStoreService:
                         from sentence_transformers import SentenceTransformer
                         return SentenceTransformer(HF_MODEL_NAME)
 
-                    print("[Vector Store] Loading SentenceTransformer model (15s timeout)...", flush=True)
+                    print(f"[Vector Store] Loading SentenceTransformer model ({HF_MODEL_NAME}, dim: {UNIFIED_EMBED_DIM})...", flush=True)
                     with ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(_load_model)
                         self.model = future.result(timeout=15.0)
                     self._embedding_mode = "local"
-                    self._active_dim = HF_EMBEDDING_DIM
-                    self._ensure_index_dimension(HF_EMBEDDING_DIM)
+                    self._active_dim = UNIFIED_EMBED_DIM
+                    self._ensure_index_dimension(UNIFIED_EMBED_DIM)
                     print("[Vector Store] SentenceTransformer loaded successfully.", flush=True)
                     return self.model
                 except Exception as e:
@@ -109,10 +111,11 @@ class VectorStoreService:
                     print(f"[Vector Store] SentenceTransformer {timeout_msg}. Using hash vectorizer.", flush=True)
 
             # ── Priority 4: Hash vectorizer fallback ─────────────────────────
-            print("[Vector Store] Using hash vectorizer fallback.", flush=True)
+            print(f"[Vector Store] Using hash vectorizer fallback (dim: {UNIFIED_EMBED_DIM}).", flush=True)
             self.model = "fallback"
             self._embedding_mode = "hash"
-            self._active_dim = OPENROUTER_EMBED_DIM
+            self._active_dim = UNIFIED_EMBED_DIM
+            self._ensure_index_dimension(UNIFIED_EMBED_DIM)
 
         return self.model
 
@@ -208,7 +211,11 @@ class VectorStoreService:
                     data = response.json()
 
                     for item in data.get("data", []):
-                        vec = np.array(item["embedding"], dtype=np.float32)
+                        raw_vec = np.array(item["embedding"], dtype=np.float32)
+                        if len(raw_vec) >= UNIFIED_EMBED_DIM:
+                            vec = raw_vec[:UNIFIED_EMBED_DIM]
+                        else:
+                            vec = np.pad(raw_vec, (0, UNIFIED_EMBED_DIM - len(raw_vec)))
                         norm = np.linalg.norm(vec)
                         if norm > 0:
                             vec /= norm
@@ -377,7 +384,7 @@ class VectorStoreService:
             except Exception as e:
                 print(f"Warning: Failed to load FAISS index ({e}). Creating a new one.")
 
-        self.index = faiss.IndexFlatIP(OPENROUTER_EMBED_DIM)
+        self.index = faiss.IndexFlatIP(UNIFIED_EMBED_DIM)
         self.metadata = []
         self._save_index()
 

@@ -825,11 +825,73 @@ def scrape_with_playwright(url: str, timeout_sec: float = 8.0) -> Optional[Dict[
         return None
 
 
+def scrape_with_jina_reader(url: str, timeout_sec: float = 10.0) -> Optional[Dict[str, Any]]:
+    """
+    High-Reliability Anti-Bot Fallback Engine (Jina AI Reader Proxy):
+    Bypasses Cloudflare bot challenges, JS shells, and anti-scraping blocks for any domain.
+    Returns clean markdown text, title, and structured metadata without browser overhead.
+    """
+    _empty_structured = {
+        "metadata": {
+            "title": "", "description": "", "keywords": [],
+            "og_title": "", "og_description": "", "og_image": "",
+            "og_site_name": "", "og_type": "",
+            "twitter_title": "", "twitter_description": "", "twitter_image": "",
+            "jsonld": [], "canonical_url": "",
+        },
+        "headings": [],
+        "social_links": {},
+        "key_images": [],
+        "cta_signals": [],
+        "key_internal_links": [],
+        "markdown_tables": [],
+        "faqs": [],
+        "tech_stack": [],
+    }
+
+    try:
+        jina_url = f"https://r.jina.ai/{url}"
+        print(f"[Scraper] Triggering Jina AI Reader fallback for blocked/stale URL: {url}", flush=True)
+
+        with httpx.Client(timeout=timeout_sec, follow_redirects=True) as client:
+            resp = client.get(jina_url, headers={"Accept": "text/plain"})
+            if resp.status_code == 200 and resp.text and len(resp.text) > MIN_CONTENT_LENGTH:
+                text = resp.text
+                title_match = re.search(r"^Title:\s*(.+)$", text, re.MULTILINE)
+                title = title_match.group(1).strip() if title_match else ""
+
+                clean_body = text
+                if "Markdown Content:" in text:
+                    clean_body = text.split("Markdown Content:", 1)[1].strip()
+
+                content_hash = compute_content_hash(clean_body)
+                structured = extract_all_structured_data(f"<html><head><title>{title}</title></head><body>{clean_body}</body></html>", url)
+                if title:
+                    structured["metadata"]["title"] = title
+
+                return {
+                    "url": url,
+                    "raw_content": text,
+                    "clean_text": clean_body,
+                    "content_hash": content_hash,
+                    "is_stale": False,
+                    "stale_reason": None,
+                    "status_code": 200,
+                    "content_type": "text/markdown",
+                    "scraped_by": "jina_reader",
+                    **structured,
+                }
+    except Exception as exc:
+        print(f"[Scraper] Jina AI Reader fallback note for {url}: {exc}")
+    return None
+
+
 def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
     """
-    High-Performance Hybrid Scraper:
-    1. Fast-Path HTTPX Scraper (sub-second performance for 95% of pages).
-    2. Smart Playwright Fallback (activated ONLY for JS-heavy SPAs or blocked pages).
+    High-Performance Multi-Engine Hybrid Scraper:
+    1. Fast-Path HTTPX Scraper (sub-second performance).
+    2. Headless Playwright Fallback (for JS SPAs).
+    3. Jina AI Reader Proxy Fallback (bypasses Cloudflare & anti-bot protection).
     """
     _empty_structured = {
         "metadata": {
@@ -926,11 +988,16 @@ def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_pla
                         **structured,
                     }
 
-                # If content is a JS shell / empty SPA, fallback to Playwright Chromium
-                if is_stale and use_playwright and content_type == "html":
-                    pw_res = scrape_with_playwright(url, timeout_sec=8.0)
-                    if pw_res and not pw_res.get("is_stale"):
-                        return pw_res
+                # If content is a JS shell / Cloudflare bot challenge / empty, try Playwright or Jina Reader fallback
+                if is_stale:
+                    if use_playwright and content_type == "html":
+                        pw_res = scrape_with_playwright(url, timeout_sec=8.0)
+                        if pw_res and not pw_res.get("is_stale"):
+                            return pw_res
+
+                    jina_res = scrape_with_jina_reader(url, timeout_sec=10.0)
+                    if jina_res and not jina_res.get("is_stale"):
+                        return jina_res
 
                 return {
                     "url": url,
@@ -966,11 +1033,15 @@ def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_pla
                 time.sleep(0.5 * (attempt + 1))
                 continue
 
-    # Attempt Playwright fallback if HTTPX retries failed
+    # Final fallback attempt using Playwright or Jina AI Reader
     if use_playwright:
         pw_res = scrape_with_playwright(url, timeout_sec=8.0)
         if pw_res and not pw_res.get("is_stale"):
             return pw_res
+
+    jina_res = scrape_with_jina_reader(url, timeout_sec=10.0)
+    if jina_res and not jina_res.get("is_stale"):
+        return jina_res
 
     return {
         "url": url,

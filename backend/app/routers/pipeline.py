@@ -207,15 +207,18 @@ def start_pipeline_run(
             seen_urls.add(u)
             urls.append(u)
 
-    # User's own company URL (for comparison analysis)
-    user_comp_url = competitor.company_url or getattr(current_user, "company_url", None)
-    if user_comp_url:
-        _add_url(user_comp_url)
+    # 1. User's own company URL (for side-by-side comparison analysis)
+    user_url = getattr(current_user, "company_url", None)
+    if user_url and user_url.strip():
+        _add_url(user_url.strip())
 
-    # Competitor's homepage — derive from pricing_url domain if not explicitly set
+    # 2. Competitor's company URL
+    if competitor.company_url:
+        _add_url(competitor.company_url.strip())
+
+    # 3. Competitor's pricing URL & root homepage
     if competitor.pricing_url:
-        _add_url(competitor.pricing_url)
-        # Also scrape competitor's root homepage for company-level data
+        _add_url(competitor.pricing_url.strip())
         from urllib.parse import urlparse
         parsed = urlparse(competitor.pricing_url.strip())
         if parsed.netloc:

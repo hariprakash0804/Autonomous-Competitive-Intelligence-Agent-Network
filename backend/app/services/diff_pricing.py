@@ -270,9 +270,14 @@ If no real pricing tiers are found, return: []"""
 
 def smart_extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     """
-    Unified smart pricing plan extractor.
-    Uses LLM extraction if LLM_API_KEY is present, otherwise falls back to regex.
+    Unified high-speed pricing plan extractor.
+    1. Try fast local regex extraction first (sub-millisecond execution).
+    2. Fall back to LLM extraction only if regex finds 0 plans.
     """
+    regex_plans = extract_plan_prices(text)
+    if regex_plans:
+        return regex_plans
+
     provider = (settings.LLM_PROVIDER or "").lower().strip()
     api_key = settings.LLM_API_KEY or ""
 
@@ -281,7 +286,7 @@ def smart_extract_plan_prices(text: str) -> List[Dict[str, Any]]:
         if plans:
             return plans
 
-    return extract_plan_prices(text)
+    return regex_plans
 
 
 def diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:

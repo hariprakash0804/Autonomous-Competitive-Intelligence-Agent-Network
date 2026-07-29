@@ -671,9 +671,13 @@ export default function ProfilePage() {
                 )}
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">URL 2: Competitor Pricing URL</label>
-                <input type="url" value={addPricingUrl} onChange={(e) => setAddPricingUrl(e.target.value)} placeholder="https://competitor.com/pricing"
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor URL *</label>
+                <input type="url" required value={addPricingUrl} onChange={(e) => setAddPricingUrl(e.target.value)} placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300" />
+                <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">
+                  <span className="shrink-0 font-bold">✨ Auto-Crawler:</span>
+                  <span>Our Autonomous Agent Network will automatically crawl, navigate, and discover all related pricing, product, feature, and enterprise sub-pages.</span>
+                </div>
               </div>
               <div className="pt-3 flex justify-end gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)}

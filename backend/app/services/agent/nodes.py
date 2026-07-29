@@ -207,7 +207,8 @@ def change_detector_node(state: AgentState) -> AgentState:
     db: Session = SessionLocal()
     try:
         competitor_id = uuid.UUID(state["competitor_id"])
-        
+        competitor = db.get(Competitor, competitor_id)
+
         # Get prior pricing snapshot
         stmt = (
             select(Snapshot)
@@ -258,8 +259,8 @@ def change_detector_node(state: AgentState) -> AgentState:
             extracted_plans = []
             seen_tiers = set()
 
-            user_comp_url = competitor.company_url or ""
-            if competitor.user and competitor.user.company_url:
+            user_comp_url = (competitor.company_url or "") if competitor else ""
+            if competitor and competitor.user and competitor.user.company_url:
                 user_comp_url = competitor.user.company_url
 
             for p in valid_pages:

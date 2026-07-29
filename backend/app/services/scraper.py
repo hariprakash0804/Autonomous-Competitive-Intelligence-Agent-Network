@@ -60,7 +60,7 @@ def _build_browser_headers(url: str) -> Dict[str, str]:
         "User-Agent": ua,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "DNT": "1",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
@@ -729,7 +729,7 @@ def compute_content_hash(text: str) -> str:
 def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, Optional[str]]:
     """
     Evaluates whether the scraped content is empty, a JS-render shell,
-    or blocked by bot detection.
+    binary corrupted data, or blocked by bot detection.
     """
     # Accept any 2xx status code, not just exactly 200
     if status_code < 200 or status_code >= 400:
@@ -737,6 +737,11 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
 
     if not clean_text or len(clean_text) < MIN_CONTENT_LENGTH:
         return True, f"Content length too short ({len(clean_text) if clean_text else 0} chars)"
+
+    # Detect unprintable / binary garbage corruption
+    printable_chars = sum(1 for c in clean_text[:2000] if c.isprintable() or c in ("\n", "\r", "\t"))
+    if (printable_chars / max(min(len(clean_text), 2000), 1)) < 0.85:
+        return True, "Binary or corrupted non-text response"
 
     lower_text = clean_text.lower()
     lower_html = html.lower() if html else ""

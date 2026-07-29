@@ -403,17 +403,23 @@ export default function DashboardPage() {
                   intelligenceData={intelligenceData}
                 />
 
-                <PriceTimeline
-                  priceHistory={priceHistory}
-                  competitorName={selectedCompetitor?.name}
-                />
+                <div id="price-timeline-section">
+                  <PriceTimeline
+                    priceHistory={priceHistory}
+                    competitorName={selectedCompetitor?.name}
+                  />
+                </div>
 
-                <SentimentChart
-                  sentimentHistory={sentimentHistory}
-                  competitorName={selectedCompetitor?.name}
-                />
+                <div id="sentiment-section">
+                  <SentimentChart
+                    sentimentHistory={sentimentHistory}
+                    competitorName={selectedCompetitor?.name}
+                  />
+                </div>
 
-                <ReportsPanel selectedCompetitorId={selectedCompId} />
+                <div id="reports-section">
+                  <ReportsPanel selectedCompetitorId={selectedCompId} />
+                </div>
               </div>
             </div>
           </div>

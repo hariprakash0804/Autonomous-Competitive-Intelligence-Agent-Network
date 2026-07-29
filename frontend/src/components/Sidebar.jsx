@@ -123,14 +123,15 @@ export default function Sidebar({ onToggleChat }) {
           {insightItems.map((item) => {
             const Icon = item.icon;
             return (
-              <div
+              <button
                 key={item.label}
-                className={`sidebar-link cursor-default opacity-60 ${collapsed ? 'justify-center px-3' : ''}`}
+                onClick={() => handleInsightClick(item.label)}
+                className={`sidebar-link w-full ${collapsed ? 'justify-center px-3' : ''}`}
                 title={collapsed ? item.label : undefined}
               >
                 <Icon className={`w-[18px] h-[18px] ${item.color} flex-shrink-0`} />
-                {!collapsed && <span className="text-slate-500">{item.label}</span>}
-              </div>
+                {!collapsed && <span className="text-slate-300">{item.label}</span>}
+              </button>
             );
           })}
         </div>

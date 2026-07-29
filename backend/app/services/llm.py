@@ -57,10 +57,10 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
     client = _get_cached_client(api_key)
 
     models_to_try = [
-        "inclusionai/ling-3.0-flash:free",
-        "nvidia/nemotron-4-40b-a3b-instruct:free",
-        "nvidia/nemotron-3-nano-30b-a3b:free",
-        "google/gemini-2.5-flash:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-exp:free",
+        "mistralai/mistral-7b-instruct:free",
+        "qwen/qwen-2.5-72b-instruct:free",
         "openrouter/free",
     ]
     
@@ -86,6 +86,12 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
         except Exception as exc:
             last_exception = exc
             err_msg = str(exc)
+            
+            # Fast-fail if account daily quota is exceeded (no free model will work until reset/credits added)
+            if "free-models-per-day" in err_msg.lower() or "daily limit" in err_msg.lower():
+                print(f"[OpenRouter Daily Limit] Daily free request quota exceeded. Fast-failing to regex/rule fallbacks.", flush=True)
+                raise exc
+
             is_429 = isinstance(exc, RateLimitError) or "429" in err_msg or "rate limit" in err_msg.lower()
             is_404 = getattr(exc, "status_code", None) == 404 or "404" in err_msg or "unavailable for free" in err_msg.lower()
 

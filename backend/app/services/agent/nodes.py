@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -113,8 +114,25 @@ def researcher_node(state: AgentState) -> AgentState:
                 if target_url and target_url not in scraped_urls and target_url not in [u.rstrip("/") for u in discovered_urls]:
                     discovered_urls.append(link_item.get("url"))
 
-        # Cap discovered URLs to 6 pages per run for optimal speed & complete coverage
-        discovered_urls = discovered_urls[:6]
+        # Pass 2.5: Proactive pricing page probe — many competitors (e.g. OpenAI) hide pricing
+        # at non-obvious URLs like /api/pricing that aren't linked from the homepage HTML.
+        # Probe well-known canonical pricing paths for each unique domain.
+        _PRICING_PROBE_PATHS = ["/pricing", "/api/pricing", "/plans"]
+        probed_domains = set()
+        for url in urls:
+            parsed = urlparse(url)
+            domain_key = f"{parsed.scheme}://{parsed.netloc}"
+            if domain_key in probed_domains:
+                continue
+            probed_domains.add(domain_key)
+            for probe_path in _PRICING_PROBE_PATHS:
+                probe_url = domain_key + probe_path
+                probe_clean = probe_url.rstrip("/")
+                if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in discovered_urls]:
+                    discovered_urls.append(probe_url)
+
+        # Cap discovered URLs to 10 pages per run for optimal speed & complete coverage
+        discovered_urls = discovered_urls[:10]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)

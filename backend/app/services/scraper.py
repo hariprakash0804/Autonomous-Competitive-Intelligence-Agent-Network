@@ -830,6 +830,66 @@ def scrape_with_playwright(url: str, timeout_sec: float = 8.0) -> Optional[Dict[
         return None
 
 
+def _extract_markdown_internal_links(markdown_text: str, base_url: str, max_links_per_category: int = 2) -> List[Dict[str, str]]:
+    """
+    Extracts key internal links from markdown [text](url) format.
+    Used when Jina Reader returns markdown instead of HTML, since extract_key_internal_links
+    works on BeautifulSoup <a> tags which don't exist in markdown output.
+    """
+    discovered = []
+    seen_urls = set()
+    parsed_base = urlparse(base_url)
+    base_domain = parsed_base.netloc.lower()
+    if not base_domain:
+        return []
+
+    category_counts = {cat: 0 for cat in _KEY_LINK_CATEGORIES}
+
+    # Match markdown links: [anchor text](url)
+    md_link_pattern = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+
+    for match in md_link_pattern.finditer(markdown_text):
+        anchor_text = match.group(1).strip()
+        href = match.group(2).strip()
+
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            continue
+
+        full_url = urljoin(base_url, href)
+        parsed_target = urlparse(full_url)
+        target_domain = parsed_target.netloc.lower()
+
+        if not target_domain or (target_domain != base_domain and not target_domain.endswith("." + base_domain)):
+            continue
+
+        clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}{parsed_target.path.rstrip('/')}"
+        if not parsed_target.path or parsed_target.path == "/":
+            clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}/"
+
+        if clean_target_url in seen_urls or clean_target_url.rstrip("/") == base_url.rstrip("/"):
+            continue
+
+        path_and_anchor = f"{parsed_target.path} {anchor_text}".lower()
+
+        for cat, patterns in _KEY_LINK_CATEGORIES.items():
+            if category_counts[cat] >= max_links_per_category:
+                continue
+            for pattern in patterns:
+                if re.search(r"\b" + pattern + r"\b", path_and_anchor) or pattern in parsed_target.path.lower():
+                    seen_urls.add(clean_target_url)
+                    category_counts[cat] += 1
+                    discovered.append({
+                        "url": clean_target_url,
+                        "category": cat,
+                        "anchor_text": anchor_text[:60],
+                    })
+                    break
+            if clean_target_url in seen_urls:
+                break
+
+    return discovered
+
+
 def scrape_with_jina_reader(url: str, timeout_sec: float = 10.0) -> Optional[Dict[str, Any]]:
     """
     High-Reliability Anti-Bot Fallback Engine (Jina AI Reader Proxy):
@@ -873,6 +933,11 @@ def scrape_with_jina_reader(url: str, timeout_sec: float = 10.0) -> Optional[Dic
                 structured = extract_all_structured_data(f"<html><head><title>{title}</title></head><body>{clean_body}</body></html>", url)
                 if title:
                     structured["metadata"]["title"] = title
+
+                # Jina returns markdown [text](url) links, not HTML <a> tags.
+                # Extract internal links from markdown format for sub-page discovery.
+                if not structured.get("key_internal_links"):
+                    structured["key_internal_links"] = _extract_markdown_internal_links(clean_body, url)
 
                 return {
                     "url": url,

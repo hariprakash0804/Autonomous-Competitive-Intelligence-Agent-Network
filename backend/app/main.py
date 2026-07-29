@@ -16,67 +16,64 @@ app = FastAPI(
 
 @app.on_event("startup")
 def on_startup():
-    """Ensures PostgreSQL database tables exist and schema migrations are applied automatically on startup."""
-    try:
-        print("[Startup] Ensuring PostgreSQL database tables exist...")
-        Base.metadata.create_all(bind=engine)
-        
-        # Self-healing column additions for existing production databases
-        from sqlalchemy import text
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS model_used VARCHAR(200);"))
-            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_url TEXT;"))
-            conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS html_url TEXT;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_url VARCHAR(1024);"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(1024);"))
-            conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
-            conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
+    """Starts background initialization tasks so Uvicorn binds port socket immediately (<0.001s)."""
+    import threading
 
-        print("[Startup] Database tables and schema verified/migrated successfully.", flush=True)
+    def _bg_startup_tasks():
+        try:
+            print("[Startup] Ensuring PostgreSQL database tables exist...", flush=True)
+            Base.metadata.create_all(bind=engine)
+            
+            # Self-healing column additions for existing production databases
+            from sqlalchemy import text
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS model_used VARCHAR(200);"))
+                conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS pdf_url TEXT;"))
+                conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS html_url TEXT;"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_url VARCHAR(1024);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(1024);"))
+                conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
+                conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
 
-        # Run heavy FAISS rehydration and sentiment topic cleanup in background daemon thread
-        # so FastAPI completes startup in <0.1s and Uvicorn binds the port IMMEDIATELY for Render.
-        import threading
+            print("[Startup] Database tables and schema verified/migrated successfully.", flush=True)
+        except Exception as exc:
+            print(f"[Startup Warning] Automatic table creation/migration error: {exc}", flush=True)
 
-        def _bg_startup_tasks():
+        try:
+            from app.database import SessionLocal
+            from app.models.sentiment_score import SentimentScore
+            from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
+            db_session = SessionLocal()
             try:
-                from app.database import SessionLocal
-                from app.models.sentiment_score import SentimentScore
-                from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
-                db_session = SessionLocal()
-                try:
-                    scores = db_session.query(SentimentScore).all()
-                    updated_count = 0
-                    for s in scores:
-                        if s.topics:
-                            clean_t = [
-                                t for t in s.topics
-                                if t and t.lower() not in STOP_WORDS and _is_valid_topic_word(t)
-                            ]
-                            if not clean_t:
-                                clean_t = ["overview", "features", "pricing", "platform"]
-                            if clean_t != s.topics:
-                                s.topics = clean_t
-                                updated_count += 1
-                    if updated_count > 0:
-                        db_session.commit()
-                        print(f"[Startup] Self-healing: Cleaned garbled topics in {updated_count} sentiment score records.", flush=True)
-                finally:
-                    db_session.close()
-            except Exception as clean_err:
-                print(f"[Startup Warning] Legacy topics cleanup notice: {clean_err}", flush=True)
+                scores = db_session.query(SentimentScore).all()
+                updated_count = 0
+                for s in scores:
+                    if s.topics:
+                        clean_t = [
+                            t for t in s.topics
+                            if t and t.lower() not in STOP_WORDS and _is_valid_topic_word(t)
+                        ]
+                        if not clean_t:
+                            clean_t = ["overview", "features", "pricing", "platform"]
+                        if clean_t != s.topics:
+                            s.topics = clean_t
+                            updated_count += 1
+                if updated_count > 0:
+                    db_session.commit()
+                    print(f"[Startup] Self-healing: Cleaned garbled topics in {updated_count} sentiment score records.", flush=True)
+            finally:
+                db_session.close()
+        except Exception as clean_err:
+            print(f"[Startup Warning] Legacy topics cleanup notice: {clean_err}", flush=True)
 
-            try:
-                from app.services.vector_store import vector_store
-                vector_store.rehydrate_from_db()
-            except Exception as rehydrate_err:
-                print(f"[Startup Warning] FAISS rehydration notice: {rehydrate_err}", flush=True)
+        try:
+            from app.services.vector_store import vector_store
+            vector_store.rehydrate_from_db()
+        except Exception as rehydrate_err:
+            print(f"[Startup Warning] FAISS rehydration notice: {rehydrate_err}", flush=True)
 
-        threading.Thread(target=_bg_startup_tasks, daemon=True).start()
-
-    except Exception as exc:
-        print(f"[Startup Warning] Automatic table creation/migration error: {exc}", flush=True)
+    threading.Thread(target=_bg_startup_tasks, daemon=True).start()
 
 
 # Static files directory for rendered HTML reports

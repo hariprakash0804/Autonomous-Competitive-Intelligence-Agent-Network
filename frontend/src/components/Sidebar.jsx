@@ -17,6 +17,30 @@ export default function Sidebar({ onToggleChat }) {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const handleInsightClick = (type) => {
+    if (type === 'Competitors') {
+      navigate('/profile');
+    } else if (type === 'Price Intel') {
+      navigate('/dashboard');
+      setTimeout(() => {
+        const el = document.getElementById('price-timeline-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } else if (type === 'Sentiment') {
+      navigate('/dashboard');
+      setTimeout(() => {
+        const el = document.getElementById('sentiment-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    } else if (type === 'Reports') {
+      navigate('/dashboard');
+      setTimeout(() => {
+        const el = document.getElementById('reports-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+  };
+
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', color: 'text-indigo-400' },
     { label: 'Profile & Targets', icon: User, path: '/profile', color: 'text-violet-400' },

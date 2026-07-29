@@ -33,45 +33,50 @@ def on_startup():
             conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
             conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
 
-        # Self-healing cleanup for legacy garbled topics in sentiment_scores
-        try:
-            from app.database import SessionLocal
-            from app.models.sentiment_score import SentimentScore
-            from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
-            db_session = SessionLocal()
+        print("[Startup] Database tables and schema verified/migrated successfully.", flush=True)
+
+        # Run heavy FAISS rehydration and sentiment topic cleanup in background daemon thread
+        # so FastAPI completes startup in <0.1s and Uvicorn binds the port IMMEDIATELY for Render.
+        import threading
+
+        def _bg_startup_tasks():
             try:
-                scores = db_session.query(SentimentScore).all()
-                updated_count = 0
-                for s in scores:
-                    if s.topics:
-                        clean_t = [
-                            t for t in s.topics
-                            if t and t.lower() not in STOP_WORDS and _is_valid_topic_word(t)
-                        ]
-                        if not clean_t:
-                            clean_t = ["overview", "features", "pricing", "platform"]
-                        if clean_t != s.topics:
-                            s.topics = clean_t
-                            updated_count += 1
-                if updated_count > 0:
-                    db_session.commit()
-                    print(f"[Startup] Self-healing: Cleaned garbled topics in {updated_count} sentiment score records.")
-            finally:
-                db_session.close()
-        except Exception as clean_err:
-            print(f"[Startup Warning] Legacy topics cleanup notice: {clean_err}")
+                from app.database import SessionLocal
+                from app.models.sentiment_score import SentimentScore
+                from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
+                db_session = SessionLocal()
+                try:
+                    scores = db_session.query(SentimentScore).all()
+                    updated_count = 0
+                    for s in scores:
+                        if s.topics:
+                            clean_t = [
+                                t for t in s.topics
+                                if t and t.lower() not in STOP_WORDS and _is_valid_topic_word(t)
+                            ]
+                            if not clean_t:
+                                clean_t = ["overview", "features", "pricing", "platform"]
+                            if clean_t != s.topics:
+                                s.topics = clean_t
+                                updated_count += 1
+                    if updated_count > 0:
+                        db_session.commit()
+                        print(f"[Startup] Self-healing: Cleaned garbled topics in {updated_count} sentiment score records.", flush=True)
+                finally:
+                    db_session.close()
+            except Exception as clean_err:
+                print(f"[Startup Warning] Legacy topics cleanup notice: {clean_err}", flush=True)
 
-        print("[Startup] Database tables and schema verified/migrated successfully.")
+            try:
+                from app.services.vector_store import vector_store
+                vector_store.rehydrate_from_db()
+            except Exception as rehydrate_err:
+                print(f"[Startup Warning] FAISS rehydration notice: {rehydrate_err}", flush=True)
 
-        # Auto-rehydrate FAISS vector store on Render startup if empty
-        try:
-            from app.services.vector_store import vector_store
-            vector_store.rehydrate_from_db()
-        except Exception as rehydrate_err:
-            print(f"[Startup Warning] FAISS rehydration notice: {rehydrate_err}")
+        threading.Thread(target=_bg_startup_tasks, daemon=True).start()
 
     except Exception as exc:
-        print(f"[Startup Warning] Automatic table creation/migration error: {exc}")
+        print(f"[Startup Warning] Automatic table creation/migration error: {exc}", flush=True)
 
 
 # Static files directory for rendered HTML reports

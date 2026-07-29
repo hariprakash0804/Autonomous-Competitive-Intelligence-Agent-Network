@@ -10,14 +10,16 @@ import {
   FileText,
   Activity,
   DollarSign,
+  X,
 } from 'lucide-react';
 
-export default function Sidebar({ onToggleChat }) {
+export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClose }) {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
   const handleInsightClick = (type) => {
+    onMobileClose?.();
     if (type === 'Competitors') {
       navigate('/profile');
     } else if (type === 'Price Intel') {
@@ -47,7 +49,15 @@ export default function Sidebar({ onToggleChat }) {
   ];
 
   const toolItems = [
-    { label: 'RAG AI Chat', icon: Sparkles, action: () => onToggleChat?.(), color: 'text-cyan-400' },
+    {
+      label: 'RAG AI Chat',
+      icon: Sparkles,
+      action: () => {
+        onMobileClose?.();
+        onToggleChat?.();
+      },
+      color: 'text-cyan-400',
+    },
   ];
 
   const insightItems = [
@@ -58,14 +68,25 @@ export default function Sidebar({ onToggleChat }) {
   ];
 
   return (
-    <aside
-      className={`sidebar ${collapsed ? 'collapsed' : ''} h-full flex flex-col bg-[#08080f]/80 backdrop-blur-xl border-r border-white/[0.04] relative z-20`}
-    >
+    <>
+      {/* Mobile Backdrop */}
+      {mobileOpen && (
+        <div
+          onClick={() => onMobileClose?.()}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden transition-opacity animate-fade-in"
+        />
+      )}
+
+      <aside
+        className={`sidebar ${collapsed ? 'collapsed' : ''} fixed lg:static inset-y-0 left-0 z-50 transform ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } transition-transform duration-300 ease-in-out h-full flex flex-col bg-[#08080f]/95 backdrop-blur-xl border-r border-white/[0.04] w-64 lg:w-auto`}
+      >
       {/* Aurora glow on sidebar top */}
       <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-indigo-500/[0.04] to-transparent pointer-events-none" />
 
       {/* Logo Area */}
-      <div className="p-4 border-b border-white/[0.04] relative">
+      <div className="p-4 border-b border-white/[0.04] relative flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
@@ -84,6 +105,13 @@ export default function Sidebar({ onToggleChat }) {
             </div>
           )}
         </div>
+        {/* Mobile close button */}
+        <button
+          onClick={() => onMobileClose?.()}
+          className="lg:hidden text-slate-500 hover:text-slate-200 p-1.5 rounded-lg bg-white/[0.04]"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Navigation */}
@@ -181,5 +209,6 @@ export default function Sidebar({ onToggleChat }) {
       {/* Ambient glow at bottom */}
       <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-indigo-500/[0.02] to-transparent pointer-events-none" />
     </aside>
-  );
+  </>
+);
 }

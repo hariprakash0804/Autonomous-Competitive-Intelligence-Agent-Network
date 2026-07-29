@@ -344,7 +344,7 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
   };
 
   return (
-    <div className="bg-[#0a0a14]/98 backdrop-blur-2xl rounded-2xl border border-indigo-500/25 shadow-2xl flex flex-col h-[560px] w-full max-w-lg animate-spring-in overflow-hidden"
+    <div className="bg-[#0a0a14]/98 backdrop-blur-2xl rounded-2xl border border-indigo-500/25 shadow-2xl flex flex-col h-[85vh] sm:h-[560px] w-full max-w-[calc(100vw-1.5rem)] sm:max-w-lg animate-spring-in overflow-hidden"
       style={{ boxShadow: '0 25px 80px -20px rgba(99, 102, 241, 0.3), 0 0 50px rgba(0, 0, 0, 0.8)' }}
     >
       {/* Header */}

@@ -15,7 +15,7 @@ import ComparativeMatrix from '../components/ComparativeMatrix';
 import {
   LogOut, Plus, Sparkles, Building2,
   AlertCircle, LayoutDashboard, Globe, FileText, Activity,
-  DollarSign, Clock, CheckCircle2
+  DollarSign, Clock, CheckCircle2, Menu
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────
@@ -54,6 +54,7 @@ export default function DashboardPage() {
   const [activeRunId, setActiveRunId] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
@@ -232,21 +233,34 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#050507] text-slate-100 flex font-sans noise-overlay">
-      {/* Sidebar */}
-      <Sidebar onToggleChat={() => setShowChat(!showChat)} />
+      {/* Responsive Sidebar */}
+      <Sidebar
+        onToggleChat={() => setShowChat(!showChat)}
+        mobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
         {/* Top Navbar */}
         <header className="bg-[#08080f]/70 backdrop-blur-xl border-b border-white/[0.04] sticky top-0 z-30">
-          <div className="px-6 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-4">
+          <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="lg:hidden p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 transition-colors"
+                title="Open Navigation"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+
               <div>
-                <h1 className="text-sm font-bold text-white font-display flex items-center gap-2">
+                <h1 className="text-xs sm:text-sm font-bold text-white font-display flex items-center gap-2">
                   <LayoutDashboard className="w-4 h-4 text-indigo-400" />
                   Intelligence Dashboard
                 </h1>
-                <p className="text-[10px] text-slate-500">Real-time competitive analysis command center</p>
+                <p className="text-[10px] text-slate-500 hidden sm:block">Real-time competitive analysis command center</p>
               </div>
             </div>
 

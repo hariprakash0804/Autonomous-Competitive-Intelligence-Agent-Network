@@ -1,6 +1,33 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown } from 'lucide-react';
 
+function extractBulletPointsFromSection(markdown, sectionKeywords) {
+  if (!markdown || typeof markdown !== 'string') return [];
+
+  const sections = markdown.split(/\n(?=##\s+)/);
+  for (const sec of sections) {
+    const lines = sec.trim().split('\n');
+    const headerLine = lines[0] || '';
+    
+    const isMatch = sectionKeywords.some(kw => headerLine.toLowerCase().includes(kw.toLowerCase()));
+    if (isMatch) {
+      const bullets = [];
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('-') || line.startsWith('*') || /^\d+\./.test(line)) {
+          const cleanText = line.replace(/^[-*\d.]+\s*/, '').trim();
+          if (cleanText) {
+            bullets.push(cleanText);
+          }
+        }
+      }
+      if (bullets.length > 0) return bullets;
+    }
+  }
+
+  return [];
+}
+
 export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData }) {
   const [activeTab, setActiveTab] = useState('matrix');
 
@@ -135,102 +162,133 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
           </div>
 
           {/* Advantages vs Disadvantages */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* Advantages Column */}
-            <div className="rounded-xl p-5 space-y-4 bg-emerald-500/[0.03] border border-emerald-500/10 neon-emerald">
-              <div className="flex items-center justify-between border-b border-emerald-500/10 pb-3">
-                <h3 className="text-xs font-bold text-emerald-300 flex items-center gap-2 font-display">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Key Advantages
-                </h3>
-                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-lg font-semibold">
-                  Wins
-                </span>
-              </div>
-              <ul className="space-y-3 text-xs text-slate-300">
-                {[
-                  {
-                    title: 'Faster Onboarding & Implementation:',
-                    body: `Lower time-to-value for development teams compared to ${competitorName}'s enterprise setup process.`,
-                    strength: 85,
-                  },
-                  {
-                    title: 'Transparent & Predictable Pricing:',
-                    body: 'User-based tiers without mandatory annual lock-in or unannounced add-on costs.',
-                    strength: 78,
-                  },
-                  {
-                    title: 'Modern Architecture:',
-                    body: 'Native multi-agent background orchestration and instant automated intelligence reports.',
-                    strength: 92,
-                  },
-                  {
-                    title: 'Responsive Customer Support:',
-                    body: 'Faster response SLAs and direct support channel access for engineering teams.',
-                    strength: 70,
-                  },
-                ].map((point, idx) => (
-                  <li key={idx} style={{ '--i': idx }} className="stagger-item space-y-1.5">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                      <div>
-                        <strong className="text-slate-100">{point.title}</strong> {point.body}
-                      </div>
-                    </div>
-                    {/* Strength bar */}
-                    <div className="ml-4 progress-bar">
-                      <div className="progress-bar-fill" style={{ width: `${point.strength}%`, background: 'linear-gradient(90deg, #10b981, #34d399)' }} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {(() => {
+            // Dynamically extract real Advantages and Gaps from the report summary
+            const extractedAdvantages = extractBulletPointsFromSection(reportSummary, ['Key Advantages', 'Advantages', 'Wins']);
+            const extractedGaps = extractBulletPointsFromSection(reportSummary, ['Key Disadvantages', 'Gaps', 'Disadvantages', 'Address']);
 
-            {/* Disadvantages Column */}
-            <div className="rounded-xl p-5 space-y-4 bg-amber-500/[0.03] border border-amber-500/10 neon-amber">
-              <div className="flex items-center justify-between border-b border-amber-500/10 pb-3">
-                <h3 className="text-xs font-bold text-amber-300 flex items-center gap-2 font-display">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  Gaps vs {competitorName}
-                </h3>
-                <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-lg font-semibold">
-                  Address
-                </span>
+            // Fallback points dynamically tailored to the selected competitor
+            const defaultAdvantages = [
+              {
+                title: 'Faster Onboarding & Implementation:',
+                body: `Lower time-to-value for development teams compared to ${competitorName}'s setup process.`,
+                strength: 85,
+              },
+              {
+                title: 'Predictable Pricing Model:',
+                body: `User-based tiers and spend controls tailored for cost predictability against ${competitorName}.`,
+                strength: 78,
+              },
+              {
+                title: 'Modern Architecture:',
+                body: 'Native multi-agent background orchestration and instant automated intelligence reports.',
+                strength: 92,
+              },
+              {
+                title: 'Responsive Customer Support:',
+                body: 'Faster response SLAs and direct support channel access for engineering teams.',
+                strength: 70,
+              },
+            ];
+
+            const defaultGaps = [
+              {
+                title: `${competitorName} Market Positioning:`,
+                body: `${competitorName} maintains targeted positioning and web assets across ${selectedCompetitor.domain || competitorName}.`,
+                gap: 65,
+              },
+              {
+                title: 'Ecosystem & Integration Footprint:',
+                body: `${competitorName} leverages specific tech stack integrations (${technographics.slice(0, 3).join(', ') || 'third-party APIs'}).`,
+                gap: 55,
+              },
+              {
+                title: 'Specialized Vertical Capabilities:',
+                body: `${competitorName} highlights targeted feature sets and specialized deployment options for its user base.`,
+                gap: 45,
+              },
+            ];
+
+            const advantageItems = extractedAdvantages.length > 0
+              ? extractedAdvantages.map((bullet, idx) => {
+                  const parts = bullet.split(':');
+                  const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Advantage ${idx + 1}:`;
+                  const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
+                  return { title, body, strength: Math.max(65, 95 - idx * 8) };
+                })
+              : defaultAdvantages;
+
+            const gapItems = extractedGaps.length > 0
+              ? extractedGaps.map((bullet, idx) => {
+                  const parts = bullet.split(':');
+                  const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Gap ${idx + 1}:`;
+                  const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
+                  return { title, body, gap: Math.max(45, 75 - idx * 10) };
+                })
+              : defaultGaps;
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Advantages Column */}
+                <div className="rounded-xl p-5 space-y-4 bg-emerald-500/[0.03] border border-emerald-500/10 neon-emerald">
+                  <div className="flex items-center justify-between border-b border-emerald-500/10 pb-3">
+                    <h3 className="text-xs font-bold text-emerald-300 flex items-center gap-2 font-display">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      Key Advantages ({advantageItems.length})
+                    </h3>
+                    <span className="text-[10px] bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-lg font-semibold">
+                      Wins
+                    </span>
+                  </div>
+                  <ul className="space-y-3 text-xs text-slate-300">
+                    {advantageItems.map((point, idx) => (
+                      <li key={idx} style={{ '--i': idx }} className="stagger-item space-y-1.5">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
+                          <div>
+                            <strong className="text-slate-100">{point.title}</strong> {point.body}
+                          </div>
+                        </div>
+                        {/* Strength bar */}
+                        <div className="ml-4 progress-bar">
+                          <div className="progress-bar-fill" style={{ width: `${point.strength}%`, background: 'linear-gradient(90deg, #10b981, #34d399)' }} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Disadvantages Column */}
+                <div className="rounded-xl p-5 space-y-4 bg-amber-500/[0.03] border border-amber-500/10 neon-amber">
+                  <div className="flex items-center justify-between border-b border-amber-500/10 pb-3">
+                    <h3 className="text-xs font-bold text-amber-300 flex items-center gap-2 font-display">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      Gaps vs {competitorName} ({gapItems.length})
+                    </h3>
+                    <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-lg font-semibold">
+                      Address
+                    </span>
+                  </div>
+                  <ul className="space-y-3 text-xs text-slate-300">
+                    {gapItems.map((point, idx) => (
+                      <li key={idx} style={{ '--i': idx }} className="stagger-item space-y-1.5">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                          <div>
+                            <strong className="text-slate-100">{point.title}</strong> {point.body}
+                          </div>
+                        </div>
+                        {/* Gap bar */}
+                        <div className="ml-4 progress-bar">
+                          <div className="progress-bar-fill" style={{ width: `${point.gap}%`, background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
-              <ul className="space-y-3 text-xs text-slate-300">
-                {[
-                  {
-                    title: 'Plugin Ecosystem Breadth:',
-                    body: `${competitorName} currently maintains more pre-built 3rd party marketplace integrations.`,
-                    gap: 65,
-                  },
-                  {
-                    title: 'Legacy Enterprise Brand Recognition:',
-                    body: `${competitorName} holds established legacy brand presence in Fortune 500 accounts.`,
-                    gap: 55,
-                  },
-                  {
-                    title: 'Specialized Industry Certifications:',
-                    body: `${competitorName} advertises compliance standard badges for healthcare and finance verticals.`,
-                    gap: 45,
-                  },
-                ].map((point, idx) => (
-                  <li key={idx} style={{ '--i': idx }} className="stagger-item space-y-1.5">
-                    <div className="flex items-start gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                      <div>
-                        <strong className="text-slate-100">{point.title}</strong> {point.body}
-                      </div>
-                    </div>
-                    {/* Gap bar */}
-                    <div className="ml-4 progress-bar">
-                      <div className="progress-bar-fill" style={{ width: `${point.gap}%`, background: 'linear-gradient(90deg, #f59e0b, #fbbf24)' }} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+            );
+          })()}
         </div>
       ) : (
         /* Executive Report View */

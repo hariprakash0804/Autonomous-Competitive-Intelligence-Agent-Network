@@ -287,8 +287,16 @@ def change_detector_node(state: AgentState) -> AgentState:
 
         # 2. Extract real plan tier prices for both Competitor and User's Company
         #    Only extract from pages that are likely pricing pages (URL or content signals)
-        existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0
-        if existing_changes == 0 and snapshots and valid_pages:
+        # 2. Extract & Sync real plan tier prices for both Competitor and User's Company
+        #    Only extract from pages that are likely pricing pages (URL or content signals)
+        existing_baseline_tiers = set(
+            db.scalars(
+                select(PriceChange.tier_name)
+                .where(PriceChange.competitor_id == competitor_id, PriceChange.old_price.is_(None))
+            ).all()
+        )
+
+        if snapshots and valid_pages:
             extracted_plans = []
             seen_tiers = set()
 
@@ -321,7 +329,7 @@ def change_detector_node(state: AgentState) -> AgentState:
                     if is_user_page:
                         t_name = f"(Our Company) {t_name}"
 
-                    if t_name not in seen_tiers:
+                    if t_name not in seen_tiers and t_name not in existing_baseline_tiers:
                         seen_tiers.add(t_name)
                         plan["tier_name"] = t_name
                         extracted_plans.append(plan)

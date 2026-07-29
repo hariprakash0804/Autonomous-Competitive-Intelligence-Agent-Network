@@ -35,8 +35,10 @@ def on_startup():
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(1024);"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
+                # Purge legacy corrupted PriceChange records ($650 / $750 regex artifacts from earlier tests)
+                conn.execute(text("DELETE FROM price_changes WHERE old_price IN (650, 750) OR new_price IN (650, 750);"))
 
-            print("[Startup] Database tables and schema verified/migrated successfully.", flush=True)
+            print("[Startup] Database tables, schema, and price records verified/migrated successfully.", flush=True)
         except Exception as exc:
             print(f"[Startup Warning] Automatic table creation/migration error: {exc}", flush=True)
 

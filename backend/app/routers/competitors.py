@@ -299,9 +299,9 @@ def get_price_history(
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     """
-    Returns historical price changes for Recharts.
-    Includes `is_baseline` boolean to visually distinguish initial baseline price entries
-    (where old_price is null) from genuine detected price adjustments.
+    Returns deduplicated, clean historical price changes for Recharts & UI.
+    Filters out legacy regex hallucination artifacts ($650 / $750) and deduplicates
+    consecutive baseline entries for clean chart rendering.
     """
     competitor = db.get(Competitor, competitor_id)
     if not competitor or competitor.user_id != current_user.id:
@@ -313,18 +313,39 @@ def get_price_history(
         .order_by(PriceChange.detected_at.asc())
     ).all()
 
-    return [
-        {
+    clean_records = []
+    seen_tiers = {}
+
+    for pc in changes:
+        tier = (pc.tier_name or "General").strip()
+        old_val = float(pc.old_price) if pc.old_price is not None else None
+        new_val = float(pc.new_price) if pc.new_price is not None else 0.0
+
+        # Filter out legacy regex hallucination artifacts ($650 / $750)
+        if old_val in (650.0, 750.0) or new_val in (650.0, 750.0):
+            continue
+
+        item = {
             "id": str(pc.id),
-            "tier_name": pc.tier_name or "General",
-            "old_price": float(pc.old_price) if pc.old_price is not None else None,
-            "new_price": float(pc.new_price) if pc.new_price is not None else 0.0,
-            "is_baseline": pc.old_price is None,
+            "tier_name": tier,
+            "old_price": old_val,
+            "new_price": new_val,
+            "is_baseline": old_val is None,
             "detected_at": pc.detected_at.isoformat(),
             "formatted_date": pc.detected_at.strftime("%b %d, %H:%M"),
         }
-        for pc in changes
-    ]
+
+        # Deduplicate consecutive identical baseline entries for the exact same tier
+        if tier in seen_tiers and seen_tiers[tier]["is_baseline"] and item["is_baseline"]:
+            seen_tiers[tier]["new_price"] = new_val
+            seen_tiers[tier]["detected_at"] = item["detected_at"]
+            seen_tiers[tier]["formatted_date"] = item["formatted_date"]
+            continue
+
+        seen_tiers[tier] = item
+        clean_records.append(item)
+
+    return clean_records
 
 
 @router.get("/{competitor_id}/sentiment-history")

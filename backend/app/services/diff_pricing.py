@@ -172,6 +172,9 @@ def _regex_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
     return changes
 
 
+_LLM_PRICING_CACHE: Dict[str, List[Dict[str, Any]]] = {}
+
+
 def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
     """
     LLM-powered pricing extraction that can detect ANY pricing structure,
@@ -179,6 +182,15 @@ def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
     per-seat pricing, and complex pricing tables.
     """
     from app.services.llm import call_openrouter
+    import hashlib
+
+    if not text:
+        return []
+
+    cache_key = hashlib.md5(text[:4000].encode("utf-8")).hexdigest()
+    if cache_key in _LLM_PRICING_CACHE:
+        print(f"[LLM Pricing Cache] Hit for text hash {cache_key[:8]}", flush=True)
+        return _LLM_PRICING_CACHE[cache_key]
 
     api_key = settings.LLM_API_KEY or ""
     if not api_key:
@@ -245,6 +257,7 @@ If no real pricing tiers are found, return: []"""
                 "key_features": item.get("key_features", []),
             })
 
+        _LLM_PRICING_CACHE[cache_key] = results
         return results
 
     except json.JSONDecodeError as e:

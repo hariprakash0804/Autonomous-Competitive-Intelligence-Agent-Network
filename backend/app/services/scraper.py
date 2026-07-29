@@ -1220,16 +1220,17 @@ def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_pla
                         **structured,
                     }
 
-                # If content is a JS shell / Cloudflare bot challenge / empty, try Playwright or Jina Reader fallback
+                # If content is a JS shell / Cloudflare bot challenge / empty / blocked (e.g. 403),
+                # try Jina AI Reader FIRST (sub-second API call, bypasses bot challenges without Chromium overhead)
                 if is_stale:
-                    if use_playwright and content_type == "html":
-                        pw_res = scrape_with_playwright(url, timeout_sec=8.0)
-                        if pw_res and not pw_res.get("is_stale"):
-                            return pw_res
-
-                    jina_res = scrape_with_jina_reader(url, timeout_sec=10.0)
+                    jina_res = scrape_with_jina_reader(url, timeout_sec=6.0)
                     if jina_res and not jina_res.get("is_stale"):
                         return jina_res
+
+                    if use_playwright and content_type == "html":
+                        pw_res = scrape_with_playwright(url, timeout_sec=6.0)
+                        if pw_res and not pw_res.get("is_stale"):
+                            return pw_res
 
                 return {
                     "url": url,
@@ -1265,15 +1266,15 @@ def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_pla
                 time.sleep(0.5 * (attempt + 1))
                 continue
 
-    # Final fallback attempt using Playwright or Jina AI Reader
-    if use_playwright:
-        pw_res = scrape_with_playwright(url, timeout_sec=8.0)
-        if pw_res and not pw_res.get("is_stale"):
-            return pw_res
-
-    jina_res = scrape_with_jina_reader(url, timeout_sec=10.0)
+    # Final fallback attempt: Try Jina AI Reader first, then Playwright
+    jina_res = scrape_with_jina_reader(url, timeout_sec=6.0)
     if jina_res and not jina_res.get("is_stale"):
         return jina_res
+
+    if use_playwright:
+        pw_res = scrape_with_playwright(url, timeout_sec=6.0)
+        if pw_res and not pw_res.get("is_stale"):
+            return pw_res
 
     return {
         "url": url,

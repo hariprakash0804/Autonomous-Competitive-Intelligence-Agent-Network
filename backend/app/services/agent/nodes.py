@@ -123,7 +123,7 @@ def researcher_node(state: AgentState) -> AgentState:
                     homepage_text = page.get("clean_text", "")
                     break
 
-            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=6)
+            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=4)
             for probe_url in probe_urls:
                 probe_clean = probe_url.rstrip("/")
                 if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in pricing_probe_urls]:
@@ -145,8 +145,8 @@ def researcher_node(state: AgentState) -> AgentState:
                 ):
                     general_internal_urls.append(link_item.get("url"))
 
-        # Combine: Pricing probes FIRST, then general internal links fill remaining slots
-        discovered_urls = (pricing_probe_urls + general_internal_urls)[:8]
+        # Combine: Pricing probes FIRST, then general internal links fill remaining slots (Cap: 5 max for 10s execution)
+        discovered_urls = (pricing_probe_urls + general_internal_urls)[:5]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)

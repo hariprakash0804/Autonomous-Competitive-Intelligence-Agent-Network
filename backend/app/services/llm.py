@@ -47,7 +47,7 @@ def _get_cached_client(api_key: str) -> OpenAI:
     return _cached_client
 
 
-def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
+def call_openrouter(prompt: str, api_key: str, max_tokens: int = 4000) -> Tuple[str, str]:
     """
     Invokes OpenRouter API using OpenAI SDK with active free models pool.
     Proactively enforces a 0.5s delay and reactively catches 429 rate limits
@@ -72,7 +72,7 @@ def call_openrouter(prompt: str, api_key: str) -> Tuple[str, str]:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=2500,
+                max_tokens=max_tokens,
                 timeout=25.0,
             )
             model_served = getattr(response, "model", model)
@@ -215,12 +215,14 @@ def generate_executive_report(
     rich_context = _build_rich_context(pages_summary, user_company_name, user_company_url)
 
     prompt = f"""
-You are an expert Competitive Intelligence Analyst. Generate a detailed, data-driven comparative intelligence report comparing '{user_company_name}' vs '{competitor_name}'.
+You are an expert Competitive Intelligence Analyst. Generate a comprehensive, data-driven comparative intelligence report comparing '{user_company_name}' vs '{competitor_name}'.
 
-IMPORTANT: Base your analysis STRICTLY on the scraped page data provided below. Do NOT fabricate features, prices, or capabilities that are not present in the data.
+IMPORTANT RULES:
+- Base your analysis STRICTLY on the scraped page data provided below. Do NOT fabricate features, prices, or capabilities.
+- Write out full details, tables, and bullet points. Do NOT abbreviate or skip sections.
 
 ═══════════════════════════════════════════════
-SCRAPED PAGE DATA (Use this as your primary source)
+SCRAPED PAGE DATA (Primary Source)
 ═══════════════════════════════════════════════
 {rich_context}
 
@@ -238,32 +240,32 @@ SENTIMENT & TOPIC ANALYSIS
 Data Quality: {'INCOMPLETE - some pages were stale after retries' if is_incomplete else 'Complete'}
 ═══════════════════════════════════════════════
 
-Report Structure MUST include ALL 6 sections:
+Your report MUST include ALL 6 sections completely without stopping mid-section:
 
 # Competitive Intelligence Executive Summary: {user_company_name} vs {competitor_name}
 
 ## Executive Brief
-Brief high-level comparative summary of both companies based on the scraped data.
+Detailed comparative summary comparing positioning, target audience, key technology, and strategic focus based on the scraped content.
 
 ## 1. Feature & Capability Comparison Matrix
-Compare product capabilities, developer experience, scalability, and target market. Use a Markdown table comparing dimensions like Core Product, Key Features, Target Audience, Technology, and Integrations.
+Compare product capabilities, developer tools, model offerings, security, and integrations. Use a complete Markdown table with dimensions: Core Product, Key Features, Target Audience, Technology, and Integrations.
 
 ## 2. Pricing & Tier Structure Comparison
-Compare pricing plans, tiers, free offerings, enterprise pricing. Quote actual prices from the scraped data.
+Provide a thorough breakdown of ALL pricing plans, subscription tiers, per-token rates, and enterprise pricing from the scraped data. Quote exact prices (e.g. Free, $20/user/mo, $25/user/mo, per-token rates like $0.075/M input tokens, $0.30/M output tokens, $0.59/M input, $0.79/M output). Detail what each tier includes.
 
 ## 3. Key Advantages of {user_company_name} over {competitor_name}
-Bullet list of advantages derived from the scraped content.
+Detailed bulleted list of strengths, capabilities, and features where {user_company_name} leads based on the scraped data.
 
 ## 4. Key Disadvantages & Gaps of {user_company_name} vs {competitor_name}
-Bullet list of areas where {competitor_name} has an edge.
+Detailed bulleted list of areas where {competitor_name} holds an advantage (e.g., lower token cost, faster speed, open models, specialized custom silicon, unique integrations).
 
 ## 5. Sentiment & Market Perception Analysis
-Analysis based on the sentiment scores and topics provided.
+Summarize sentiment scores, market perception, and top topics extracted from the ingested content.
 
 ## 6. Strategic Recommendations & Action Plan
-Actionable steps for marketing, product roadmap, and sales positioning.
+Provide 3-4 concrete, actionable strategic recommendations for product roadmap, pricing positioning, and competitive differentiation.
 
-CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-table or truncate mid-sentence. Reference specific data points from the scraped content.
+CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-section or truncate.
 """
 
     if is_incomplete:
@@ -272,7 +274,7 @@ CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-table or truncate mi
     # 1. OpenRouter Provider Execution
     if provider == "openrouter" and api_key:
         try:
-            report_text, model_used = call_openrouter(prompt, api_key)
+            report_text, model_used = call_openrouter(prompt, api_key, max_tokens=4000)
             return report_text, f"openrouter/{model_used}"
         except Exception as exc:
             print(f"[OpenRouter API Failure] {exc}. Falling back to instant structured comparative generator.")

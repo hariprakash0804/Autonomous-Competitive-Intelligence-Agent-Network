@@ -115,24 +115,34 @@ def researcher_node(state: AgentState) -> AgentState:
                     discovered_urls.append(link_item.get("url"))
 
         # Pass 2.5: Proactive pricing page probe — many competitors (e.g. OpenAI) hide pricing
-        # at non-obvious URLs like /api/pricing that aren't linked from the homepage HTML.
+        # at non-obvious URLs like /api/pricing, /chatgpt/pricing, /business/pricing.
         # Probe well-known canonical pricing paths for each unique domain.
-        _PRICING_PROBE_PATHS = ["/pricing", "/api/pricing", "/plans"]
+        from app.services.scraper import generate_pricing_probe_urls
+
         probed_domains = set()
-        for url in urls:
-            parsed = urlparse(url)
+        for seed_url in urls:
+            parsed = urlparse(seed_url)
             domain_key = f"{parsed.scheme}://{parsed.netloc}"
             if domain_key in probed_domains:
                 continue
             probed_domains.add(domain_key)
-            for probe_path in _PRICING_PROBE_PATHS:
-                probe_url = domain_key + probe_path
+
+            # Get homepage text for dynamic product-slug extraction
+            homepage_text = ""
+            for page in raw_pages:
+                if page.get("url", "").rstrip("/") == seed_url.rstrip("/") and not page.get("is_stale"):
+                    homepage_text = page.get("clean_text", "")
+                    break
+
+            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=8)
+            for probe_url in probe_urls:
                 probe_clean = probe_url.rstrip("/")
                 if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in discovered_urls]:
                     discovered_urls.append(probe_url)
 
-        # Cap discovered URLs to 10 pages per run for optimal speed & complete coverage
-        discovered_urls = discovered_urls[:10]
+        # Cap discovered URLs to 12 pages per run — balances complete coverage vs speed.
+        # With 2 competitors: ~2-4 internal links + ~8 pricing probes per domain = fits under cap.
+        discovered_urls = discovered_urls[:12]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)

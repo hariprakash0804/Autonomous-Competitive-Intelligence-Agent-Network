@@ -518,6 +518,148 @@ _KEY_LINK_CATEGORIES = {
 }
 
 
+# ── Comprehensive Pricing Page URL Probing ────────────────────────────────────
+
+# Standard pricing path patterns used by SaaS/tech companies worldwide.
+# Ordered by frequency/likelihood — most common patterns first.
+_STANDARD_PRICING_PATHS = [
+    # Tier 1: Universal patterns (95%+ of SaaS companies)
+    "/pricing",
+    "/plans",
+    # Tier 2: Generic product-segment patterns (work across most companies)
+    "/api/pricing",
+    "/business/pricing",
+    "/platform/pricing",
+    "/cloud/pricing",
+    # Tier 3: Developer/Enterprise pricing
+    "/developers/pricing",
+    "/enterprise/pricing",
+    "/enterprise",
+    # Tier 4: Alternative naming patterns
+    "/pricing-plans",
+    "/compare-plans",
+    "/pricing-options",
+    "/product/pricing",
+    # Tier 5: Cost calculators & usage-based pricing
+    "/cost",
+    "/calculator",
+    "/pricing/calculator",
+]
+
+
+def generate_pricing_probe_urls(
+    base_url: str,
+    homepage_text: str = "",
+    max_probes: int = 8,
+) -> List[str]:
+    """
+    Generates a comprehensive list of pricing page URLs to probe for a given domain.
+
+    Many companies hide pricing at non-obvious URLs:
+      - OpenAI: /chatgpt/pricing, /api/pricing, /business/pricing
+      - Databricks: /product/pricing
+      - Snowflake: /pricing-options
+      - Anthropic: /pricing (redirects to claude.com/pricing)
+      - Google Cloud: /pricing, /products/pricing
+
+    This function generates both static probe paths and dynamic product-specific
+    pricing URLs extracted from the homepage content.
+
+    Args:
+        base_url: The competitor's seed URL (e.g., "https://openai.com")
+        homepage_text: Optional clean text from the homepage to extract product names
+        max_probes: Maximum number of probe URLs to return
+    Returns:
+        List of unique pricing URLs to probe
+    """
+    parsed = urlparse(base_url)
+    domain_key = f"{parsed.scheme}://{parsed.netloc}"
+
+    probes = []
+    seen = set()
+
+    def _add_probe(path: str):
+        url = domain_key + path
+        clean = url.rstrip("/")
+        if clean not in seen:
+            seen.add(clean)
+            probes.append(url)
+
+    # ─── Step 1: Extract dynamic product slugs from homepage FIRST ───
+    #     so we can interleave them at the right priority level.
+    dynamic_slug_probes = []
+    if homepage_text:
+        extracted_slugs = set()
+        _STOP_SLUGS = {
+            "the", "our", "new", "all", "and", "for", "get", "see", "try", "log",
+            "sign", "contact", "learn", "read", "view", "start", "join", "help",
+            "home", "about", "blog", "news", "docs", "team", "more", "here",
+            "research", "company", "careers", "jobs", "press", "resources",
+            "legal", "privacy", "terms", "security", "trust", "status",
+            "partners", "events", "webinars", "changelog", "updates",
+        }
+        _ALREADY_COVERED = {
+            "pricing", "plans", "api", "enterprise", "business", "developers",
+            "platform", "cloud", "products", "solutions", "services", "features",
+            "support", "console", "dashboard", "account", "settings", "customer-stories",
+            "case-studies", "testimonials", "customers", "stories", "intl",
+        }
+
+        # Pattern 1: "Try X", "Explore X", "Meet X", "Introducing X"
+        for m in re.finditer(r"(?:try|explore|meet|introducing|launch)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)", homepage_text[:5000]):
+            slug = m.group(1).strip().lower().replace(" ", "-")
+            if len(slug) >= 3 and slug not in _STOP_SLUGS and slug not in _ALREADY_COVERED:
+                extracted_slugs.add(slug)
+
+        # Pattern 2: Markdown links [Product Name](/product/...) from Jina Reader output
+        for m in re.finditer(r"\[([A-Za-z][A-Za-z0-9 ]{1,20})\]\((/[a-z][a-z0-9-]*)", homepage_text[:8000]):
+            path_slug = m.group(2).strip("/").split("/")[0]
+            if len(path_slug) >= 3 and path_slug not in _STOP_SLUGS and path_slug not in _ALREADY_COVERED:
+                extracted_slugs.add(path_slug)
+
+        # Pattern 3: Extract from internal URL paths like /chatgpt/, /claude/, /groqcloud/
+        for m in re.finditer(r"https?://[^/]+/([a-z][a-z0-9-]{2,15})(?:/|$|\s)", homepage_text[:8000]):
+            path_slug = m.group(1)
+            if path_slug not in _STOP_SLUGS and path_slug not in _ALREADY_COVERED:
+                extracted_slugs.add(path_slug)
+
+        dynamic_slug_probes = [f"/{slug}/pricing" for slug in list(extracted_slugs)[:5]]
+
+    # ─── Step 2: Build prioritized probe list ───
+    # Tier 1: Universal patterns (highest priority — always first)
+    _add_probe("/pricing")
+    _add_probe("/plans")
+
+    # Tier 2: Generic product-segment patterns
+    _add_probe("/api/pricing")
+    _add_probe("/business/pricing")
+
+    # Tier 2.5: Dynamic product-specific paths (e.g., /chatgpt/pricing, /claude/pricing)
+    #           These are HIGH priority because they are tailored to the actual competitor.
+    for path in dynamic_slug_probes:
+        _add_probe(path)
+
+    # Tier 3: More generic segment patterns
+    _add_probe("/platform/pricing")
+    _add_probe("/cloud/pricing")
+    _add_probe("/developers/pricing")
+    _add_probe("/enterprise/pricing")
+    _add_probe("/enterprise")
+
+    # Tier 4: Alternative naming patterns (less common)
+    _add_probe("/pricing-plans")
+    _add_probe("/compare-plans")
+    _add_probe("/pricing-options")
+    _add_probe("/product/pricing")
+
+    # Tier 5: Cost calculators & usage-based pricing
+    _add_probe("/cost")
+    _add_probe("/calculator")
+    _add_probe("/pricing/calculator")
+
+    # Return capped results, prioritized by tier
+    return probes[:max_probes]
+
 def extract_key_internal_links(soup: BeautifulSoup, base_url: str, max_links_per_category: int = 2) -> List[Dict[str, str]]:
     """
     Scans HTML <a> tags and discovers key internal sub-page URLs on the same domain.

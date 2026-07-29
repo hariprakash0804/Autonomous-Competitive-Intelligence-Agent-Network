@@ -354,7 +354,7 @@ def get_sentiment_history(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    """Returns historical sentiment scores for Recharts."""
+    """Returns historical sentiment scores, key topics, and positive/negative sentiment driver words."""
     competitor = db.get(Competitor, competitor_id)
     if not competitor or competitor.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
@@ -365,7 +365,7 @@ def get_sentiment_history(
         .order_by(SentimentScore.scored_at.asc())
     ).all()
 
-    from app.services.sentiment import _is_valid_topic_word, STOP_WORDS
+    from app.services.sentiment import _is_valid_topic_word, STOP_WORDS, extract_sentiment_words
 
     results = []
     for ss in scores:
@@ -376,11 +376,22 @@ def get_sentiment_history(
         if not clean_topics:
             clean_topics = ["overview", "features", "pricing", "platform"]
 
+        # Extract positive and negative sentiment driver words
+        pos_w = getattr(ss, "positive_words", None) or []
+        neg_w = getattr(ss, "negative_words", None) or []
+
+        if not pos_w and not neg_w and ss.snapshot and ss.snapshot.raw_content:
+            s_words = extract_sentiment_words(ss.snapshot.raw_content[:5000])
+            pos_w = s_words["positive_words"]
+            neg_w = s_words["negative_words"]
+
         results.append({
             "id": str(ss.id),
             "score": ss.score,
             "source_type": ss.source_type,
             "topics": clean_topics,
+            "positive_words": pos_w,
+            "negative_words": neg_w,
             "scored_at": ss.scored_at.isoformat(),
             "formatted_date": ss.scored_at.strftime("%b %d, %H:%M"),
         })

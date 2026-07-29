@@ -38,6 +38,15 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
   const overallLabel = avgScore > 0.05 ? 'Positive' : avgScore < -0.05 ? 'Negative' : 'Neutral';
   const OverallIcon = avgScore > 0.05 ? TrendingUp : avgScore < -0.05 ? TrendingDown : Minus;
 
+  // Collect positive & negative sentiment driver words
+  const allPositiveWords = Array.from(
+    new Set((Array.isArray(sentimentHistory) ? sentimentHistory : []).flatMap((item) => item?.positive_words || []))
+  ).slice(0, 6);
+
+  const allNegativeWords = Array.from(
+    new Set((Array.isArray(sentimentHistory) ? sentimentHistory : []).flatMap((item) => item?.negative_words || []))
+  ).slice(0, 6);
+
   return (
     <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
       <div className="flex items-center justify-between">
@@ -106,6 +115,12 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
                       {Array.isArray(data?.topics) && data.topics.length > 0 && (
                         <p className="text-slate-400 text-[10px]">Topics: {data.topics.join(', ')}</p>
                       )}
+                      {Array.isArray(data?.positive_words) && data.positive_words.length > 0 && (
+                        <p className="text-emerald-400/80 text-[10px]">Positives: {data.positive_words.join(', ')}</p>
+                      )}
+                      {Array.isArray(data?.negative_words) && data.negative_words.length > 0 && (
+                        <p className="text-rose-400/80 text-[10px]">Risks: {data.negative_words.join(', ')}</p>
+                      )}
                     </div>
                   );
                 }
@@ -128,7 +143,7 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
         </ResponsiveContainer>
       </div>
 
-      {/* Topic Badges */}
+      {/* Topic & Sentiment Driver Badges */}
       {Array.isArray(allTopics) && allTopics.length > 0 && (
         <div className="border-t border-white/[0.04] pt-3">
           <h4 className="text-[10px] font-semibold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-wider">
@@ -145,6 +160,47 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Sentiment Driver Words (Positive & Negative/Risk) */}
+      {(allPositiveWords.length > 0 || allNegativeWords.length > 0) && (
+        <div className="border-t border-white/[0.04] pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {allPositiveWords.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-emerald-400/80 mb-2 flex items-center gap-1 uppercase tracking-wider">
+                <TrendingUp className="w-3 h-3 text-emerald-400" /> Positive Drivers
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {allPositiveWords.map((word, i) => (
+                  <span
+                    key={i}
+                    className="bg-emerald-500/[0.08] text-emerald-300 border border-emerald-500/15 text-[11px] px-2.5 py-0.5 rounded-lg font-medium"
+                  >
+                    + {word}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {allNegativeWords.length > 0 && (
+            <div>
+              <h4 className="text-[10px] font-semibold text-rose-400/80 mb-2 flex items-center gap-1 uppercase tracking-wider">
+                <TrendingDown className="w-3 h-3 text-rose-400" /> Risk & Warning Words
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {allNegativeWords.map((word, i) => (
+                  <span
+                    key={i}
+                    className="bg-rose-500/[0.08] text-rose-300 border border-rose-500/15 text-[11px] px-2.5 py-0.5 rounded-lg font-medium"
+                  >
+                    - {word}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

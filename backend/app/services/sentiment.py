@@ -125,12 +125,61 @@ def extract_key_topics(text: str, top_n: int = 5) -> List[str]:
     return extracted
 
 
+POSITIVE_SENTIMENT_WORDS = {
+    "fast", "speed", "affordable", "cheap", "low-cost", "unlimited", "breakthrough",
+    "stunned", "instant", "scalable", "efficient", "optimized", "seamless", "flexible",
+    "leader", "powerful", "innovative", "reliable", "trust", "security", "high-performance",
+    "savings", "superior", "boost", "dominant", "leading", "popular", "growth",
+}
+
+NEGATIVE_SENTIMENT_WORDS = {
+    "corrupted", "stale", "slow", "unreadable", "expensive", "overhead", "flake",
+    "limit", "rate-limit", "restricted", "error", "blocked", "failing", "lag",
+    "bottleneck", "vulnerability", "risk", "down", "outage", "flawed", "deprecated",
+}
+
+
+def extract_sentiment_words(text: str) -> Dict[str, List[str]]:
+    """
+    Extracts positive and negative sentiment driver words from text using
+    VADER's sentiment lexicon + domain-specific competitive intelligence terms.
+    Returns: {"positive_words": [...], "negative_words": [...]}
+    """
+    if not text:
+        return {"positive_words": [], "negative_words": []}
+
+    words = re.findall(r"\b[a-zA-Z]{3,}\b", text.lower())
+    pos_counts = Counter()
+    neg_counts = Counter()
+
+    for w in words:
+        if w in STOP_WORDS or not _is_valid_topic_word(w):
+            continue
+
+        vader_score = analyzer.lexicon.get(w, 0.0)
+
+        if vader_score > 0.4 or w in POSITIVE_SENTIMENT_WORDS:
+            pos_counts[w] += 1
+        elif vader_score < -0.4 or w in NEGATIVE_SENTIMENT_WORDS:
+            neg_counts[w] += 1
+
+    pos_words = [w for w, _ in pos_counts.most_common(6)]
+    neg_words = [w for w, _ in neg_counts.most_common(6)]
+
+    return {
+        "positive_words": pos_words,
+        "negative_words": neg_words,
+    }
+
+
 def _vader_sentiment(text: str) -> Dict[str, Any]:
     """Fast local VADER-based sentiment analysis (no API calls)."""
     if not text or len(text.strip()) == 0:
         return {
             "score": 0.0,
             "topics": [],
+            "positive_words": [],
+            "negative_words": [],
             "sentiment_category": "neutral",
             "raw_scores": {"neg": 0.0, "neu": 1.0, "pos": 0.0, "compound": 0.0},
         }
@@ -147,10 +196,13 @@ def _vader_sentiment(text: str) -> Dict[str, Any]:
         category = "neutral"
 
     topics = extract_key_topics(sample_text, top_n=5)
+    sent_words = extract_sentiment_words(sample_text)
 
     return {
         "score": compound,
         "topics": topics,
+        "positive_words": sent_words["positive_words"],
+        "negative_words": sent_words["negative_words"],
         "sentiment_category": category,
         "raw_scores": scores,
     }
@@ -159,7 +211,7 @@ def _vader_sentiment(text: str) -> Dict[str, Any]:
 def _llm_sentiment(text: str) -> Dict[str, Any]:
     """
     LLM-powered deep sentiment analysis using OpenRouter.
-    Provides richer topic extraction, nuanced sentiment scoring, and competitive insights.
+    Provides richer topic extraction, nuanced sentiment scoring, positive/negative word classification, and competitive insights.
     Falls back to VADER if LLM is unavailable.
     """
     from app.services.llm import call_openrouter
@@ -171,7 +223,7 @@ def _llm_sentiment(text: str) -> Dict[str, Any]:
     # Truncate to keep prompt size reasonable for free-tier models
     sample_text = text[:3000]
 
-    prompt = f"""Analyze the following competitor content for sentiment and key topics.
+    prompt = f"""Analyze the following competitor content for sentiment, key topics, and positive/negative sentiment driver words.
 
 CONTENT:
 {sample_text}
@@ -181,6 +233,8 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
   "score": <float from -1.0 to 1.0 where -1=very negative, 0=neutral, 1=very positive>,
   "sentiment_category": "<positive|neutral|negative>",
   "topics": ["<topic1>", "<topic2>", "<topic3>", "<topic4>", "<topic5>"],
+  "positive_words": ["<word1>", "<word2>", "<word3>"],
+  "negative_words": ["<word1>", "<word2>"],
   "key_insights": "<1-2 sentence summary of the sentiment drivers and competitive positioning>"
 }}"""
 
@@ -209,9 +263,15 @@ Respond ONLY with valid JSON in this exact format (no markdown, no extra text):
             topics = extract_key_topics(sample_text, top_n=5)
         topics = [str(t) for t in topics[:8]]  # Cap at 8 topics
 
+        fallback_words = extract_sentiment_words(sample_text)
+        pos_words = parsed.get("positive_words") if isinstance(parsed.get("positive_words"), list) else fallback_words["positive_words"]
+        neg_words = parsed.get("negative_words") if isinstance(parsed.get("negative_words"), list) else fallback_words["negative_words"]
+
         result = {
             "score": round(score, 4),
             "topics": topics,
+            "positive_words": [str(w) for w in pos_words[:6]],
+            "negative_words": [str(w) for w in neg_words[:6]],
             "sentiment_category": category,
             "raw_scores": {"compound": score},
             "key_insights": str(parsed.get("key_insights", "")),

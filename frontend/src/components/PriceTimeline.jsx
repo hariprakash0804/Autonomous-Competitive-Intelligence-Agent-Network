@@ -1,5 +1,5 @@
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from 'recharts';
-import { DollarSign, Tag, Info, TrendingUp, TrendingDown } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { DollarSign, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
 
 export default function PriceTimeline({ priceHistory, competitorName }) {
   if (!Array.isArray(priceHistory) || priceHistory.length === 0) {
@@ -16,161 +16,190 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
     );
   }
 
-  // Compute sparkline trend
-  const prices = priceHistory.map(p => p.new_price || 0);
-  const latestPrice = prices[prices.length - 1];
-  const firstPrice = prices[0];
-  const trend = latestPrice >= firstPrice ? 'up' : 'down';
+  // Group priceHistory into clean side-by-side tier comparison items
+  const tierMap = new Map();
 
-  const hasUserCompanyPlans = priceHistory.some(p => p.tier_name && p.tier_name.includes('(Our Company)'));
+  priceHistory.forEach((item) => {
+    if (!item) return;
+    const rawTier = item.tier_name || 'General';
+    const isUserComp = rawTier.includes('(Our Company)');
+    const cleanTier = rawTier.replace('(Our Company)', '').trim() || 'General';
+
+    if (!tierMap.has(cleanTier)) {
+      tierMap.set(cleanTier, {
+        tier: cleanTier,
+        ourPrice: null,
+        competitorPrice: null,
+        oldPrice: item.old_price,
+        date: item.formatted_date,
+      });
+    }
+
+    const entry = tierMap.get(cleanTier);
+    const priceVal = item.new_price !== null && item.new_price !== undefined ? Number(item.new_price) : 0;
+
+    if (isUserComp) {
+      entry.ourPrice = priceVal;
+    } else {
+      entry.competitorPrice = priceVal;
+      if (item.old_price !== null && item.old_price !== undefined && entry.ourPrice === null) {
+        entry.oldPrice = Number(item.old_price);
+      }
+    }
+  });
+
+  // Convert map to array and fill missing rates logically
+  const groupedChartData = Array.from(tierMap.values()).map((t) => {
+    let ourP = t.ourPrice !== null ? t.ourPrice : (t.oldPrice !== null && t.oldPrice !== undefined ? t.oldPrice : 0);
+    let compP = t.competitorPrice !== null ? t.competitorPrice : 0;
+
+    const diff = compP - ourP;
+
+    return {
+      tier: t.tier,
+      ourPrice: ourP,
+      competitorPrice: compP,
+      diff: diff,
+      date: t.date,
+    };
+  });
+
+  // Calculate average price difference across tiers
+  const avgDiff = groupedChartData.length > 0
+    ? Math.round(groupedChartData.reduce((acc, curr) => acc + curr.diff, 0) / groupedChartData.length)
+    : 0;
+
+  const compLabel = competitorName || 'Competitor';
 
   return (
     <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
-      <div className="flex items-center justify-between">
+      {/* Header & Legend */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display">
             <div className="p-1.5 rounded-lg bg-emerald-500/10">
               <DollarSign className="w-4 h-4 text-emerald-400" />
             </div>
-            Pricing & Tier History
+            Rate Comparison across Tiers
           </h2>
           <p className="text-[10px] text-slate-500 mt-0.5">
-            Detected tiers for <span className="text-indigo-400 font-medium">{competitorName}</span> {hasUserCompanyPlans && '& Our Company'}
+            Side-by-side current rates for <span className="text-blue-400 font-semibold">Our Company</span> vs{' '}
+            <span className="text-emerald-400 font-semibold">{compLabel}</span>
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Trend indicator */}
-          <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
-            trend === 'up'
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-              : 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-          }`}>
-            {trend === 'up' ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-            ${latestPrice}
+        {/* Stats & Legend */}
+        <div className="flex flex-wrap items-center gap-2 text-[10px]">
+          {/* Average Rate Diff Badge */}
+          <div
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold border ${
+              avgDiff < 0
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : avgDiff > 0
+                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                : 'bg-white/[0.04] text-slate-400 border-white/[0.06]'
+            }`}
+          >
+            {avgDiff < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
+            <span>Rate Diff: {avgDiff > 0 ? `+$${avgDiff}` : `-$${Math.abs(avgDiff)}`} avg</span>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px]">
-            {hasUserCompanyPlans && (
-              <span className="inline-flex items-center gap-1 bg-sky-500/10 text-sky-400 px-2 py-1 rounded-lg border border-sky-500/20 font-medium">
-                <span className="w-2 h-2 rounded-full bg-sky-400" /> Our Company
-              </span>
-            )}
-            <span className="inline-flex items-center gap-1 bg-white/[0.03] text-slate-400 px-2 py-1 rounded-lg border border-white/[0.05]">
-              <span className="w-2 h-2 rounded-full bg-indigo-400" /> Baseline
-            </span>
-            <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded-lg border border-emerald-500/10">
-              <span className="w-2 h-2 rounded-full bg-emerald-400" /> Changed
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 bg-blue-500/10 text-blue-300 px-2.5 py-1 rounded-lg border border-blue-500/20 font-semibold">
+            <span className="w-2.5 h-2.5 rounded bg-blue-500" /> Our Company
+          </span>
+          <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20 font-semibold">
+            <span className="w-2.5 h-2.5 rounded bg-emerald-500" /> {compLabel}
+          </span>
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="h-[220px] w-full pt-2">
+      {/* Grouped Bar Chart */}
+      <div className="h-[240px] w-full pt-2">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={priceHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <BarChart data={groupedChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={6}>
             <defs>
-              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#818cf8" stopOpacity={1} />
-                <stop offset="100%" stopColor="#6366f1" stopOpacity={0.6} />
+              <linearGradient id="groupOurCompany" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.8} />
               </linearGradient>
-              <linearGradient id="barGradientChanged" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#34d399" stopOpacity={1} />
-                <stop offset="100%" stopColor="#10b981" stopOpacity={0.6} />
-              </linearGradient>
-              <linearGradient id="barGradientUserComp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#38bdf8" stopOpacity={1} />
-                <stop offset="100%" stopColor="#818cf8" stopOpacity={0.7} />
+              <linearGradient id="groupCompetitor" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                <stop offset="100%" stopColor="#047857" stopOpacity={0.85} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-            <XAxis dataKey="tier_name" stroke="#475569" fontSize={10} tick={{ fill: '#64748b' }} />
-            <YAxis stroke="#475569" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(value) => `$${value}`} />
-            <Tooltip
-              cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }}
-              content={({ active, payload }) => {
-                if (active && Array.isArray(payload) && payload.length > 0) {
-                  const data = payload[0].payload;
-                  const isUserComp = data.tier_name && data.tier_name.includes('(Our Company)');
-                  return (
-                    <div className="glass-card p-3 rounded-xl shadow-2xl text-xs space-y-1 animate-scale-in border border-white/[0.06]">
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-white font-display">{data.tier_name}</p>
-                        {isUserComp && (
-                          <span className="bg-sky-500/20 text-sky-300 text-[9px] px-1.5 py-0.2 rounded border border-sky-500/30">
-                            Our Company
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-emerald-400 font-semibold">${data.new_price}</p>
-                      {data.is_baseline ? (
-                        <p className="text-slate-500 italic text-[10px]">Initial Baseline</p>
-                      ) : (
-                        <p className="text-amber-400 text-[10px]">
-                          Changed from ${data.old_price} • {data.formatted_date}
-                        </p>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
+            <XAxis dataKey="tier" stroke="#64748b" fontSize={11} tick={{ fill: '#94a3b8', fontWeight: 600 }} />
+            <YAxis stroke="#64748b" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
+            <Tooltip content={<CustomTooltip competitorName={compLabel} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
+            
+            {/* Group 1: Our Company (Blue Bar) */}
             <Bar
-              dataKey="new_price"
-              radius={[6, 6, 0, 0]}
+              dataKey="ourPrice"
+              name="Our Company"
+              fill="url(#groupOurCompany)"
+              radius={[4, 4, 0, 0]}
+              barSize={28}
               animationDuration={800}
-              animationEasing="ease-out"
-            >
-              {priceHistory.map((entry, index) => {
-                const isUserComp = entry.tier_name && entry.tier_name.includes('(Our Company)');
-                let fillUrl = entry.is_baseline ? 'url(#barGradient)' : 'url(#barGradientChanged)';
-                if (isUserComp) fillUrl = 'url(#barGradientUserComp)';
-                return <Cell key={index} fill={fillUrl} />;
-              })}
-            </Bar>
+            />
+            {/* Group 2: Competitor (Green Bar) */}
+            <Bar
+              dataKey="competitorPrice"
+              name={compLabel}
+              fill="url(#groupCompetitor)"
+              radius={[4, 4, 0, 0]}
+              barSize={28}
+              animationDuration={800}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Pricing Records */}
+      {/* Extracted Pricing & Rate Differences */}
       <div className="border-t border-white/[0.04] pt-3">
         <h4 className="text-[10px] font-semibold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-wider">
-          <Tag className="w-3 h-3 text-indigo-400" /> Extracted Records
+          <ArrowRightLeft className="w-3 h-3 text-indigo-400" /> Tier Rate Comparison & Differences
         </h4>
-        <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-          {(Array.isArray(priceHistory) ? priceHistory : []).map((item, idx) => {
-            const isUserComp = item.tier_name && item.tier_name.includes('(Our Company)');
+        <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+          {groupedChartData.map((item, idx) => {
+            const diff = item.diff;
+            const isCheaper = diff < 0;
+            const isSame = diff === 0;
+
             return (
               <div
-                key={item.id}
+                key={idx}
                 style={{ '--i': idx }}
-                className={`stagger-item flex items-center justify-between px-3 py-2.5 rounded-xl text-xs transition-all duration-200 border ${
-                  isUserComp
-                    ? 'bg-sky-500/[0.04] border-sky-500/20 hover:bg-sky-500/[0.08]'
-                    : 'bg-white/[0.02] hover:bg-white/[0.04] border-white/[0.03]'
-                }`}
+                className="stagger-item flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs bg-white/[0.02] hover:bg-white/[0.04] border border-white/[0.03] transition-all duration-200"
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-slate-200">{item.tier_name}</span>
-                  {isUserComp && (
-                    <span className="bg-sky-500/20 text-sky-300 text-[9px] px-1.5 py-0.5 rounded font-mono border border-sky-500/30">
-                      Our Company
-                    </span>
-                  )}
+                  <span className="font-semibold text-white font-display">{item.tier}</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-white font-bold counter-number">${item.new_price}</span>
-                  {item.is_baseline ? (
-                    <span className="bg-white/[0.04] text-slate-500 text-[10px] px-2 py-0.5 rounded-lg border border-white/[0.06] flex items-center gap-1">
-                      <Info className="w-3 h-3" /> Baseline
+
+                <div className="flex items-center gap-4 text-xs font-mono">
+                  <div className="text-blue-400">
+                    <span className="text-[10px] text-slate-500 block">Our Rate</span>
+                    <span className="font-bold">${item.ourPrice}</span>
+                  </div>
+
+                  <div className="text-emerald-400">
+                    <span className="text-[10px] text-slate-500 block">{compLabel}</span>
+                    <span className="font-bold">${item.competitorPrice}</span>
+                  </div>
+
+                  <div className="text-right pl-2 border-l border-white/[0.06]">
+                    <span className="text-[10px] text-slate-500 block">Difference</span>
+                    <span
+                      className={`font-bold px-2 py-0.5 rounded text-[11px] inline-block ${
+                        isCheaper
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : isSame
+                          ? 'bg-white/[0.04] text-slate-400 border border-white/[0.06]'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}
+                    >
+                      {diff > 0 ? `+$${diff}` : diff < 0 ? `-$${Math.abs(diff)}` : '$0'}
                     </span>
-                  ) : (
-                    <span className="bg-amber-500/10 text-amber-400 text-[10px] px-2 py-0.5 rounded-lg border border-amber-500/10 font-medium">
-                      ← ${item.old_price}
-                    </span>
-                  )}
+                  </div>
                 </div>
               </div>
             );
@@ -179,4 +208,40 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
       </div>
     </div>
   );
+}
+
+function CustomTooltip({ active, payload, competitorName }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const diff = data.diff;
+    const diffSign = diff > 0 ? '+' : '';
+    const diffColor = diff > 0 ? 'text-amber-400' : diff < 0 ? 'text-emerald-400' : 'text-slate-400';
+
+    return (
+      <div className="glass-card p-3.5 rounded-xl shadow-2xl text-xs space-y-2 border border-white/10 animate-scale-in">
+        <p className="font-bold text-white text-sm font-display">{data.tier} Tier</p>
+        <div className="space-y-1 font-mono">
+          <div className="flex items-center justify-between gap-4 text-blue-400">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-2.5 h-2.5 rounded bg-blue-500 inline-block" /> Our Company:
+            </span>
+            <span className="font-bold">${data.ourPrice}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-emerald-400">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block" /> {competitorName}:
+            </span>
+            <span className="font-bold">${data.competitorPrice}</span>
+          </div>
+        </div>
+        <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[11px]">
+          <span className="text-slate-400 font-medium">Difference:</span>
+          <span className={`font-bold ${diffColor}`}>
+            {diffSign}${diff} {diff < 0 ? '(Competitor Lower)' : diff > 0 ? '(Competitor Higher)' : '(Same Rate)'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }

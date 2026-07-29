@@ -27,8 +27,11 @@ TARGET_TIERS = [
 
 # Regex patterns to detect price values following a tier header
 PRICE_PATTERNS = [
+    # Monthly/annual user subscriptions e.g. $20/mo, $25/user/month, $200/month
     r"(?:starting\s+at\s+|from\s+)?[\$\€\£]\s*(\d+(?:\.\d{2})?)\s*(?:USD|EUR|GBP)?(?:\s*(?:per|/)\s*(?:user/month|user/mo|month|mo|year|yr))?",
-    r"(\d+(?:\.\d{2})?)\s*(?:USD|EUR|GBP)\s*(?:per|/)\s*(?:user/month|user/mo|month|mo|year|yr)",
+    # Per-token / usage rates e.g. $0.05 / 1M tokens, $0.59/M tokens
+    r"[\$\€\£]\s*(\d+(?:\.\d+)?)\s*(?:/|per|\s+per\s+)\s*(?:1m|m|million|100k|k|token|tokens)",
+    # Fallback dollar price e.g. $20, $200, $0
     r"[\$\€\£]\s*(\d+(?:\.\d{2})?)",
 ]
 
@@ -80,17 +83,17 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
 
                         # Prefer non-zero prices for non-Free tiers (prevents intro text like 'team... $0' from matching Free card)
                         is_better = False
-                        if best_candidate is None:
+                        if best_candidate is None or best_candidate.get("price") is None:
                             is_better = True
                         else:
                             best_val = best_candidate["price"]
                             if tier.lower() != "free":
                                 if best_val == 0.0 and val_float > 0.0:
                                     is_better = True
-                                elif (best_val == 0.0 or val_float > 0.0) and distance < best_candidate["distance"]:
+                                elif (best_val == 0.0 or val_float > 0.0) and distance < best_candidate.get("distance", 999):
                                     is_better = True
                             else:
-                                if distance < best_candidate["distance"]:
+                                if distance < best_candidate.get("distance", 999):
                                     is_better = True
 
                         if is_better:
@@ -104,13 +107,18 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
                     except ValueError:
                         continue
 
-            if best_candidate is None and ("contact" in forward_window.lower() or "custom" in forward_window.lower()):
-                best_candidate = {
-                    "tier_name": tier.capitalize(),
-                    "price": None,
-                    "price_str": "Contact Us / Custom",
-                    "distance": 999,
-                }
+        # Only set Contact Us / Custom if no numeric price candidate was found across all matches
+        if best_candidate is None:
+            # Check full text for custom/contact tier mentions
+            for match in matches:
+                forward_window = text[match.start() : min(len(text), match.start() + 180)]
+                if "contact" in forward_window.lower() or "custom" in forward_window.lower() or "enterprise" in tier.lower():
+                    best_candidate = {
+                        "tier_name": tier.capitalize(),
+                        "price": None,
+                        "price_str": "Contact Us / Custom",
+                    }
+                    break
 
         if best_candidate:
             # Remove helper distance key

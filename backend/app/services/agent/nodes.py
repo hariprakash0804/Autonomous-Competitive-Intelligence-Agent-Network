@@ -254,6 +254,7 @@ def change_detector_node(state: AgentState) -> AgentState:
                 )
 
         # 2. Extract real plan tier prices for both Competitor and User's Company
+        #    Only extract from pages that are likely pricing pages (URL or content signals)
         existing_changes = db.scalar(select(func.count(PriceChange.id)).where(PriceChange.competitor_id == competitor_id)) or 0
         if existing_changes == 0 and snapshots and valid_pages:
             extracted_plans = []
@@ -263,11 +264,26 @@ def change_detector_node(state: AgentState) -> AgentState:
             if competitor and competitor.user and competitor.user.company_url:
                 user_comp_url = competitor.user.company_url
 
+            # Pricing page detection keywords
+            _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "cost", "tier")
+            _pricing_text_kw = ("$/mo", "per month", "per user", "free plan", "billed annually", "billed monthly", "per million")
+
             for p in valid_pages:
-                page_url = p.get("url", "")
+                page_url = p.get("url", "").lower()
+                clean_text = p.get("clean_text", "")
+                clean_lower = clean_text[:3000].lower()
                 is_user_page = bool(user_comp_url and (user_comp_url in page_url or page_url in user_comp_url))
 
-                extracted = smart_extract_plan_prices(p.get("clean_text", ""))
+                # Only extract pricing from pages that are actually pricing pages
+                is_pricing_page = (
+                    any(kw in page_url for kw in _pricing_url_kw)
+                    or any(kw in clean_lower for kw in _pricing_text_kw)
+                    or is_user_page  # Always try user's own company page
+                )
+                if not is_pricing_page:
+                    continue
+
+                extracted = smart_extract_plan_prices(clean_text)
                 for plan in extracted:
                     t_name = plan.get("tier_name", "General")
                     if is_user_page:

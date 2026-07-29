@@ -38,9 +38,17 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     Extracts distinct plan tiers (Free, Team, Pro, Enterprise, etc.) and binds them
     to their actual price values extracted from surrounding text. Evaluates all occurrences
     of a tier name to select the true pricing card header.
+    Filters out false positives from navigation text (e.g. 'Free API key', 'Free trial').
     """
     if not text:
         return []
+
+    # Context phrases that indicate a tier name is used as a nav/CTA element, not a pricing card
+    _NAV_CONTEXT_PHRASES = [
+        "free api key", "free trial", "free sign up", "free signup", "free account",
+        "start free", "try free", "get started free", "sign up free", "free download",
+        "free demo", "start building", "get free", "free access",
+    ]
 
     results = []
 
@@ -56,6 +64,11 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
             start_pos = match.start()
             # Inspect 150 characters right after the tier name
             forward_window = text[start_pos : min(len(text), start_pos + 180)]
+
+            # Skip if this is a navigation/CTA context (e.g. "Free API key", "Free trial")
+            forward_lower = forward_window[:60].lower()
+            if any(phrase in forward_lower for phrase in _NAV_CONTEXT_PHRASES):
+                continue
 
             for pattern in PRICE_PATTERNS:
                 price_match = re.search(pattern, forward_window, re.IGNORECASE)
@@ -173,7 +186,14 @@ def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
 
     sample_text = text[:4000]
 
-    prompt = f"""Extract ALL pricing tiers/plans from this pricing page content.
+    prompt = f"""Extract ALL real subscription/pricing tiers from this pricing page content.
+
+IMPORTANT RULES:
+- Only extract REAL pricing plans/tiers with actual dollar amounts or "Contact Us" pricing.
+- Do NOT extract navigation menu items, button labels, page headers, or feature names as tiers.
+- Do NOT extract per-token API pricing rows as subscription tiers (those are usage-based rates, not plans).
+- A valid tier must have a plan NAME and a monthly/yearly PRICE or "Contact Us".
+- If no real subscription tiers are found, return an empty array [].
 
 CONTENT:
 {sample_text}
@@ -189,7 +209,7 @@ Respond ONLY with valid JSON array (no markdown, no extra text). Each item must 
   }}
 ]
 
-If no pricing is found, return an empty array: []"""
+If no real pricing tiers are found, return: []"""
 
     try:
         response_text, model_used = call_openrouter(prompt, api_key)

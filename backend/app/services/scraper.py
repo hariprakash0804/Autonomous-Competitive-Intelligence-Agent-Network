@@ -696,6 +696,16 @@ def extract_key_internal_links(soup: BeautifulSoup, base_url: str, max_links_per
         if not parsed_target.path or parsed_target.path == "/":
             clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}/"
 
+        # Ignore media/binary/static asset URLs (e.g. .mp4, .jpg, .pdf, .zip)
+        path_lower = parsed_target.path.lower()
+        if path_lower.endswith((
+            ".mp4", ".mp3", ".wav", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".webm",
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".tiff", ".bmp",
+            ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar", ".exe", ".dmg", ".pkg",
+            ".css", ".js", ".json", ".xml", ".woff", ".woff2", ".ttf", ".eot"
+        )):
+            continue
+
         if clean_target_url in seen_urls or clean_target_url.rstrip("/") == base_url.rstrip("/"):
             continue
 
@@ -1007,6 +1017,16 @@ def _extract_markdown_internal_links(markdown_text: str, base_url: str, max_link
         clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}{parsed_target.path.rstrip('/')}"
         if not parsed_target.path or parsed_target.path == "/":
             clean_target_url = f"{parsed_target.scheme}://{parsed_target.netloc}/"
+
+        # Ignore media/binary/static asset URLs (e.g. .mp4, .jpg, .pdf, .zip)
+        path_lower = parsed_target.path.lower()
+        if path_lower.endswith((
+            ".mp4", ".mp3", ".wav", ".avi", ".mov", ".wmv", ".flv", ".mkv", ".webm",
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".tiff", ".bmp",
+            ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar", ".exe", ".dmg", ".pkg",
+            ".css", ".js", ".json", ".xml", ".woff", ".woff2", ".ttf", ".eot"
+        )):
+            continue
 
         if clean_target_url in seen_urls or clean_target_url.rstrip("/") == base_url.rstrip("/"):
             continue

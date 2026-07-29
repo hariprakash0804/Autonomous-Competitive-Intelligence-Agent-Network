@@ -103,22 +103,11 @@ def researcher_node(state: AgentState) -> AgentState:
 
         print(f"[Researcher Node] Pass 1 scraping ({len(urls)} seed URLs) completed in {time.time() - scrape_start:.2f}s", flush=True)
 
-        # Pass 2: Automatic discovery of key sub-pages (pricing, features, about, docs, reviews, news)
-        discovered_urls = []
-        for page in raw_pages:
-            if page.get("is_stale"):
-                continue
-            internal_links = page.get("key_internal_links", [])
-            for link_item in internal_links:
-                target_url = link_item.get("url", "").rstrip("/")
-                if target_url and target_url not in scraped_urls and target_url not in [u.rstrip("/") for u in discovered_urls]:
-                    discovered_urls.append(link_item.get("url"))
-
-        # Pass 2.5: Proactive pricing page probe — many competitors (e.g. OpenAI) hide pricing
-        # at non-obvious URLs like /api/pricing, /chatgpt/pricing, /business/pricing.
-        # Probe well-known canonical pricing paths for each unique domain.
+        # Pass 2: Automatic discovery of sub-pages & proactive pricing probes
+        # PRIORITY 1: Proactive pricing page probes (Highest priority for Competitive Intelligence)
         from app.services.scraper import generate_pricing_probe_urls
 
+        pricing_probe_urls = []
         probed_domains = set()
         for seed_url in urls:
             parsed = urlparse(seed_url)
@@ -134,15 +123,30 @@ def researcher_node(state: AgentState) -> AgentState:
                     homepage_text = page.get("clean_text", "")
                     break
 
-            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=8)
+            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=6)
             for probe_url in probe_urls:
                 probe_clean = probe_url.rstrip("/")
-                if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in discovered_urls]:
-                    discovered_urls.append(probe_url)
+                if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in pricing_probe_urls]:
+                    pricing_probe_urls.append(probe_url)
 
-        # Cap discovered URLs to 12 pages per run — balances complete coverage vs speed.
-        # With 2 competitors: ~2-4 internal links + ~8 pricing probes per domain = fits under cap.
-        discovered_urls = discovered_urls[:12]
+        # PRIORITY 2: Key internal sub-pages (pricing, features, about, docs, reviews, news)
+        general_internal_urls = []
+        for page in raw_pages:
+            if page.get("is_stale"):
+                continue
+            internal_links = page.get("key_internal_links", [])
+            for link_item in internal_links:
+                target_url = link_item.get("url", "").rstrip("/")
+                if (
+                    target_url
+                    and target_url not in scraped_urls
+                    and target_url not in [u.rstrip("/") for u in pricing_probe_urls]
+                    and target_url not in [u.rstrip("/") for u in general_internal_urls]
+                ):
+                    general_internal_urls.append(link_item.get("url"))
+
+        # Combine: Pricing probes FIRST, then general internal links fill remaining slots
+        discovered_urls = (pricing_probe_urls + general_internal_urls)[:8]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)

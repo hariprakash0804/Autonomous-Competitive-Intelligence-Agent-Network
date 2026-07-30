@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle, StopCircle } from 'lucide-react';
 import api from '../api/client';
 
 export default function AgentRunStatus({ runId, onComplete }) {
   const [statusData, setStatusData] = useState(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     if (!runId) return;
@@ -16,7 +17,7 @@ export default function AgentRunStatus({ runId, onComplete }) {
         const response = await api.get(`/pipeline/status/${runId}`);
         setStatusData(response.data);
 
-        if (response.data.status === 'COMPLETED' || response.data.status === 'FAILED') {
+        if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(response.data.status)) {
           isStopped = true;
           clearInterval(intervalRef);
           if (onComplete) onComplete(response.data);
@@ -34,10 +35,25 @@ export default function AgentRunStatus({ runId, onComplete }) {
     };
   }, [runId]);
 
+  const handleCancel = async () => {
+    if (!runId || isCancelling) return;
+    setIsCancelling(true);
+    try {
+      await api.post(`/pipeline/cancel/${runId}`);
+      setStatusData((prev) => (prev ? { ...prev, status: 'CANCELLED' } : null));
+      if (onComplete) onComplete({ status: 'CANCELLED' });
+    } catch (err) {
+      console.error('Failed to cancel pipeline run:', err);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   if (!statusData) return null;
 
   const isRunning = statusData.status === 'RUNNING';
   const isCompleted = statusData.status === 'COMPLETED';
+  const isCancelled = statusData.status === 'CANCELLED';
   const isFailed = statusData.status === 'FAILED';
 
   return (
@@ -47,6 +63,8 @@ export default function AgentRunStatus({ runId, onComplete }) {
           ? 'glass-card neon-amber'
           : isCompleted
           ? 'glass-card neon-emerald animate-scale-in'
+          : isCancelled
+          ? 'glass-card border-slate-700/50 animate-scale-in'
           : 'glass-card neon-rose animate-scale-in'
       }`}
     >
@@ -74,6 +92,11 @@ export default function AgentRunStatus({ runId, onComplete }) {
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
           </div>
         )}
+        {isCancelled && (
+          <div className="w-10 h-10 rounded-xl bg-slate-500/10 border border-slate-500/15 flex items-center justify-center">
+            <StopCircle className="w-5 h-5 text-slate-400" />
+          </div>
+        )}
         {isFailed && (
           <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/15 flex items-center justify-center">
             <AlertCircle className="w-5 h-5 text-rose-400" />
@@ -94,6 +117,8 @@ export default function AgentRunStatus({ runId, onComplete }) {
                   ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                   : isCompleted
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                  : isCancelled
+                  ? 'bg-slate-500/15 text-slate-400 border border-slate-500/20'
                   : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
               }`}
             >
@@ -117,12 +142,30 @@ export default function AgentRunStatus({ runId, onComplete }) {
         </div>
       </div>
 
-      {statusData.reflection_triggered && (
-        <span className="relative flex items-center gap-1.5 text-[11px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/15 px-3 py-1.5 rounded-xl animate-scale-in">
-          <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin" style={{ animationDuration: '2s' }} />
-          Reflection Triggered
-        </span>
-      )}
+      <div className="relative flex items-center gap-3">
+        {isRunning && (
+          <button
+            onClick={handleCancel}
+            disabled={isCancelling}
+            className="relative z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-all duration-200 active:scale-95 disabled:opacity-50 shadow-sm"
+            title="Cancel ongoing pipeline execution"
+          >
+            {isCancelling ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5 text-rose-400" />
+            )}
+            {isCancelling ? 'Cancelling...' : 'Cancel Run'}
+          </button>
+        )}
+
+        {statusData.reflection_triggered && (
+          <span className="relative flex items-center gap-1.5 text-[11px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/15 px-3 py-1.5 rounded-xl animate-scale-in">
+            <RefreshCw className="w-3 h-3 text-indigo-400 animate-spin" style={{ animationDuration: '2s' }} />
+            Reflection Triggered
+          </span>
+        )}
+      </div>
     </div>
   );
 }

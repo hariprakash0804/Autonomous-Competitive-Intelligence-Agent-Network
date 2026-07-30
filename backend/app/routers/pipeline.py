@@ -29,13 +29,31 @@ from app.services.reports_service import (
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
+# Global registry to track requested cancellations for active pipeline runs
+_cancelled_runs: set = set()
+
+
+def is_run_cancelled(agent_run_id_str: str) -> bool:
+    """Checks if an AgentRun has been marked as CANCELLED by the user."""
+    if agent_run_id_str in _cancelled_runs:
+        return True
+    try:
+        db = SessionLocal()
+        run = db.get(AgentRun, uuid.UUID(agent_run_id_str))
+        is_canc = run.status == "CANCELLED" if run else False
+        db.close()
+        return is_canc
+    except Exception:
+        return False
+
+
 def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
     """Helper worker to execute graph invoke inside thread pool with recursion safety net."""
     return invoke_pipeline_graph(initial_state, recursion_limit=6)
 
 
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
-    """Background worker function executing the LangGraph agent pipeline with a 300-second timeout guard."""
+    """Background worker function executing the LangGraph agent pipeline with cancellation & timeout guards."""
     import time as _time
     pipeline_start = _time.time()
     print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
@@ -44,6 +62,15 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
     try:
         agent_run_id = uuid.UUID(agent_run_id_str)
         agent_run = db.get(AgentRun, agent_run_id)
+
+        # 1. Early Cancellation Check
+        if is_run_cancelled(agent_run_id_str):
+            print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED before start.", flush=True)
+            if agent_run:
+                agent_run.status = "CANCELLED"
+                agent_run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+            return
 
         initial_state: AgentState = {
             "competitor_id": competitor_id_str,
@@ -57,17 +84,32 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
             "retry_count": 0,
             "reflection_triggered": False,
             "is_incomplete": False,
+            "agent_run_id": agent_run_id_str,
             "status": "RUNNING",
         }
 
         print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
 
-        # Run pipeline with configurable timeout guard to account for multi-page LLM analysis & rate-limiting delays
+        # Run pipeline with configurable timeout & cancellation monitoring
         timeout_limit = float(getattr(settings, "PIPELINE_TIMEOUT_SECONDS", 600.0))
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_execute_graph_with_timeout, initial_state)
             try:
-                final_state = future.result(timeout=timeout_limit)
+                # Poll periodically for user-triggered cancellation while task executes
+                poll_start = _time.time()
+                while not future.done():
+                    if is_run_cancelled(agent_run_id_str):
+                        print(f"[Pipeline Task] AgentRun {agent_run_id_str} CANCELLED by user mid-execution. Aborting.", flush=True)
+                        if agent_run:
+                            agent_run.status = "CANCELLED"
+                            agent_run.completed_at = datetime.now(timezone.utc)
+                            db.commit()
+                        return
+                    _time.sleep(0.5)
+                    if _time.time() - poll_start > timeout_limit:
+                        raise TimeoutError()
+
+                final_state = future.result()
             except TimeoutError:
                 elapsed = _time.time() - pipeline_start
                 print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s ({timeout_limit:.0f}s limit)!", flush=True)
@@ -77,6 +119,15 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     db.commit()
                 return
+
+        # 2. Final Cancellation Check before updating completion status
+        if is_run_cancelled(agent_run_id_str):
+            print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED. Skipping report delivery.", flush=True)
+            if agent_run:
+                agent_run.status = "CANCELLED"
+                agent_run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+            return
 
         # Update AgentRun in PostgreSQL
         if agent_run:
@@ -290,4 +341,33 @@ def get_pipeline_status(
         "completed_at": agent_run.completed_at.isoformat() if agent_run.completed_at else None,
         "reflection_triggered": agent_run.reflection_triggered,
         "langsmith_trace_url": agent_run.langsmith_trace_url,
+    }
+
+
+@router.post("/cancel/{agent_run_id}")
+@router.post("/{agent_run_id}/cancel")
+def cancel_pipeline_run(
+    agent_run_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+):
+    """Cancels an ongoing background agent pipeline run."""
+    agent_run = db.get(AgentRun, agent_run_id)
+    if not agent_run or not agent_run.competitor or agent_run.competitor.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent run not found")
+
+    run_id_str = str(agent_run_id)
+    _cancelled_runs.add(run_id_str)
+
+    if agent_run.status in ("RUNNING", "PENDING"):
+        agent_run.status = "CANCELLED"
+        agent_run.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(agent_run)
+        print(f"[Pipeline Cancel] AgentRun {run_id_str} marked as CANCELLED by user.", flush=True)
+
+    return {
+        "id": str(agent_run.id),
+        "status": agent_run.status,
+        "message": "Pipeline run cancellation requested.",
     }

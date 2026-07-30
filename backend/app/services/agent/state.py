@@ -14,4 +14,5 @@ class AgentState(TypedDict):
     retry_count: int
     reflection_triggered: bool
     is_incomplete: bool
+    agent_run_id: Optional[str]
     status: str

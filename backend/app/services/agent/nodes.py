@@ -66,6 +66,18 @@ def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
     return SourceType.NEWS
 
 
+def _check_cancellation(state: AgentState) -> bool:
+    """Helper to check if active pipeline run has been cancelled."""
+    run_id = state.get("agent_run_id")
+    if not run_id:
+        return False
+    try:
+        from app.routers.pipeline import is_run_cancelled
+        return is_run_cancelled(run_id)
+    except Exception:
+        return False
+
+
 def researcher_node(state: AgentState) -> AgentState:
     """
     1. Researcher Node:
@@ -73,6 +85,11 @@ def researcher_node(state: AgentState) -> AgentState:
        Calls scraper.py directly for scraping and staleness evaluation.
        Uses batched DB commits and deferred FAISS saves for performance.
     """
+    if _check_cancellation(state):
+        print(f"[Researcher Node] Pipeline run CANCELLED. Aborting node.", flush=True)
+        state["status"] = "CANCELLED"
+        return state
+
     node_start = time.time()
     print(f"[Researcher Node] Starting...", flush=True)
 
@@ -229,6 +246,11 @@ def change_detector_node(state: AgentState) -> AgentState:
        and compares scraped pages using diff_pricing service.
        Persists detected price changes and baseline entries.
     """
+    if _check_cancellation(state):
+        print(f"[Change-Detector Node] Pipeline run CANCELLED. Aborting node.", flush=True)
+        state["status"] = "CANCELLED"
+        return state
+
     node_start = time.time()
     print(f"[Change-Detector] Starting...", flush=True)
 
@@ -363,6 +385,11 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
        Analyzes scraped pages using sentiment_score service function directly.
        Persists sentiment scores to DB for Recharts visualization.
     """
+    if _check_cancellation(state):
+        print(f"[Sentiment-Analyst Node] Pipeline run CANCELLED. Aborting node.", flush=True)
+        state["status"] = "CANCELLED"
+        return state
+
     node_start = time.time()
     print(f"[Sentiment-Analyst] Starting...", flush=True)
 
@@ -454,6 +481,11 @@ def report_writer_node(state: AgentState) -> AgentState:
     4. Report-Writer Node:
        Synthesizes report draft using LLM provider abstraction module and saves Report row to DB.
     """
+    if _check_cancellation(state):
+        print(f"[Report-Writer Node] Pipeline run CANCELLED. Aborting node.", flush=True)
+        state["status"] = "CANCELLED"
+        return state
+
     node_start = time.time()
     print(f"[Report-Writer] Starting...", flush=True)
 

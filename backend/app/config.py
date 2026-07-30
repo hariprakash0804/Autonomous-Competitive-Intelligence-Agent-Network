@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Backend public URL (for Slack/email report links)
     BACKEND_URL: Optional[str] = "http://localhost:8000"
 
+    # Pipeline Execution Timeout (in seconds)
+    PIPELINE_TIMEOUT_SECONDS: float = 600.0
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

@@ -62,14 +62,15 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
 
         print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
 
-        # Run pipeline with a 300s hard timeout guard to account for multi-page LLM analysis & rate-limiting delays
+        # Run pipeline with configurable timeout guard to account for multi-page LLM analysis & rate-limiting delays
+        timeout_limit = float(getattr(settings, "PIPELINE_TIMEOUT_SECONDS", 600.0))
         with ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_execute_graph_with_timeout, initial_state)
             try:
-                final_state = future.result(timeout=300.0)
+                final_state = future.result(timeout=timeout_limit)
             except TimeoutError:
                 elapsed = _time.time() - pipeline_start
-                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s (300s hard limit)!", flush=True)
+                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s ({timeout_limit:.0f}s limit)!", flush=True)
                 final_state = {"reflection_triggered": False}
                 if agent_run:
                     agent_run.status = "FAILED"

@@ -236,7 +236,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
       </div>
 
       {/* Grouped Bar Chart */}
-      <div className="h-[240px] w-full pt-2">
+      <div className="h-[270px] w-full pt-2">
         {filteredChartData.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/[0.06] rounded-xl p-4">
             <p className="font-semibold text-slate-400">No tiers match current filters</p>
@@ -253,7 +253,11 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={filteredChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={4}>
+            <BarChart
+              data={filteredChartData}
+              margin={{ top: 15, right: 15, left: -15, bottom: filteredChartData.length > 6 ? 40 : 10 }}
+              barGap={4}
+            >
               <defs>
                 <linearGradient id="groupOurCompany" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
@@ -268,10 +272,13 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               <XAxis
                 dataKey="tier"
                 stroke="#64748b"
-                fontSize={10}
+                fontSize={filteredChartData.length > 10 ? 9 : 10}
                 tick={{ fill: '#94a3b8', fontWeight: 600 }}
                 interval={0}
-                tickFormatter={(tick) => (tick.length > 9 ? `${tick.slice(0, 7)}…` : tick)}
+                angle={filteredChartData.length > 6 ? -35 : 0}
+                textAnchor={filteredChartData.length > 6 ? 'end' : 'middle'}
+                height={filteredChartData.length > 6 ? 50 : 30}
+                tickFormatter={(tick) => (tick.length > 11 ? `${tick.slice(0, 9)}…` : tick)}
               />
               <YAxis stroke="#64748b" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
               <Tooltip content={<CustomTooltip competitorName={compLabel} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />

@@ -11,6 +11,7 @@ import {
   Activity,
   DollarSign,
   X,
+  NotebookPen,
 } from 'lucide-react';
 
 export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClose }) {
@@ -40,6 +41,12 @@ export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClos
         const el = document.getElementById('reports-section');
         if (el) el.scrollIntoView({ behavior: 'smooth' });
       }, 100);
+    } else if (type === 'Notes') {
+      navigate('/dashboard');
+      setTimeout(() => {
+        const el = document.getElementById('notes-section');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   };
 
@@ -65,6 +72,7 @@ export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClos
     { label: 'Price Intel', icon: DollarSign, color: 'text-amber-400' },
     { label: 'Sentiment', icon: Activity, color: 'text-rose-400' },
     { label: 'Reports', icon: FileText, color: 'text-indigo-400' },
+    { label: 'Notes', icon: NotebookPen, color: 'text-indigo-400' },
   ];
 
   return (

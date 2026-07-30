@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown, Volume2, Pause, Play, Square, Headphones } from 'lucide-react';
 
 function extractBulletPointsFromSection(markdown, sectionKeywords) {
   if (!markdown || typeof markdown !== 'string') return [];
@@ -30,6 +30,8 @@ function extractBulletPointsFromSection(markdown, sectionKeywords) {
 
 export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData }) {
   const [activeTab, setActiveTab] = useState('matrix');
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [isPausedAudio, setIsPausedAudio] = useState(false);
 
   if (!selectedCompetitor) {
     return (
@@ -52,6 +54,68 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
 
   const reportSummary = latestReport?.summary || '';
   const technographics = intelligenceData?.technographics || [];
+
+  // Text-to-Speech SpeechSynthesis Audio Listener Handler
+  const handleSpeakBrief = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      alert('Text-to-speech listening is not supported in this browser.');
+      return;
+    }
+
+    if (isPlayingAudio && !isPausedAudio) {
+      window.speechSynthesis.pause();
+      setIsPausedAudio(true);
+      return;
+    }
+
+    if (isPausedAudio) {
+      window.speechSynthesis.resume();
+      setIsPausedAudio(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel(); // Stop any ongoing speech
+
+    // Format markdown text for clean speech reading
+    const cleanText = reportSummary
+      .replace(/#+/g, '')
+      .replace(/\*+/g, '')
+      .replace(/\|/g, ' ')
+      .replace(/\[.*?\]\(.*?\)/g, '')
+      .replace(/`{1,3}.*?`{1,3}/gs, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => {
+      setIsPlayingAudio(true);
+      setIsPausedAudio(false);
+    };
+
+    utterance.onend = () => {
+      setIsPlayingAudio(false);
+      setIsPausedAudio(false);
+    };
+
+    utterance.onerror = () => {
+      setIsPlayingAudio(false);
+      setIsPausedAudio(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleStopAudio = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setIsPausedAudio(false);
+  };
 
   return (
     <div className="glass-card rounded-2xl p-6 neon-border space-y-6 animate-fade-in-up">
@@ -291,10 +355,79 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
           })()}
         </div>
       ) : (
-        /* Executive Report View */
-        <div className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-6 text-xs text-slate-300 max-h-[520px] overflow-y-auto animate-fade-in-up space-y-2">
+        /* Executive Report View with Audio Listener */
+        <div className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-6 text-xs text-slate-300 max-h-[520px] overflow-y-auto animate-fade-in-up space-y-4">
           {reportSummary ? (
-            renderMarkdownFormatted(reportSummary)
+            <>
+              {/* Executive Brief Audio Player Bar */}
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/20 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-400">
+                    <Headphones className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white font-display flex items-center gap-2">
+                      <span>Executive Brief Audio Listener</span>
+                      {isPlayingAudio && !isPausedAudio && (
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {isPlayingAudio && !isPausedAudio
+                        ? 'Reading executive brief aloud...'
+                        : isPausedAudio
+                        ? 'Audio brief playback paused'
+                        : 'Listen to AI-synthesized audio briefing'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSpeakBrief}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-300 shadow-lg ${
+                      isPlayingAudio && !isPausedAudio
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : isPausedAudio
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-600/30'
+                    }`}
+                  >
+                    {isPlayingAudio && !isPausedAudio ? (
+                      <>
+                        <Pause className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Pause</span>
+                      </>
+                    ) : isPausedAudio ? (
+                      <>
+                        <Play className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Resume</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-3.5 h-3.5 text-white" />
+                        <span>Listen to Brief</span>
+                      </>
+                    )}
+                  </button>
+
+                  {(isPlayingAudio || isPausedAudio) && (
+                    <button
+                      onClick={handleStopAudio}
+                      className="p-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition-colors"
+                      title="Stop Audio Playback"
+                    >
+                      <Square className="w-3.5 h-3.5 text-rose-400" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {renderMarkdownFormatted(reportSummary)}
+            </>
           ) : (
             <div className="text-center py-12 space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mx-auto">

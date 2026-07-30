@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock } from 'lucide-react';
+import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock, Volume2, Square } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import api, { API_BASE_URL } from '../api/client';
 
@@ -9,6 +9,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
   const [copiedId, setCopiedId] = useState(null);
   const [sendingSlackId, setSendingSlackId] = useState(null);
   const [sendingEmailId, setSendingEmailId] = useState(null);
+  const [listeningReportId, setListeningReportId] = useState(null);
 
   const fetchReports = useCallback(async () => {
     try {
@@ -21,6 +22,50 @@ export default function ReportsPanel({ selectedCompetitorId }) {
       console.error('Failed to fetch reports:', err);
     }
   }, [selectedCompetitorId]);
+
+  const handleListenReport = (report) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      toast.warning('Text-to-speech listening is not supported in this browser.');
+      return;
+    }
+
+    if (listeningReportId === report.id) {
+      window.speechSynthesis.cancel();
+      setListeningReportId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const cleanText = (report.summary || report.content || `Executive report for ${report.competitor_name}`)
+      .replace(/#+/g, '')
+      .replace(/\*+/g, '')
+      .replace(/\|/g, ' ')
+      .replace(/\[.*?\]\(.*?\)/g, '')
+      .replace(/`{1,3}.*?`{1,3}/gs, '')
+      .trim();
+
+    if (!cleanText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => {
+      setListeningReportId(report.id);
+      toast.info(`Playing audio report for ${report.competitor_name}...`, 'Executive Listening');
+    };
+
+    utterance.onend = () => {
+      setListeningReportId(null);
+    };
+
+    utterance.onerror = () => {
+      setListeningReportId(null);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
 
   useEffect(() => {
     fetchReports();
@@ -138,6 +183,28 @@ export default function ReportsPanel({ selectedCompetitorId }) {
             </div>
 
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => handleListenReport(r)}
+                title={listeningReportId === r.id ? 'Stop Listening' : 'Listen to Executive Brief Audio'}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border transition-all duration-200 hover:scale-105 active:scale-95 text-[10px] font-semibold ${
+                  listeningReportId === r.id
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 glow'
+                    : 'bg-indigo-500/10 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/20'
+                }`}
+              >
+                {listeningReportId === r.id ? (
+                  <>
+                    <Square className="w-3 h-3 text-rose-400" />
+                    <span>Stop</span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="w-3 h-3 text-indigo-400" />
+                    <span className="hidden group-hover:inline">Listen</span>
+                  </>
+                )}
+              </button>
+
               <a
                 href={`${API_BASE_URL}${r.html_url}`}
                 target="_blank"

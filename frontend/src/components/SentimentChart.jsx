@@ -57,7 +57,6 @@ export default function SentimentChart({ sentimentHistory, competitorName }) {
         return false;
       }
     }
-
     return true;
   });
 

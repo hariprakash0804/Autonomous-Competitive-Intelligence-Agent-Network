@@ -1,7 +1,14 @@
+import { useState } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { DollarSign, TrendingUp, TrendingDown, ArrowRightLeft } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, ArrowRightLeft, Search, Filter } from 'lucide-react';
+
+const CORE_PLAN_KEYWORDS = ['free', 'basic', 'plus', 'pro', 'team', 'business', 'enterprise', 'general'];
 
 export default function PriceTimeline({ priceHistory, competitorName }) {
+  const [selectedCategory, setSelectedCategory] = useState('all'); // 'all', 'core', 'models'
+  const [diffFilter, setDiffFilter] = useState('all'); // 'all', 'cheaper', 'higher'
+  const [searchQuery, setSearchQuery] = useState('');
+
   if (!Array.isArray(priceHistory) || priceHistory.length === 0) {
     return (
       <div className="glass-card rounded-2xl p-8 neon-border flex flex-col items-center justify-center min-h-[300px] animate-fade-in-up">
@@ -88,9 +95,34 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
     };
   });
 
-  // Calculate average price difference across tiers
-  const avgDiff = groupedChartData.length > 0
-    ? Math.round(groupedChartData.reduce((acc, curr) => acc + curr.diff, 0) / groupedChartData.length)
+  // Apply Interactive Filters (Category, Rate Diff, Search)
+  const filteredChartData = groupedChartData.filter((item) => {
+    const tierLower = item.tier.toLowerCase();
+
+    // 1. Category Filter
+    if (selectedCategory === 'core') {
+      const isCore = CORE_PLAN_KEYWORDS.some((kw) => tierLower.includes(kw));
+      if (!isCore) return false;
+    } else if (selectedCategory === 'models') {
+      const isCore = CORE_PLAN_KEYWORDS.some((kw) => tierLower === kw);
+      if (isCore) return false;
+    }
+
+    // 2. Rate Diff Filter
+    if (diffFilter === 'cheaper' && item.diff >= 0) return false;
+    if (diffFilter === 'higher' && item.diff <= 0) return false;
+
+    // 3. Search Query Filter
+    if (searchQuery.trim()) {
+      if (!tierLower.includes(searchQuery.toLowerCase().trim())) return false;
+    }
+
+    return true;
+  });
+
+  // Calculate average price difference across filtered tiers
+  const avgDiff = filteredChartData.length > 0
+    ? Math.round(filteredChartData.reduce((acc, curr) => acc + curr.diff, 0) / filteredChartData.length)
     : 0;
 
   const compLabel = competitorName || 'Competitor';
@@ -137,61 +169,148 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
         </div>
       </div>
 
+      {/* Interactive Filtering Toolbar */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+        {/* Category Filter Pills */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedCategory === 'all'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            All Tiers ({groupedChartData.length})
+          </button>
+          <button
+            onClick={() => setSelectedCategory('core')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedCategory === 'core'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            Core Plans
+          </button>
+          <button
+            onClick={() => setSelectedCategory('models')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedCategory === 'models'
+                ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+            }`}
+          >
+            API & Models
+          </button>
+        </div>
+
+        {/* Search Input & Difference Dropdown Filter */}
+        <div className="flex items-center gap-2">
+          {/* Search Box */}
+          <div className="relative flex-1 md:w-44">
+            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search tier..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg pl-8 pr-2.5 py-1 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/40"
+            />
+          </div>
+
+          {/* Rate Difference Dropdown Filter */}
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-1">
+            <Filter className="w-3 h-3 text-slate-500" />
+            <select
+              value={diffFilter}
+              onChange={(e) => setDiffFilter(e.target.value)}
+              className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-slate-900 text-slate-200">All Differences</option>
+              <option value="cheaper" className="bg-slate-900 text-emerald-400">Competitor Lower</option>
+              <option value="higher" className="bg-slate-900 text-amber-400">Competitor Higher</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Grouped Bar Chart */}
       <div className="h-[240px] w-full pt-2">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={groupedChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={4}>
-            <defs>
-              <linearGradient id="groupOurCompany" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
-                <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.8} />
-              </linearGradient>
-              <linearGradient id="groupCompetitor" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
-                <stop offset="100%" stopColor="#047857" stopOpacity={0.85} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-            <XAxis
-              dataKey="tier"
-              stroke="#64748b"
-              fontSize={10}
-              tick={{ fill: '#94a3b8', fontWeight: 600 }}
-              interval={0}
-              tickFormatter={(tick) => (tick.length > 9 ? `${tick.slice(0, 7)}…` : tick)}
-            />
-            <YAxis stroke="#64748b" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
-            <Tooltip content={<CustomTooltip competitorName={compLabel} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
-            
-            {/* Group 1: Our Company (Blue Bar) */}
-            <Bar
-              dataKey="ourPrice"
-              name="Our Company"
-              fill="url(#groupOurCompany)"
-              radius={[4, 4, 0, 0]}
-              barSize={groupedChartData.length > 10 ? 14 : groupedChartData.length > 6 ? 20 : 28}
-              animationDuration={800}
-            />
-            {/* Group 2: Competitor (Green Bar) */}
-            <Bar
-              dataKey="competitorPrice"
-              name={compLabel}
-              fill="url(#groupCompetitor)"
-              radius={[4, 4, 0, 0]}
-              barSize={groupedChartData.length > 10 ? 14 : groupedChartData.length > 6 ? 20 : 28}
-              animationDuration={800}
-            />
-          </BarChart>
-        </ResponsiveContainer>
+        {filteredChartData.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/[0.06] rounded-xl p-4">
+            <p className="font-semibold text-slate-400">No tiers match current filters</p>
+            <button
+              onClick={() => {
+                setSelectedCategory('all');
+                setDiffFilter('all');
+                setSearchQuery('');
+              }}
+              className="mt-2 text-[11px] text-indigo-400 hover:text-indigo-300 underline font-medium"
+            >
+              Reset Filters
+            </button>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={filteredChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={4}>
+              <defs>
+                <linearGradient id="groupOurCompany" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.8} />
+                </linearGradient>
+                <linearGradient id="groupCompetitor" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={1} />
+                  <stop offset="100%" stopColor="#047857" stopOpacity={0.85} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+              <XAxis
+                dataKey="tier"
+                stroke="#64748b"
+                fontSize={10}
+                tick={{ fill: '#94a3b8', fontWeight: 600 }}
+                interval={0}
+                tickFormatter={(tick) => (tick.length > 9 ? `${tick.slice(0, 7)}…` : tick)}
+              />
+              <YAxis stroke="#64748b" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
+              <Tooltip content={<CustomTooltip competitorName={compLabel} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
+              
+              {/* Group 1: Our Company (Blue Bar) */}
+              <Bar
+                dataKey="ourPrice"
+                name="Our Company"
+                fill="url(#groupOurCompany)"
+                radius={[4, 4, 0, 0]}
+                barSize={filteredChartData.length > 10 ? 14 : filteredChartData.length > 6 ? 20 : 28}
+                animationDuration={800}
+              />
+              {/* Group 2: Competitor (Green Bar) */}
+              <Bar
+                dataKey="competitorPrice"
+                name={compLabel}
+                fill="url(#groupCompetitor)"
+                radius={[4, 4, 0, 0]}
+                barSize={filteredChartData.length > 10 ? 14 : filteredChartData.length > 6 ? 20 : 28}
+                animationDuration={800}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
 
       {/* Extracted Pricing & Rate Differences */}
       <div className="border-t border-white/[0.04] pt-3">
-        <h4 className="text-[10px] font-semibold text-slate-500 mb-2 flex items-center gap-1 uppercase tracking-wider">
-          <ArrowRightLeft className="w-3 h-3 text-indigo-400" /> Tier Rate Comparison & Differences
+        <h4 className="text-[10px] font-semibold text-slate-500 mb-2 flex items-center justify-between uppercase tracking-wider">
+          <span className="flex items-center gap-1">
+            <ArrowRightLeft className="w-3 h-3 text-indigo-400" /> Tier Rate Comparison & Differences
+          </span>
+          <span className="text-[10px] text-slate-500 normal-case font-mono">
+            Showing {filteredChartData.length} of {groupedChartData.length} tiers
+          </span>
         </h4>
         <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-          {groupedChartData.map((item, idx) => {
+          {filteredChartData.map((item, idx) => {
             const diff = item.diff;
             const isCheaper = diff < 0;
             const isSame = diff === 0;

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Calendar, Sparkles, X, Download, Image as ImageIcon, Paperclip, Trash2 } from 'lucide-react';
+import { Send, Bot, User, Calendar, Sparkles, X, Download, Paperclip, Trash2 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import api from '../api/client';
 

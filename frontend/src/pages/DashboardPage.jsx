@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
@@ -66,19 +66,19 @@ export default function DashboardPage() {
 
   const savedCompanyUrl = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
 
-  const fetchCompetitors = async () => {
+  const fetchCompetitors = useCallback(async () => {
     try {
       const res = await api.get('/competitors/');
       const data = Array.isArray(res.data) ? res.data : [];
       setCompetitors(data);
-      if (data.length > 0 && !selectedCompId) {
-        setSelectedCompId(data[0].id);
+      if (data.length > 0) {
+        setSelectedCompId((prev) => prev || data[0].id);
       }
     } catch (err) {
       console.error('Failed to fetch competitors:', err);
       setCompetitors([]);
     }
-  };
+  }, []);
 
   const [intelligenceData, setIntelligenceData] = useState(null);
 
@@ -106,7 +106,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchCompetitors();
-  }, []);
+  }, [fetchCompetitors]);
 
   useEffect(() => {
     if (selectedCompId) {

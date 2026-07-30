@@ -33,7 +33,7 @@ export default function AgentRunStatus({ runId, onComplete }) {
       isStopped = true;
       clearInterval(intervalRef);
     };
-  }, [runId]);
+  }, [runId, onComplete]);
 
   const handleCancel = async () => {
     if (!runId || isCancelling) return;

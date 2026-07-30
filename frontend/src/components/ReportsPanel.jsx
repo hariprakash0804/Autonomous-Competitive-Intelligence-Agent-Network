@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import api, { API_BASE_URL } from '../api/client';
@@ -10,7 +10,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
   const [sendingSlackId, setSendingSlackId] = useState(null);
   const [sendingEmailId, setSendingEmailId] = useState(null);
 
-  const fetchReports = async () => {
+  const fetchReports = useCallback(async () => {
     try {
       const endpoint = selectedCompetitorId
         ? `/reports/competitor/${selectedCompetitorId}`
@@ -20,11 +20,11 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     } catch (err) {
       console.error('Failed to fetch reports:', err);
     }
-  };
+  }, [selectedCompetitorId]);
 
   useEffect(() => {
     fetchReports();
-  }, [selectedCompetitorId]);
+  }, [fetchReports]);
 
   const handleCopyLink = (reportId) => {
     const link = `${window.location.origin}/reports/${reportId}/html`;

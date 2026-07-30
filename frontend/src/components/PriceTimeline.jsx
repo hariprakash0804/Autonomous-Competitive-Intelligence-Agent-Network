@@ -140,7 +140,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
       {/* Grouped Bar Chart */}
       <div className="h-[240px] w-full pt-2">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={groupedChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={6}>
+          <BarChart data={groupedChartData} margin={{ top: 15, right: 15, left: -15, bottom: 5 }} barGap={4}>
             <defs>
               <linearGradient id="groupOurCompany" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
@@ -152,7 +152,14 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
-            <XAxis dataKey="tier" stroke="#64748b" fontSize={11} tick={{ fill: '#94a3b8', fontWeight: 600 }} />
+            <XAxis
+              dataKey="tier"
+              stroke="#64748b"
+              fontSize={10}
+              tick={{ fill: '#94a3b8', fontWeight: 600 }}
+              interval={0}
+              tickFormatter={(tick) => (tick.length > 9 ? `${tick.slice(0, 7)}…` : tick)}
+            />
             <YAxis stroke="#64748b" fontSize={10} tick={{ fill: '#64748b' }} tickFormatter={(val) => `$${val}`} />
             <Tooltip content={<CustomTooltip competitorName={compLabel} />} cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }} />
             
@@ -162,7 +169,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               name="Our Company"
               fill="url(#groupOurCompany)"
               radius={[4, 4, 0, 0]}
-              barSize={28}
+              barSize={groupedChartData.length > 10 ? 14 : groupedChartData.length > 6 ? 20 : 28}
               animationDuration={800}
             />
             {/* Group 2: Competitor (Green Bar) */}
@@ -171,7 +178,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
               name={compLabel}
               fill="url(#groupCompetitor)"
               radius={[4, 4, 0, 0]}
-              barSize={28}
+              barSize={groupedChartData.length > 10 ? 14 : groupedChartData.length > 6 ? 20 : 28}
               animationDuration={800}
             />
           </BarChart>
@@ -238,7 +245,6 @@ function CustomTooltip({ active, payload, competitorName }) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const diff = data.diff;
-    const diffSign = diff > 0 ? '+' : '';
     const diffColor = diff > 0 ? 'text-amber-400' : diff < 0 ? 'text-emerald-400' : 'text-slate-400';
 
     return (
@@ -261,7 +267,8 @@ function CustomTooltip({ active, payload, competitorName }) {
         <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[11px]">
           <span className="text-slate-400 font-medium">Difference:</span>
           <span className={`font-bold ${diffColor}`}>
-            {diffSign}${diff} {diff < 0 ? '(Competitor Lower)' : diff > 0 ? '(Competitor Higher)' : '(Same Rate)'}
+            {diff < 0 ? `-$${Math.abs(diff)}` : diff > 0 ? `+$${diff}` : '$0'}{' '}
+            {diff < 0 ? '(Competitor Lower)' : diff > 0 ? '(Competitor Higher)' : '(Same Rate)'}
           </span>
         </div>
       </div>

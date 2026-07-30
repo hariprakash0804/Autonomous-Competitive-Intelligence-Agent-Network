@@ -100,7 +100,7 @@ class VectorStoreService:
                     print(f"[Vector Store] Loading SentenceTransformer model ({HF_MODEL_NAME}, dim: {UNIFIED_EMBED_DIM})...", flush=True)
                     with ThreadPoolExecutor(max_workers=1) as executor:
                         future = executor.submit(_load_model)
-                        self.model = future.result(timeout=15.0)
+                        self.model = future.result(timeout=3.0)
                     self._embedding_mode = "local"
                     self._active_dim = UNIFIED_EMBED_DIM
                     self._ensure_index_dimension(UNIFIED_EMBED_DIM)

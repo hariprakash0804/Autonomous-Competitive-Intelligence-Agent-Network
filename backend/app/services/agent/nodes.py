@@ -95,7 +95,7 @@ def researcher_node(state: AgentState) -> AgentState:
         raw_pages = []
 
         if urls:
-            with ThreadPoolExecutor(max_workers=min(len(urls), 5)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(urls), 10)) as executor:
                 pass1_results = list(executor.map(scrape_url, urls))
             for res in pass1_results:
                 raw_pages.append(res)
@@ -123,7 +123,7 @@ def researcher_node(state: AgentState) -> AgentState:
                     homepage_text = page.get("clean_text", "")
                     break
 
-            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=4)
+            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=3)
             for probe_url in probe_urls:
                 probe_clean = probe_url.rstrip("/")
                 if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in pricing_probe_urls]:
@@ -145,13 +145,13 @@ def researcher_node(state: AgentState) -> AgentState:
                 ):
                     general_internal_urls.append(link_item.get("url"))
 
-        # Combine: Pricing probes FIRST, then general internal links fill remaining slots (Cap: 5 max for 10s execution)
-        discovered_urls = (pricing_probe_urls + general_internal_urls)[:5]
+        # Combine: Pricing probes FIRST, then general internal links fill remaining slots (Cap: 3 max for ultra-fast execution)
+        discovered_urls = (pricing_probe_urls + general_internal_urls)[:3]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)
             pass2_start = time.time()
-            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 5)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 10)) as executor:
                 pass2_results = list(executor.map(scrape_url, discovered_urls))
             for res in pass2_results:
                 raw_pages.append(res)
@@ -210,12 +210,13 @@ def researcher_node(state: AgentState) -> AgentState:
 def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge: Pure routing function.
-    If any page is_stale and retry_count < 2, loop back to Researcher node for a retry pass.
-    Otherwise proceed to Change-Detector node.
+    Only reflects to Researcher if ALL scraped pages failed/stale and retry_count < 1.
+    If at least one valid page was scraped, proceeds directly to Change-Detector.
     """
-    has_stale = any(page.get("is_stale", False) for page in state.get("raw_pages", []))
+    raw_pages = state.get("raw_pages", [])
+    all_stale = all(page.get("is_stale", True) for page in raw_pages) if raw_pages else True
 
-    if has_stale and state.get("retry_count", 0) < 2:
+    if all_stale and state.get("retry_count", 0) < 1:
         return "Researcher"
 
     return "Change-Detector"

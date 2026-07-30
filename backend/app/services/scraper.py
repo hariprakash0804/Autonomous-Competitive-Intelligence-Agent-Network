@@ -922,7 +922,7 @@ def _extract_text_by_content_type(response: httpx.Response, content_type: str) -
         return re.sub(r"\s+", " ", raw_text).strip()[:10000]
 
 
-def scrape_with_playwright(url: str, timeout_sec: float = 8.0) -> Optional[Dict[str, Any]]:
+def scrape_with_playwright(url: str, timeout_sec: float = 4.0) -> Optional[Dict[str, Any]]:
     """
     High-Speed Headless Browser Scraping (Playwright Chromium):
     Renders JavaScript-heavy Single Page Applications (SPAs) with resource blocking
@@ -1052,7 +1052,7 @@ def _extract_markdown_internal_links(markdown_text: str, base_url: str, max_link
     return discovered
 
 
-def scrape_with_jina_reader(url: str, timeout_sec: float = 10.0) -> Optional[Dict[str, Any]]:
+def scrape_with_jina_reader(url: str, timeout_sec: float = 4.0) -> Optional[Dict[str, Any]]:
     """
     High-Reliability Anti-Bot Fallback Engine (Jina AI Reader Proxy):
     Bypasses Cloudflare bot challenges, JS shells, and anti-scraping blocks for any domain.
@@ -1118,7 +1118,7 @@ def scrape_with_jina_reader(url: str, timeout_sec: float = 10.0) -> Optional[Dic
     return None
 
 
-def scrape_url(url: str, timeout_sec: float = 6.0, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
+def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
     """
     High-Performance Multi-Engine Hybrid Scraper:
     1. Fast-Path HTTPX Scraper (sub-second performance).

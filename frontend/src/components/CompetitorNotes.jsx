@@ -99,10 +99,18 @@ export default function CompetitorNotes({ selectedCompetitor }) {
     toast.info(`Downloaded notes as text file`, 'Notes Exported');
   };
 
-  // Clear note
-  const handleClear = () => {
+  // Clear note using Toast confirmation modal
+  const handleClear = async () => {
     if (!noteText.trim()) return;
-    if (window.confirm(`Are you sure you want to clear notes for ${compName}?`)) {
+    const isConfirmed = await toast.confirm({
+      title: 'Clear Strategic Notes?',
+      message: `Are you sure you want to clear all strategic notes for ${compName}?`,
+      confirmText: 'Clear Notes',
+      cancelText: 'Keep Notes',
+      type: 'danger',
+    });
+
+    if (isConfirmed) {
       setNoteText('');
       localStorage.removeItem(storageKey);
       setLastSaved(null);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown, Volume2, Pause, Play, Square, Headphones, Mail } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 import CompetitorNotes from './CompetitorNotes';
 
@@ -31,6 +32,7 @@ function extractBulletPointsFromSection(markdown, sectionKeywords) {
 }
 
 export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData }) {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('matrix');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isPausedAudio, setIsPausedAudio] = useState(false);
@@ -60,7 +62,7 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
   // Text-to-Speech SpeechSynthesis Audio Listener Handler
   const handleSpeakBrief = () => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      alert('Text-to-speech listening is not supported in this browser.');
+      toast.warning('Text-to-speech listening is not supported in this browser.', 'Browser Unsupported');
       return;
     }
 

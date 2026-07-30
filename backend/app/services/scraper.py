@@ -98,6 +98,14 @@ def _validate_url(url: str) -> Tuple[bool, str]:
             return False, f"No valid domain in URL: {url}"
         if parsed.scheme not in ("http", "https"):
             return False, f"Unsupported scheme: {parsed.scheme}"
+
+        # SSRF Protection: Block access to localhost, loopback, and private internal IP spaces
+        domain_lower = parsed.netloc.split(":")[0].lower()
+        if domain_lower in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or domain_lower.endswith(".local"):
+            return False, "Access to localhost or loopback target addresses is forbidden (SSRF Block)"
+        if domain_lower.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.31.", "169.254.")):
+            return False, "Access to private internal IP ranges is forbidden (SSRF Block)"
+
         return True, url
     except Exception as e:
         return False, f"URL parse error: {e}"

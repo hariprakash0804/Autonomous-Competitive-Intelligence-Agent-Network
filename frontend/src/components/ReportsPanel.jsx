@@ -200,7 +200,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
               <a
                 href={`${API_BASE_URL}${r.html_url}`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1 bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-indigo-500/10 transition-all duration-200 hover:scale-105 text-[10px] font-medium"
               >
                 <ExternalLink className="w-3 h-3" />
@@ -210,7 +210,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
               <a
                 href={`${API_BASE_URL}${r.pdf_url || `/reports/${r.id}/pdf`}`}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-600 text-amber-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-amber-500/10 transition-all duration-200 hover:scale-105 text-[10px] font-medium"
               >
                 <Download className="w-3 h-3" />

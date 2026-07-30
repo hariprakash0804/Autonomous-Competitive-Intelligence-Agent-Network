@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown, Volume2, Pause, Play, Square, Headphones, Mail } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
+import { sanitizeUrl } from '../utils/url';
 import CompetitorNotes from './CompetitorNotes';
 
 function extractBulletPointsFromSection(markdown, sectionKeywords) {
@@ -201,9 +202,9 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
               </div>
               <p className="text-sm font-bold text-white font-display">{companyName}</p>
               <a
-                href={companyUrl}
+                href={sanitizeUrl(companyUrl)}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1 font-mono truncate transition-colors hover:text-indigo-300"
               >
                 {companyUrl} <ExternalLink className="w-3 h-3 flex-shrink-0" />
@@ -220,9 +221,9 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
               </div>
               <p className="text-sm font-bold text-white font-display">{competitorName}</p>
               <a
-                href={competitorUrl}
+                href={sanitizeUrl(competitorUrl)}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="text-[11px] text-rose-400 hover:underline flex items-center gap-1 font-mono truncate transition-colors hover:text-rose-300"
               >
                 {competitorUrl} <ExternalLink className="w-3 h-3 flex-shrink-0" />

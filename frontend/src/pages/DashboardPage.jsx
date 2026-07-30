@@ -11,6 +11,7 @@ import AgentRunStatus from '../components/AgentRunStatus';
 import ChatWidget from '../components/ChatWidget';
 import ReportsPanel from '../components/ReportsPanel';
 import ComparativeMatrix from '../components/ComparativeMatrix';
+import CompetitorNotes from '../components/CompetitorNotes';
 
 import {
   LogOut, Plus, Sparkles, Building2,
@@ -444,6 +445,10 @@ export default function DashboardPage() {
 
                 <div id="reports-section">
                   <ReportsPanel selectedCompetitorId={selectedCompId} />
+                </div>
+
+                <div id="notes-section">
+                  <CompetitorNotes selectedCompetitor={selectedCompetitor} />
                 </div>
               </div>
             </div>

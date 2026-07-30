@@ -8,7 +8,6 @@ export default function ReportsPanel({ selectedCompetitorId }) {
   const [reports, setReports] = useState([]);
   const [copiedId, setCopiedId] = useState(null);
   const [sendingSlackId, setSendingSlackId] = useState(null);
-  const [sendingEmailId, setSendingEmailId] = useState(null);
   const [listeningReportId, setListeningReportId] = useState(null);
 
   const fetchReports = useCallback(async () => {
@@ -106,23 +105,16 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     }
   };
 
-  const handleSendEmail = async (reportId) => {
-    setSendingEmailId(reportId);
-    try {
-      const res = await api.post(`/reports/deliver-email/${reportId}`, {});
-      if (res.data.email_result?.status === 'skipped') {
-        toast.warning(res.data.email_result.reason, 'SMTP Not Configured');
-      } else if (res.data.email_result?.status === 'sent') {
-        toast.success(`Email report sent to ${res.data.email_result.recipient}!`, 'Email Delivered');
-      } else {
-        toast.error(`Email delivery failed: ${res.data.email_result?.reason || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Failed to send email:', err);
-      toast.error('Failed to send email report.');
-    } finally {
-      setSendingEmailId(null);
-    }
+  const handleOpenMailClient = (report) => {
+    const subject = `Executive Intelligence Report: ${report.competitor_name}`;
+    const cleanSummary = (report.summary || report.content || '')
+      .replace(/#+/g, '')
+      .replace(/\*+/g, '')
+      .replace(/\|/g, ' ')
+      .trim();
+    const body = `Executive Report for ${report.competitor_name}\nDate: ${report.formatted_date}\n\nSummary:\n${cleanSummary.slice(0, 1000)}\n\nRead HTML Report: ${API_BASE_URL}${report.html_url}\n\n---\nAutonomous Competitive Intelligence Agent Network`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    toast.info(`Navigating to default email app...`, 'Email Client Launched');
   };
 
   // Model color mapping
@@ -239,16 +231,12 @@ export default function ReportsPanel({ selectedCompetitorId }) {
               </button>
 
               <button
-                onClick={() => handleSendEmail(r.id)}
-                disabled={sendingEmailId === r.id}
-                title="Send Email"
-                className="flex items-center gap-1 bg-violet-500/10 hover:bg-violet-600 text-violet-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-violet-500/10 transition-all duration-200 hover:scale-105 active:scale-95 text-[10px] font-medium disabled:opacity-40 disabled:hover:scale-100"
+                onClick={() => handleOpenMailClient(r)}
+                title="Open Default Email App with Executive Report"
+                className="flex items-center gap-1 bg-violet-500/10 hover:bg-violet-600 text-violet-400 hover:text-white px-2.5 py-1.5 rounded-lg border border-violet-500/10 transition-all duration-200 hover:scale-105 active:scale-95 text-[10px] font-medium"
               >
-                {sendingEmailId === r.id ? (
-                  <span className="w-3 h-3 border-2 border-violet-400/30 border-t-violet-400 rounded-full animate-spin" />
-                ) : (
-                  <Mail className="w-3 h-3" />
-                )}
+                <Mail className="w-3 h-3 text-violet-400" />
+                <span className="hidden group-hover:inline">Mail App</span>
               </button>
 
               <button

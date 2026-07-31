@@ -353,7 +353,7 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
       </div>
 
       {/* Dual Company Side-by-Side Comparison Area Chart */}
-      <div ref={chartRef} className="h-[210px] w-full pt-2 relative">
+      <div className="h-[210px] w-full pt-2 relative">
         {filteredHistory.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/[0.06] rounded-xl p-4">
             <p className="font-semibold text-slate-400">No sentiment entries match active filters</p>

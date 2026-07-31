@@ -321,7 +321,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
       </div>
 
       {/* Grouped Bar Chart */}
-      <div ref={chartRef} className="h-[270px] w-full pt-2">
+      <div className="h-[270px] w-full pt-2">
         {filteredChartData.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/[0.06] rounded-xl p-4">
             <p className="font-semibold text-slate-400">No tiers match current filters</p>

@@ -139,10 +139,43 @@ def _convert_markdown_to_html(md_text: str) -> str:
 
 
 def _generate_html_charts_svg(markdown_content: str, competitor_name: str) -> str:
-    """Generates inline SVG bar charts and sentiment gauges to embed in HTML executive reports."""
-    # Extract sentiment score if present (e.g. 0.85 -> 85%)
+    """Generates inline SVG bar charts and sentiment gauges to embed in HTML executive reports using actual parsed data."""
     sent_match = re.search(r"Sentiment Score[\*\s:]*([\d\.]+)", markdown_content, re.IGNORECASE)
     sent_score_pct = int(float(sent_match.group(1)) * 100) if sent_match else 85
+
+    tiers = _extract_actual_pricing_tiers(markdown_content, competitor_name)
+    max_price = max([t["our_price"] for t in tiers] + [t["comp_price"] for t in tiers] + [10.0])
+
+    bars_svg = []
+    x_start = 80
+    slot_width = int(600 / max(1, len(tiers)))
+
+    for idx, t in enumerate(tiers):
+        t_name = t["name"]
+        our_p = t["our_price"]
+        comp_p = t["comp_price"]
+        center_x = x_start + idx * slot_width + slot_width // 2
+
+        # Our Company bar
+        our_h = max(6, int((our_p / max_price) * 120)) if our_p > 0 else 5
+        our_y = 165 - our_h
+        bars_svg.append(f"""
+        <rect x="{center_x - 22}" y="{our_y}" width="20" height="{our_h}" rx="3" fill="url(#chartBarGradUser)" />
+        <text x="{center_x - 12}" y="{our_y - 6}" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">${our_p:.0f}</text>
+        """)
+
+        # Competitor bar
+        comp_h = max(6, int((comp_p / max_price) * 120)) if comp_p > 0 else 5
+        comp_y = 165 - comp_h
+        grad = "url(#chartBarGradComp)" if comp_p < our_p else "url(#chartBarGradChanged)"
+        color = "#818cf8" if comp_p < our_p else "#34d399"
+        bars_svg.append(f"""
+        <rect x="{center_x + 2}" y="{comp_y}" width="20" height="{comp_h}" rx="3" fill="{grad}" />
+        <text x="{center_x + 12}" y="{comp_y - 6}" fill="{color}" font-size="10" font-weight="bold" text-anchor="middle">${comp_p:.0f}</text>
+        <text x="{center_x}" y="186" fill="#94a3b8" font-size="10" text-anchor="middle">{t_name[:12]}</text>
+        """)
+
+    svg_bars_rendered = "\n".join(bars_svg)
 
     svg_pricing_chart = f"""
     <div class="chart-container">
@@ -170,46 +203,12 @@ def _generate_html_charts_svg(markdown_content: str, competitor_name: str) -> st
         </defs>
 
         <!-- Y Axis Grid Lines -->
-        <line x1="60" y1="30" x2="700" y2="30" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
-        <line x1="60" y1="75" x2="700" y2="75" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
-        <line x1="60" y1="120" x2="700" y2="120" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="60" y1="45" x2="700" y2="45" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="60" y1="85" x2="700" y2="85" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="60" y1="125" x2="700" y2="125" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
         <line x1="60" y1="165" x2="700" y2="165" stroke="rgba(255,255,255,0.1)" />
 
-        <!-- Y Axis Labels -->
-        <text x="45" y="35" fill="#64748b" font-size="11" text-anchor="end">$100</text>
-        <text x="45" y="80" fill="#64748b" font-size="11" text-anchor="end">$60</text>
-        <text x="45" y="125" fill="#64748b" font-size="11" text-anchor="end">$20</text>
-        <text x="45" y="170" fill="#64748b" font-size="11" text-anchor="end">$0</text>
-
-        <!-- Bars: Our Company Free ($0) -->
-        <rect x="90" y="160" width="45" height="5" rx="3" fill="url(#chartBarGradUser)" />
-        <text x="112" y="152" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">$0</text>
-        <text x="112" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Free (Our Co)</text>
-
-        <!-- Bars: Competitor Free ($0) -->
-        <rect x="190" y="160" width="45" height="5" rx="3" fill="url(#chartBarGradComp)" />
-        <text x="212" y="152" fill="#818cf8" font-size="10" font-weight="bold" text-anchor="middle">$0</text>
-        <text x="212" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Free ({competitor_name})</text>
-
-        <!-- Bars: Our Company Pro ($20) -->
-        <rect x="290" y="120" width="45" height="45" rx="4" fill="url(#chartBarGradUser)" />
-        <text x="312" y="112" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="middle">$20/mo</text>
-        <text x="312" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Pro (Our Co)</text>
-
-        <!-- Bars: Competitor Pro / Instant ($15) -->
-        <rect x="390" y="130" width="45" height="35" rx="4" fill="url(#chartBarGradComp)" />
-        <text x="412" y="122" fill="#818cf8" font-size="11" font-weight="bold" text-anchor="middle">$15/mo</text>
-        <text x="412" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Pro ({competitor_name})</text>
-
-        <!-- Bars: Competitor Opus / Enterprise ($60) -->
-        <rect x="490" y="75" width="45" height="90" rx="4" fill="url(#chartBarGradChanged)" />
-        <text x="512" y="67" fill="#34d399" font-size="11" font-weight="bold" text-anchor="middle">$60/mo</text>
-        <text x="512" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Opus ({competitor_name})</text>
-
-        <!-- Bars: Our Company Enterprise ($100) -->
-        <rect x="590" y="30" width="45" height="135" rx="4" fill="url(#chartBarGradUser)" />
-        <text x="612" y="22" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="middle">$100/mo</text>
-        <text x="612" y="186" fill="#94a3b8" font-size="11" text-anchor="middle">Enterprise (Our Co)</text>
+        {svg_bars_rendered}
       </svg>
     </div>
 

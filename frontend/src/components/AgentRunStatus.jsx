@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle, StopCircle } from 'lucide-react';
 import api from '../api/client';
 
-export default function AgentRunStatus({ runId, onComplete }) {
+export default function AgentRunStatus({ runId, competitorName, onComplete }) {
   const [statusData, setStatusData] = useState(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -106,7 +106,7 @@ export default function AgentRunStatus({ runId, onComplete }) {
         <div>
           <div className="flex items-center gap-2.5">
             <h4 className="text-sm font-bold text-white font-display">
-              Agent Pipeline Run
+              Agent Pipeline{competitorName ? `: ${competitorName}` : ''}
             </h4>
             <span className="font-mono text-[10px] text-slate-500 bg-white/[0.03] px-2 py-0.5 rounded-lg border border-white/[0.04]">
               {runId.slice(0, 8)}...

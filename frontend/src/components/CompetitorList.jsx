@@ -1,17 +1,21 @@
-import { Play, MessageSquare, Plus, Globe, Trash2 } from 'lucide-react';
+import { Play, MessageSquare, Plus, Globe, Trash2, Zap, Loader2 } from 'lucide-react';
 
 export default function CompetitorList({
   competitors,
   selectedId,
+  runningCompIds = [],
   onSelect,
   onRunPipeline,
+  onRunAllPipelines,
   onOpenChat,
   onAddCompetitor,
   onDeleteCompetitor,
 }) {
+  const compList = Array.isArray(competitors) ? competitors : [];
+
   return (
     <div className="glass-card rounded-2xl p-5 neon-border">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div>
           <h2 className="text-sm font-bold text-white flex items-center gap-2 font-display">
             <div className="p-1.5 rounded-lg bg-emerald-500/10">
@@ -19,14 +23,28 @@ export default function CompetitorList({
             </div>
             Tracked Competitors
           </h2>
-          <p className="text-[10px] text-slate-500 mt-0.5">Select a target to analyze</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Select target or run concurrent pipelines</p>
         </div>
-        <button
-          onClick={onAddCompetitor}
-          className="flex items-center gap-1.5 btn-gradient text-xs font-semibold px-3 py-2 rounded-xl shadow-lg shadow-indigo-600/15"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add
-        </button>
+
+        <div className="flex items-center gap-2">
+          {compList.length > 1 && (
+            <button
+              onClick={onRunAllPipelines}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-amber-500/10 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/20 transition-all duration-200 hover:scale-105 active:scale-95 shadow-md"
+              title="Run multi-agent pipelines concurrently for all tracked competitors"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Run All ({compList.length})</span>
+            </button>
+          )}
+
+          <button
+            onClick={onAddCompetitor}
+            className="flex items-center gap-1.5 btn-gradient text-xs font-semibold px-3 py-2 rounded-xl shadow-lg shadow-indigo-600/15"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </div>
       </div>
 
       <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
@@ -90,16 +108,26 @@ export default function CompetitorList({
               </div>
 
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRunPipeline(comp.id);
-                  }}
-                  title="Trigger Agent Pipeline Run"
-                  className="p-2 bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg border border-indigo-500/15 transition-all duration-200 hover:scale-110 active:scale-95"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                </button>
+                {runningCompIds.includes(comp.id) ? (
+                  <span
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-500/20 text-amber-300 text-[10px] font-semibold animate-pulse"
+                    title="Agent Pipeline is actively running for this target"
+                  >
+                    <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
+                    <span>Running</span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRunPipeline(comp.id);
+                    }}
+                    title="Trigger Agent Pipeline Run"
+                    className="p-2 bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg border border-indigo-500/15 transition-all duration-200 hover:scale-110 active:scale-95"
+                  >
+                    <Play className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

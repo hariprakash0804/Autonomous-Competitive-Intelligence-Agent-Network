@@ -16,7 +16,7 @@ import CompetitorNotes from '../components/CompetitorNotes';
 import {
   LogOut, Plus, Sparkles, Building2,
   AlertCircle, LayoutDashboard, Globe, FileText, Activity,
-  DollarSign, Clock, CheckCircle2, Menu
+  DollarSign, Clock, CheckCircle2, Menu, Zap
 } from 'lucide-react';
 
 /* ────────────────────────────────────────────
@@ -52,7 +52,7 @@ export default function DashboardPage() {
   const [priceHistory, setPriceHistory] = useState([]);
   const [sentimentHistory, setSentimentHistory] = useState([]);
   const [reports, setReports] = useState([]);
-  const [activeRunId, setActiveRunId] = useState(null);
+  const [activeRuns, setActiveRuns] = useState([]); // [{ runId, compId, compName }]
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -121,20 +121,36 @@ export default function DashboardPage() {
   };
 
   const handleTriggerPipeline = async (compId) => {
+    const comp = competitors.find((c) => c.id === compId);
+    const compName = comp?.name || 'Competitor';
     try {
       const res = await api.post(`/pipeline/run/${compId}`);
-      setActiveRunId(res.data.agent_run_id);
-      toast.info('Background multi-agent run launched', 'Agent Pipeline');
+      const newRun = { runId: res.data.agent_run_id, compId, compName };
+      setActiveRuns((prev) => {
+        const filtered = prev.filter((r) => r.compId !== compId);
+        return [...filtered, newRun];
+      });
+      toast.info(`Agent pipeline launched for ${compName}`, 'Agent Pipeline');
     } catch (err) {
       console.error('Failed to start agent run:', err);
-      toast.error('Failed to launch agent run. Please check backend connection.');
+      toast.error(`Failed to launch agent run for ${compName}. Please check connection.`);
     }
   };
 
-  const handleRunComplete = () => {
+  const handleRunAllPipelines = async () => {
+    if (!competitors || competitors.length === 0) return;
+    toast.info(`Launching ${competitors.length} concurrent agent pipelines...`, 'Concurrent Pipeline Start');
+    for (const comp of competitors) {
+      await handleTriggerPipeline(comp.id);
+    }
+  };
+
+  const handleRunComplete = (finishedRunId, compId) => {
+    setActiveRuns((prev) => prev.filter((r) => r.runId !== finishedRunId));
     fetchCompetitors();
-    if (selectedCompId) fetchDetails(selectedCompId);
-    toast.success('Agent pipeline completed successfully!', 'Pipeline Finished');
+    if (selectedCompId === compId) fetchDetails(selectedCompId);
+    const comp = competitors.find((c) => c.id === compId);
+    toast.success(`Agent pipeline for ${comp?.name || 'Competitor'} completed!`, 'Pipeline Finished');
   };
 
   const handleDeleteCompetitor = async (compId) => {
@@ -392,9 +408,31 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Active Pipeline Run Status Poller */}
-            {activeRunId && (
-              <AgentRunStatus runId={activeRunId} onComplete={handleRunComplete} />
+            {/* Active Concurrent Pipeline Runs Status Grid */}
+            {activeRuns.length > 0 && (
+              <div className="space-y-3 animate-fade-in-up">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2 font-display">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    Active Agent Pipelines ({activeRuns.length})
+                  </h3>
+                  {activeRuns.length > 1 && (
+                    <span className="text-[10px] text-amber-400 font-mono bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md animate-pulse">
+                      Concurrent Multi-Agent Processing Active
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {activeRuns.map((run) => (
+                    <AgentRunStatus
+                      key={run.runId}
+                      runId={run.runId}
+                      competitorName={run.compName}
+                      onComplete={() => handleRunComplete(run.runId, run.compId)}
+                    />
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Section Divider */}
@@ -409,8 +447,10 @@ export default function DashboardPage() {
                 <CompetitorList
                   competitors={competitors}
                   selectedId={selectedCompId}
+                  runningCompIds={activeRuns.map((r) => r.compId)}
                   onSelect={setSelectedCompId}
                   onRunPipeline={handleTriggerPipeline}
+                  onRunAllPipelines={handleRunAllPipelines}
                   onOpenChat={(id) => {
                     setSelectedCompId(id);
                     setShowChat(true);
@@ -440,6 +480,7 @@ export default function DashboardPage() {
                   <SentimentChart
                     sentimentHistory={sentimentHistory}
                     competitorName={selectedCompetitor?.name}
+                    userCompany={user}
                   />
                 </div>
 

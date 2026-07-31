@@ -112,8 +112,20 @@ def _validate_url(url: str) -> Tuple[bool, str]:
 
 
 def _detect_content_type(response: httpx.Response) -> str:
-    """Detects the content type from response headers. Returns: 'html', 'json', 'xml', 'text', or 'binary'."""
+    """Detects the content type from response headers and binary bytes. Returns: 'html', 'json', 'xml', 'text', or 'binary'."""
     ct = (response.headers.get("content-type") or "").lower()
+
+    # Check for explicit binary MIME types
+    if any(b in ct for b in ["application/pdf", "application/zip", "application/octet-stream", "image/", "video/", "audio/", "font/"]):
+        return "binary"
+
+    # Check raw content bytes for GZIP magic header (\x1f\x8b), PDF (%PDF), or null bytes
+    try:
+        content_bytes = response.content[:500]
+        if content_bytes.startswith(b"\x1f\x8b") or content_bytes.startswith(b"%PDF") or b"\x00" in content_bytes:
+            return "binary"
+    except Exception:
+        pass
 
     if "html" in ct:
         return "html"
@@ -124,7 +136,7 @@ def _detect_content_type(response: httpx.Response) -> str:
     elif "text/" in ct:
         return "text"
     else:
-        # Fallback: try to detect from content
+        # Fallback: try to detect from content text safely
         try:
             text_start = response.text[:500].strip().lower()
             if text_start.startswith(("<!doctype", "<html", "<head", "<body", "<!--")):
@@ -916,8 +928,29 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
 
 
 def _extract_text_by_content_type(response: httpx.Response, content_type: str) -> str:
-    """Extracts clean text from a response based on its detected content type."""
-    raw_text = response.text
+    """Extracts clean text from a response based on its detected content type, safely handling gzip and binary streams."""
+    if content_type == "binary":
+        # Check if it is GZIP compressed data that can be safely decompressed into text
+        try:
+            if response.content.startswith(b"\x1f\x8b"):
+                import gzip
+                decompressed = gzip.decompress(response.content)
+                raw_text = decompressed.decode("utf-8", errors="ignore")
+                if "<html" in raw_text.lower():
+                    return clean_html(raw_text)
+                return re.sub(r"\s+", " ", raw_text).strip()[:10000]
+        except Exception:
+            pass
+        return "[Binary file content - Asset skipped for text analysis]"
+
+    try:
+        raw_text = response.text
+    except Exception:
+        raw_text = response.content.decode("utf-8", errors="ignore")
+
+    # Sanity check: filter out garbled binary characters (\ufffd) or un-rendered gzip
+    if "\ufffd" in raw_text[:200] or raw_text.startswith("\x1f\x8b"):
+        return "[Non-text binary content skipped]"
 
     if content_type == "html":
         return clean_html(raw_text)
@@ -926,7 +959,7 @@ def _extract_text_by_content_type(response: httpx.Response, content_type: str) -
     elif content_type == "xml":
         return clean_xml_content(raw_text)
     else:
-        # Plain text — just clean up whitespace
+        # Plain text — clean up whitespace
         return re.sub(r"\s+", " ", raw_text).strip()[:10000]
 
 
@@ -1201,9 +1234,9 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                     time.sleep(0.5 * (attempt + 1))
                     continue
 
-                raw_content = response.text
                 content_type = _detect_content_type(response)
                 clean_text = _extract_text_by_content_type(response, content_type)
+                raw_content = clean_text if content_type == "binary" else response.text
 
                 if content_type == "html":
                     structured = extract_all_structured_data(raw_content, url)

@@ -511,29 +511,33 @@ def extract_cta_signals(soup: BeautifulSoup) -> List[str]:
 _KEY_LINK_CATEGORIES = {
     "pricing": [
         r"pricing", r"plans?", r"tiers?", r"costs?", r"billing", r"packages", r"subscriptions?",
-        r"quote", r"calculator", r"pricing-plans"
+        r"quote", r"calculator", r"pricing-plans", r"rate-limits?", r"token-pricing", r"api-pricing",
+        r"pay-as-you-go", r"rates", r"usage-pricing", r"pricing-options", r"compare-plans"
     ],
     "features": [
         r"features?", r"products?", r"platform", r"solutions?", r"use-cases?", r"capabilities",
-        r"integrations?", r"marketplace", r"ecosystem", r"apps?", r"plugins?", r"technology", r"services?"
+        r"integrations?", r"marketplace", r"ecosystem", r"apps?", r"plugins?", r"technology", r"services?",
+        r"models", r"llms", r"inference", r"specs", r"benchmarks", r"architecture", r"tokens"
     ],
     "enterprise": [
-        r"enterprise", r"security", r"trust", r"compliance", r"soc2", r"privacy", r"governance"
+        r"enterprise", r"security", r"trust", r"compliance", r"soc2", r"privacy", r"governance",
+        r"security-portal", r"hipaa", r"gdpr"
     ],
     "about": [
         r"about", r"company", r"team", r"who-we-are", r"story", r"leadership", r"careers", r"jobs",
-        r"culture", r"overview"
+        r"culture", r"overview", r"about-us", r"our-mission", r"manifesto", r"investors", r"contact"
     ],
     "docs": [
         r"docs?", r"documentation", r"api", r"developers?", r"help", r"support", r"kb",
-        r"knowledge-base", r"guides?", r"tutorials?", r"references?"
+        r"knowledge-base", r"guides?", r"tutorials?", r"references?", r"api-reference", r"quickstart", r"sdk"
     ],
     "reviews": [
         r"customers?", r"case-studies", r"testimonials?", r"reviews?", r"stories", r"clients?",
-        r"compare", r"versus", r"vs", r"alternatives?"
+        r"compare", r"versus", r"vs", r"alternatives?", r"customer-stories", r"benchmarks", r"evals", r"leaderboard"
     ],
     "news": [
-        r"blog", r"news", r"press", r"updates?", r"changelog", r"resources?", r"events?", r"webinars?"
+        r"blog", r"news", r"press", r"updates?", r"changelog", r"resources?", r"events?", r"webinars?",
+        r"announcements", r"release-notes", r"releases", r"whats-new"
     ],
 }
 
@@ -546,20 +550,28 @@ _STANDARD_PRICING_PATHS = [
     # Tier 1: Universal patterns (95%+ of SaaS companies)
     "/pricing",
     "/plans",
-    # Tier 2: Generic product-segment patterns (work across most companies)
+    "/rates",
+    "/api-pricing",
+    # Tier 2: Generic product-segment & developer patterns
     "/api/pricing",
+    "/pricing/api",
     "/business/pricing",
     "/platform/pricing",
     "/cloud/pricing",
+    "/models/pricing",
     # Tier 3: Developer/Enterprise pricing
     "/developers/pricing",
     "/enterprise/pricing",
     "/enterprise",
+    "/business",
+    "/pro",
     # Tier 4: Alternative naming patterns
     "/pricing-plans",
     "/compare-plans",
     "/pricing-options",
     "/product/pricing",
+    "/usage-pricing",
+    "/pay-as-you-go",
     # Tier 5: Cost calculators & usage-based pricing
     "/cost",
     "/calculator",

@@ -39,8 +39,14 @@ def ingest_url_for_competitor(
         fallback_candidates = [
             f"https://{domain}/pricing",
             f"https://{domain}/plans",
+            f"https://{domain}/api/pricing",
+            f"https://{domain}/pricing-plans",
+            f"https://{domain}/rates",
             f"https://{domain}/product",
             f"https://{domain}/features",
+            f"https://{domain}/business",
+            f"https://{domain}/enterprise",
+            f"https://{domain}/docs",
             f"https://{domain}/about",
             f"https://{domain}/",
         ]

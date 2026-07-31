@@ -147,11 +147,30 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
       // Allow DOM to settle menu close
       await new Promise((r) => setTimeout(r, 100));
 
+      // Temporarily uncap max-height and overflow so all details below the chart are 100% captured
+      const scrollables = cardRef.current.querySelectorAll('.overflow-y-auto, [class*="max-h-"]');
+      const originalStyles = [];
+      scrollables.forEach((el) => {
+        originalStyles.push({
+          el,
+          maxHeight: el.style.maxHeight,
+          overflow: el.style.overflow,
+        });
+        el.style.maxHeight = 'none';
+        el.style.overflow = 'visible';
+      });
+
       const dataUrl = await toPng(cardRef.current, {
         backgroundColor: '#0a0a12',
         quality: 0.98,
         pixelRatio: 2,
         cacheBust: true,
+      });
+
+      // Restore UI scrollable styles
+      originalStyles.forEach(({ el, maxHeight, overflow }) => {
+        el.style.maxHeight = maxHeight;
+        el.style.overflow = overflow;
       });
 
       const link = document.createElement('a');
@@ -160,7 +179,7 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success('Full Sentiment Chart component exported as PNG image!', 'PNG Downloaded');
+      toast.success('Complete Sentiment Chart & all details exported as PNG image!', 'PNG Downloaded');
     } catch (err) {
       console.error('PNG export error:', err);
       toast.error('Failed to export chart image.');

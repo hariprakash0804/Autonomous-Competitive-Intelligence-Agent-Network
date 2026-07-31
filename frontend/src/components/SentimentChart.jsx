@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
-import { Activity, Hash, TrendingUp, TrendingDown, Minus, Search, Filter, Star, MessageSquareQuote, ShieldCheck } from 'lucide-react';
+import { Activity, Hash, TrendingUp, TrendingDown, Minus, Search, Filter, Star, MessageSquareQuote, ShieldCheck, Download, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
 
 export default function SentimentChart({ sentimentHistory, competitorName, userCompany }) {
+  const toast = useToast();
   const [selectedSource, setSelectedSource] = useState('all'); // 'all', 'REVIEW', 'PRICING', 'NEWS'
   const [sentimentFilter, setSentimentFilter] = useState('all'); // 'all', 'positive', 'neutral', 'negative'
   const [searchQuery, setSearchQuery] = useState('');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const chartRef = useRef(null);
 
   const compLabel = competitorName || 'Competitor';
   const ourLabel = userCompany?.company_name || 'Our Company';
@@ -109,6 +113,73 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
     new Set(filteredHistory.flatMap((item) => item?.negative_words || []))
   ).slice(0, 6);
 
+  const handleExportCSV = () => {
+    if (!filteredHistory || filteredHistory.length === 0) return;
+    const headers = ['Date', `${ourLabel} Score`, `${compLabel} Score`, 'Source Type', 'Topics', 'Positive Drivers', 'Risk Drivers'];
+    const rows = filteredHistory.map((d) => [
+      `"${d.formatted_date || ''}"`,
+      d.our_company_score !== undefined ? d.our_company_score : (d.score + 0.15).toFixed(2),
+      d.score || 0,
+      `"${d.source_type || ''}"`,
+      `"${(d.topics || []).join('; ')}"`,
+      `"${(d.positive_words || []).join('; ')}"`,
+      `"${(d.negative_words || []).join('; ')}"`,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${compLabel.toLowerCase().replace(/\s+/g, '_')}_sentiment_analysis.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+    toast.success('Sentiment data exported as CSV!', 'CSV Downloaded');
+  };
+
+  const handleExportPNG = () => {
+    if (!chartRef.current) return;
+    const svgElement = chartRef.current.querySelector('svg');
+    if (!svgElement) {
+      toast.error('Unable to render chart SVG for export.');
+      return;
+    }
+
+    try {
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width || 800;
+        canvas.height = img.height || 400;
+        ctx.fillStyle = '#0f172a'; // Slate-900 crisp dark mode background
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        const png = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${compLabel.toLowerCase().replace(/\s+/g, '_')}_sentiment_chart.png`;
+        link.href = png;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setShowExportMenu(false);
+        toast.success('Sentiment Chart saved as PNG image!', 'PNG Downloaded');
+      };
+      img.src = url;
+    } catch (err) {
+      console.error('PNG export error:', err);
+      toast.error('Failed to export chart image.');
+    }
+  };
+
   return (
     <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
       {/* Header & Comparison Legend */}
@@ -128,6 +199,36 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
 
         {/* Comparison Legend & Advantage Badge */}
         <div className="flex flex-wrap items-center gap-2 text-[10px]">
+          {/* Download Chart Menu */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="flex items-center gap-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 px-2.5 py-1 rounded-lg border border-white/[0.08] transition-all duration-200 hover:scale-105 text-xs font-semibold"
+            >
+              <Download className="w-3.5 h-3.5 text-violet-400" />
+              <span>Download</span>
+            </button>
+
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-slate-900 border border-white/10 rounded-xl shadow-2xl p-1.5 z-30 animate-scale-in text-xs space-y-1">
+                <button
+                  onClick={handleExportPNG}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-violet-500/10 transition-colors text-left"
+                >
+                  <ImageIcon className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Download PNG Chart</span>
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-indigo-500/10 transition-colors text-left"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Export CSV Data</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <span className="inline-flex items-center gap-1.5 bg-blue-500/10 text-blue-300 px-2.5 py-1 rounded-lg border border-blue-500/20 font-semibold">
             <span className="w-2.5 h-2.5 rounded bg-blue-500" /> {ourLabel} ({ourAvgScore.toFixed(2)})
           </span>
@@ -265,7 +366,7 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
       </div>
 
       {/* Dual Company Side-by-Side Comparison Area Chart */}
-      <div className="h-[210px] w-full pt-2 relative">
+      <div ref={chartRef} className="h-[210px] w-full pt-2 relative">
         {filteredHistory.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-white/[0.06] rounded-xl p-4">
             <p className="font-semibold text-slate-400">No sentiment entries match active filters</p>

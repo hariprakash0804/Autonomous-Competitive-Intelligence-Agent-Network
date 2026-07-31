@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
 import { Activity, Hash, TrendingUp, TrendingDown, Minus, Search, Filter, Star, MessageSquareQuote, ShieldCheck, Download, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { useToast } from '../contexts/ToastContext';
 
 export default function SentimentChart({ sentimentHistory, competitorName, userCompany }) {
@@ -9,7 +10,7 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
   const [sentimentFilter, setSentimentFilter] = useState('all'); // 'all', 'positive', 'neutral', 'negative'
   const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const chartRef = useRef(null);
+  const cardRef = useRef(null);
 
   const compLabel = competitorName || 'Competitor';
   const ourLabel = userCompany?.company_name || 'Our Company';
@@ -139,41 +140,27 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
     toast.success('Sentiment data exported as CSV!', 'CSV Downloaded');
   };
 
-  const handleExportPNG = () => {
-    if (!chartRef.current) return;
-    const svgElement = chartRef.current.querySelector('svg');
-    if (!svgElement) {
-      toast.error('Unable to render chart SVG for export.');
-      return;
-    }
-
+  const handleExportPNG = async () => {
+    if (!cardRef.current) return;
     try {
-      const svgData = new XMLSerializer().serializeToString(svgElement);
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-      const url = URL.createObjectURL(svgBlob);
+      setShowExportMenu(false);
+      // Allow DOM to settle menu close
+      await new Promise((r) => setTimeout(r, 100));
 
-      const img = new Image();
-      img.onload = () => {
-        canvas.width = img.width || 800;
-        canvas.height = img.height || 400;
-        ctx.fillStyle = '#0f172a'; // Slate-900 crisp dark mode background
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
+      const dataUrl = await toPng(cardRef.current, {
+        backgroundColor: '#0a0a12',
+        quality: 0.98,
+        pixelRatio: 2,
+        cacheBust: true,
+      });
 
-        const png = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = `${compLabel.toLowerCase().replace(/\s+/g, '_')}_sentiment_chart.png`;
-        link.href = png;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setShowExportMenu(false);
-        toast.success('Sentiment Chart saved as PNG image!', 'PNG Downloaded');
-      };
-      img.src = url;
+      const link = document.createElement('a');
+      link.download = `${compLabel.toLowerCase().replace(/\s+/g, '_')}_sentiment_chart.png`;
+      link.href = dataUrl;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Full Sentiment Chart component exported as PNG image!', 'PNG Downloaded');
     } catch (err) {
       console.error('PNG export error:', err);
       toast.error('Failed to export chart image.');
@@ -181,7 +168,7 @@ export default function SentimentChart({ sentimentHistory, competitorName, userC
   };
 
   return (
-    <div className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
+    <div ref={cardRef} className="glass-card rounded-2xl p-5 neon-border space-y-4 animate-fade-in-up">
       {/* Header & Comparison Legend */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>

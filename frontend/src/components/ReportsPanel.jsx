@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock, Volume2, Square } from 'lucide-react';
+import { FileText, ExternalLink, Download, Send, Mail, Copy, Check, Clock, Volume2, Square, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import api, { API_BASE_URL } from '../api/client';
 
@@ -9,6 +9,7 @@ export default function ReportsPanel({ selectedCompetitorId }) {
   const [copiedId, setCopiedId] = useState(null);
   const [sendingSlackId, setSendingSlackId] = useState(null);
   const [listeningReportId, setListeningReportId] = useState(null);
+  const [ratedReports, setRatedReports] = useState({});
 
   const fetchReports = useCallback(async () => {
     try {
@@ -115,6 +116,27 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     const body = `Executive Report for ${report.competitor_name}\nDate: ${report.formatted_date}\n\nSummary:\n${cleanSummary.slice(0, 1000)}\n\nRead HTML Report: ${API_BASE_URL}${report.html_url}\n\n---\nAutonomous Competitive Intelligence Agent Network`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     toast.info(`Navigating to default email app...`, 'Email Client Launched');
+  };
+
+  const handleFeedbackSubmit = async (reportId, rating) => {
+    try {
+      setRatedReports((prev) => ({ ...prev, [reportId]: rating }));
+      const comments = rating >= 4 ? 'High quality intelligence report' : 'Needs reflection tuning';
+      await api.post(`/reports/${reportId}/feedback`, {
+        rating,
+        feedback_type: 'quality',
+        comments,
+      });
+      toast.success(
+        rating >= 4
+          ? 'Feedback recorded! Agent reflection memory updated with positive exemplar.'
+          : 'Feedback recorded! Agent memory updated for future reflection tuning.',
+        'Feedback Ingested into Training Memory'
+      );
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+      toast.error('Failed to record feedback.');
+    }
   };
 
   // Model color mapping
@@ -250,6 +272,35 @@ export default function ReportsPanel({ selectedCompetitorId }) {
                   <Copy className="w-3 h-3" />
                 )}
               </button>
+
+              {/* Feedback-Based Agent Training Buttons */}
+              <div className="h-4 w-px bg-white/[0.06]" />
+
+              <div className="flex items-center gap-1 bg-white/[0.02] border border-white/[0.04] p-1 rounded-lg">
+                <span className="text-[9px] text-slate-500 font-semibold px-1 hidden sm:inline">Train Agent:</span>
+                <button
+                  onClick={() => handleFeedbackSubmit(r.id, 5)}
+                  title="Submit Positive Feedback (Train Agent Memory)"
+                  className={`p-1 rounded-md transition-all duration-200 ${
+                    ratedReports[r.id] === 5
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10'
+                  }`}
+                >
+                  <ThumbsUp className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => handleFeedbackSubmit(r.id, 1)}
+                  title="Submit Negative Correction (Tune Reflection Prompts)"
+                  className={`p-1 rounded-md transition-all duration-200 ${
+                    ratedReports[r.id] === 1
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      : 'text-slate-400 hover:text-rose-400 hover:bg-rose-500/10'
+                  }`}
+                >
+                  <ThumbsDown className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
         ))}

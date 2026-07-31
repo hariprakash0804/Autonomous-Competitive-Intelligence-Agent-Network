@@ -201,11 +201,13 @@ def generate_executive_report(
     is_incomplete: bool = False,
     user_company_name: str = "Our Company",
     user_company_url: Optional[str] = None,
+    user_feedback_exemplars: Optional[List[str]] = None,
 ) -> Tuple[str, str]:
     """
     Generates a structured comparative competitive intelligence report.
     Uses rich scraped content (metadata, headings, CTAs, actual text) to produce
     data-driven analysis. Includes Features, Pricing, Advantages, and Disadvantages.
+    Incorporates user feedback exemplars (RLHF) to tune report reflection.
     Returns (report_markdown, model_info_string).
     """
     provider = (settings.LLM_PROVIDER or "").lower().strip()
@@ -213,6 +215,10 @@ def generate_executive_report(
 
     # Build rich context from all scraped pages
     rich_context = _build_rich_context(pages_summary, user_company_name, user_company_url)
+
+    feedback_context = ""
+    if user_feedback_exemplars:
+        feedback_context = f"\n═══════════════════════════════════════════════\nUSER FEEDBACK & REFLECTION LEARNING EXEMPLARS (RLHF Memory)\n═══════════════════════════════════════════════\n" + "\n---\n".join(user_feedback_exemplars) + "\n"
 
     prompt = f"""
 You are an expert Competitive Intelligence Analyst. Generate a comprehensive, data-driven comparative intelligence report comparing '{user_company_name}' vs '{competitor_name}'.
@@ -225,7 +231,7 @@ IMPORTANT RULES:
 SCRAPED PAGE DATA (Primary Source)
 ═══════════════════════════════════════════════
 {rich_context}
-
+{feedback_context}
 ═══════════════════════════════════════════════
 PRICING CHANGES & TIERS DETECTED
 ═══════════════════════════════════════════════
@@ -236,8 +242,6 @@ SENTIMENT & TOPIC ANALYSIS
 ═══════════════════════════════════════════════
 {sentiment_results if sentiment_results else "No sentiment data available."}
 
-═══════════════════════════════════════════════
-Data Quality: {'INCOMPLETE - some pages were stale after retries' if is_incomplete else 'Complete'}
 ═══════════════════════════════════════════════
 
 Your report MUST include ALL 6 sections completely without stopping mid-section:

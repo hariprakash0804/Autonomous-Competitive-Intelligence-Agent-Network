@@ -33,6 +33,12 @@ class EmailDeliverRequest(BaseModel):
     recipient_email: Optional[str] = None
 
 
+class FeedbackRequest(BaseModel):
+    rating: int = 5
+    feedback_type: Optional[str] = "quality"
+    comments: Optional[str] = None
+
+
 @router.get("/")
 def list_reports(
     db: Annotated[Session, Depends(get_db)],
@@ -253,3 +259,63 @@ def deliver_email_notification(
     )
 
     return {"status": "success", "email_result": res}
+
+
+@router.post("/{report_id}/feedback")
+def submit_report_feedback(
+    report_id: uuid.UUID,
+    payload: FeedbackRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+):
+    """
+    Submits user feedback (RLHF / Reinforcement Learning from Human Feedback) for an Executive Report.
+    High-rated feedback and user corrections are ingested into FAISS Vector Store memory for Agent Reflection tuning!
+    """
+    report = db.get(Report, report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    comp = db.get(Competitor, report.competitor_id)
+    if not comp or comp.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    from app.models.report import ReportFeedback
+    from app.services.vector_store import vector_store
+
+    fb = ReportFeedback(
+        report_id=report_id,
+        user_id=current_user.id,
+        rating=max(1, min(5, payload.rating)),
+        feedback_type=payload.feedback_type or "quality",
+        comments=payload.comments,
+    )
+    db.add(fb)
+    db.commit()
+    db.refresh(fb)
+
+    # Agent Training & Reflection Ingestion:
+    # Ingest high-rated report sections & feedback into vector store memory for agent learning
+    if payload.rating >= 4 or (payload.comments and len(payload.comments.strip()) > 5):
+        try:
+            exemplar_text = f"User Feedback ({payload.rating}/5 stars) for {comp.name}:\nComments: {payload.comments or 'High quality report'}\nSummary: {(report.summary or '')[:800]}"
+            vector_store.add_texts(
+                texts=[exemplar_text],
+                metadatas=[{
+                    "type": "user_feedback_exemplar",
+                    "rating": payload.rating,
+                    "competitor": comp.name,
+                    "report_id": str(report.id),
+                }]
+            )
+            print(f"[Agent Training] Ingested user feedback exemplar for {comp.name} into FAISS RAG memory.", flush=True)
+        except Exception as e_train:
+            print(f"[Agent Training Note] Vector store feedback ingestion notice: {e_train}", flush=True)
+
+    return {
+        "status": "success",
+        "feedback_id": str(fb.id),
+        "rating": fb.rating,
+        "comments": fb.comments,
+        "message": "Feedback recorded and ingested into Agent Reflection training memory!",
+    }

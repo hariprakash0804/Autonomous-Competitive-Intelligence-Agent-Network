@@ -523,6 +523,19 @@ def report_writer_node(state: AgentState) -> AgentState:
     finally:
         db.close()
 
+    # Retrieve user feedback reflection exemplars (RLHF) from vector store
+    feedback_exemplars = []
+    try:
+        from app.services.vector_store import vector_store
+        fb_docs = vector_store.similarity_search("user_feedback_exemplar", k=3)
+        for doc in fb_docs:
+            if doc and doc.page_content:
+                feedback_exemplars.append(doc.page_content[:600])
+        if feedback_exemplars:
+            print(f"[Report-Writer Node] Retained {len(feedback_exemplars)} user feedback exemplars for reflection tuning.", flush=True)
+    except Exception as e_fb:
+        print(f"[Report-Writer Node] Feedback memory query notice: {e_fb}", flush=True)
+
     llm_start = time.time()
     report_md, model_used = generate_executive_report(
         competitor_name=state.get("competitor_name", "Competitor"),
@@ -532,6 +545,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         is_incomplete=state.get("is_incomplete", False),
         user_company_name=user_company_name,
         user_company_url=user_company_url,
+        user_feedback_exemplars=feedback_exemplars if feedback_exemplars else None,
     )
     print(f"[Report-Writer] LLM report generation: {time.time() - llm_start:.2f}s (model: {model_used})", flush=True)
 

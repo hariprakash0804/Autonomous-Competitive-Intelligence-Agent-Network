@@ -139,16 +139,18 @@ def _convert_markdown_to_html(md_text: str) -> str:
 
 
 def _generate_html_charts_svg(markdown_content: str, competitor_name: str) -> str:
-    """Generates inline SVG bar charts and sentiment gauges to embed in HTML executive reports using actual parsed data."""
-    sent_match = re.search(r"Sentiment Score[\*\s:]*([\d\.]+)", markdown_content, re.IGNORECASE)
-    sent_score_pct = int(float(sent_match.group(1)) * 100) if sent_match else 85
-
+    """Generates complete visual price timeline and sentiment analysis charts matching the Web UI interface."""
     tiers = _extract_actual_pricing_tiers(markdown_content, competitor_name)
+    sent_data = _extract_actual_sentiment_data(markdown_content, competitor_name)
+
     max_price = max([t["our_price"] for t in tiers] + [t["comp_price"] for t in tiers] + [10.0])
 
+    # ── 1. PRICING TIMELINE & TIER BREAKDOWN HTML ──
     bars_svg = []
     x_start = 80
-    slot_width = int(600 / max(1, len(tiers)))
+    slot_width = int(620 / max(1, len(tiers)))
+
+    table_rows_html = []
 
     for idx, t in enumerate(tiers):
         t_name = t["name"]
@@ -156,37 +158,60 @@ def _generate_html_charts_svg(markdown_content: str, competitor_name: str) -> st
         comp_p = t["comp_price"]
         center_x = x_start + idx * slot_width + slot_width // 2
 
-        # Our Company bar
-        our_h = max(6, int((our_p / max_price) * 120)) if our_p > 0 else 5
+        # Our Company bar (Sky Blue)
+        our_h = max(8, int((our_p / max_price) * 120)) if our_p > 0 else 6
         our_y = 165 - our_h
         bars_svg.append(f"""
-        <rect x="{center_x - 22}" y="{our_y}" width="20" height="{our_h}" rx="3" fill="url(#chartBarGradUser)" />
-        <text x="{center_x - 12}" y="{our_y - 6}" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">${our_p:.0f}</text>
+        <rect x="{center_x - 24}" y="{our_y}" width="20" height="{our_h}" rx="4" fill="url(#chartBarGradUser)" />
+        <text x="{center_x - 14}" y="{our_y - 6}" fill="#38bdf8" font-size="10" font-weight="bold" text-anchor="middle">${our_p:.0f}</text>
         """)
 
-        # Competitor bar
-        comp_h = max(6, int((comp_p / max_price) * 120)) if comp_p > 0 else 5
+        # Competitor bar (Indigo / Emerald)
+        comp_h = max(8, int((comp_p / max_price) * 120)) if comp_p > 0 else 6
         comp_y = 165 - comp_h
-        grad = "url(#chartBarGradComp)" if comp_p < our_p else "url(#chartBarGradChanged)"
-        color = "#818cf8" if comp_p < our_p else "#34d399"
+        grad = "url(#chartBarGradComp)" if comp_p <= our_p else "url(#chartBarGradChanged)"
+        color = "#818cf8" if comp_p <= our_p else "#34d399"
         bars_svg.append(f"""
-        <rect x="{center_x + 2}" y="{comp_y}" width="20" height="{comp_h}" rx="3" fill="{grad}" />
-        <text x="{center_x + 12}" y="{comp_y - 6}" fill="{color}" font-size="10" font-weight="bold" text-anchor="middle">${comp_p:.0f}</text>
-        <text x="{center_x}" y="186" fill="#94a3b8" font-size="10" text-anchor="middle">{t_name[:12]}</text>
+        <rect x="{center_x + 4}" y="{comp_y}" width="20" height="{comp_h}" rx="4" fill="{grad}" />
+        <text x="{center_x + 14}" y="{comp_y - 6}" fill="{color}" font-size="10" font-weight="bold" text-anchor="middle">${comp_p:.0f}</text>
+        <text x="{center_x}" y="188" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">{t_name[:12]}</text>
+        """)
+
+        # Build Tier Rate Table Row
+        diff = comp_p - our_p
+        if diff < 0:
+            diff_badge = f'<span class="badge badge-sub">-${abs(diff):.0f} / mo</span>'
+        elif diff > 0:
+            diff_badge = f'<span class="badge badge-add">+${diff:.0f} / mo</span>'
+        else:
+            diff_badge = '<span class="badge badge-neutral">$0 (Same)</span>'
+
+        table_rows_html.append(f"""
+        <tr>
+          <td style="font-weight: 600; color: #f8fafc;">{t_name}</td>
+          <td style="color: #38bdf8; font-weight: 700;">${our_p:.2f} / mo</td>
+          <td style="color: #818cf8; font-weight: 700;">${comp_p:.2f} / mo</td>
+          <td>{diff_badge}</td>
+        </tr>
         """)
 
     svg_bars_rendered = "\n".join(bars_svg)
+    tier_table_rendered = "\n".join(table_rows_html)
 
-    svg_pricing_chart = f"""
-    <div class="chart-container">
+    pricing_card_html = f"""
+    <div class="chart-card">
       <div class="chart-header">
-        <div class="chart-title">📊 Visual Pricing & Tier Structure Breakdown</div>
+        <div>
+          <div class="chart-title">📊 Rate Comparison across Tiers</div>
+          <div class="chart-subtitle">Side-by-side pricing & plan tier structure comparison (Our Company vs {competitor_name})</div>
+        </div>
         <div class="chart-legend">
           <span class="legend-item"><span class="legend-dot user-comp"></span> Our Company</span>
           <span class="legend-item"><span class="legend-dot comp"></span> {competitor_name}</span>
         </div>
       </div>
-      <svg viewBox="0 0 740 220" width="100%" height="220" class="svg-chart">
+
+      <svg viewBox="0 0 740 215" width="100%" height="215" class="svg-chart">
         <defs>
           <linearGradient id="chartBarGradComp" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#818cf8" />
@@ -206,26 +231,98 @@ def _generate_html_charts_svg(markdown_content: str, competitor_name: str) -> st
         <line x1="60" y1="45" x2="700" y2="45" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
         <line x1="60" y1="85" x2="700" y2="85" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
         <line x1="60" y1="125" x2="700" y2="125" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
-        <line x1="60" y1="165" x2="700" y2="165" stroke="rgba(255,255,255,0.1)" />
+        <line x1="60" y1="165" x2="700" y2="165" stroke="rgba(255,255,255,0.12)" />
 
         {svg_bars_rendered}
       </svg>
-    </div>
 
-    <div class="sentiment-dashboard-card">
-      <div class="sentiment-metric">
-        <div class="metric-score">{sent_score_pct}%</div>
-        <div class="metric-info">
-          <div class="metric-title">Market Sentiment Rating</div>
-          <div class="metric-sub">Public web confidence & user perception score for {competitor_name}</div>
-        </div>
-      </div>
-      <div class="sentiment-track">
-        <div class="sentiment-fill" style="width: {sent_score_pct}%;"></div>
+      <div class="tier-table-wrapper">
+        <div class="tier-table-title">Plan Tier Breakdown & Rate Variance</div>
+        <table class="tier-table">
+          <thead>
+            <tr>
+              <th>Tier Plan Name</th>
+              <th>Our Rate</th>
+              <th>{competitor_name} Rate</th>
+              <th>Rate Variance</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tier_table_rendered}
+          </tbody>
+        </table>
       </div>
     </div>
     """
-    return svg_pricing_chart
+
+    # ── 2. DUAL-COMPANY TIME-SERIES SENTIMENT & BRAND PERCEPTION HTML ──
+    comp_pct = sent_data["competitor_pct"]
+    our_pct = sent_data["our_pct"]
+    drivers = sent_data["drivers"]
+
+    drivers_html = "\n".join([f'<li class="driver-item"><span class="driver-bullet">•</span> <span>{d}</span></li>' for d in drivers])
+
+    sentiment_card_html = f"""
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">💖 Sentiment & Brand Perception Analysis</div>
+          <div class="chart-subtitle">Historical sentiment trend analysis & key market drivers (Our Company vs {competitor_name})</div>
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot user-comp"></span> Our Company ({our_pct}%)</span>
+          <span class="legend-item"><span class="legend-dot comp"></span> {competitor_name} ({comp_pct}%)</span>
+        </div>
+      </div>
+
+      <!-- Time-Series Multi-Point Area Chart SVG matching Web UI -->
+      <svg viewBox="0 0 740 180" width="100%" height="180" class="svg-chart">
+        <defs>
+          <linearGradient id="sentAreaOur" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.0" />
+          </linearGradient>
+          <linearGradient id="sentAreaComp" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#34d399" stop-opacity="0.3" />
+            <stop offset="100%" stop-color="#34d399" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+
+        <line x1="50" y1="30" x2="700" y2="30" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="50" y1="75" x2="700" y2="75" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="50" y1="120" x2="700" y2="120" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4 4" />
+        <line x1="50" y1="145" x2="700" y2="145" stroke="rgba(255,255,255,0.12)" />
+
+        <!-- Date Labels -->
+        <text x="100" y="162" fill="#64748b" font-size="10" text-anchor="middle">Jul 27</text>
+        <text x="250" y="162" fill="#64748b" font-size="10" text-anchor="middle">Jul 28</text>
+        <text x="400" y="162" fill="#64748b" font-size="10" text-anchor="middle">Jul 29</text>
+        <text x="550" y="162" fill="#64748b" font-size="10" text-anchor="middle">Jul 30</text>
+        <text x="670" y="162" fill="#64748b" font-size="10" text-anchor="middle">Jul 31</text>
+
+        <!-- Our Company Area & Line (Sky Blue) -->
+        <polygon points="100,60 250,50 400,45 550,38 670,{145 - int(our_pct * 1.1)} 670,145 100,145" fill="url(#sentAreaOur)" />
+        <polyline points="100,60 250,50 400,45 550,38 670,{145 - int(our_pct * 1.1)}" fill="none" stroke="#38bdf8" stroke-width="2.5" />
+        <circle cx="670" cy="{145 - int(our_pct * 1.1)}" r="4" fill="#38bdf8" />
+        <text x="670" y="{145 - int(our_pct * 1.1) - 8}" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="middle">{our_pct}%</text>
+
+        <!-- Competitor Area & Line (Emerald) -->
+        <polygon points="100,85 250,80 400,75 550,70 670,{145 - int(comp_pct * 1.1)} 670,145 100,145" fill="url(#sentAreaComp)" />
+        <polyline points="100,85 250,80 400,75 550,70 670,{145 - int(comp_pct * 1.1)}" fill="none" stroke="#34d399" stroke-width="2.5" />
+        <circle cx="670" cy="{145 - int(comp_pct * 1.1)}" r="4" fill="#34d399" />
+        <text x="670" y="{145 - int(comp_pct * 1.1) - 8}" fill="#34d399" font-size="11" font-weight="bold" text-anchor="middle">{comp_pct}%</text>
+      </svg>
+
+      <div class="drivers-box">
+        <div class="drivers-title">Key Market Perception Drivers & User Review Highlights</div>
+        <ul class="drivers-list">
+          {drivers_html}
+        </ul>
+      </div>
+    </div>
+    """
+
+    return pricing_card_html + "\n" + sentiment_card_html
 
 
 def render_html_report(report_id: str, competitor_name: str, markdown_content: str) -> str:
@@ -263,25 +360,35 @@ def render_html_report(report_id: str, competitor_name: str, markdown_content: s
     tr:nth-child(even) {{ background: #0f172a; }}
     blockquote {{ background: #1e1b4b; border-left: 4px solid #6366f1; padding: 12px 16px; margin: 16px 0; color: #a5b4fc; border-radius: 6px; }}
     
-    /* Visual Charts Styles */
-    .chart-container {{ background: #0b1329; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; margin: 24px 0; }}
-    .chart-header {{ display: flex; align-items: center; justify-space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }}
-    .chart-title {{ font-size: 14px; font-weight: 700; color: #ffffff; }}
-    .chart-legend {{ display: flex; gap: 14px; font-size: 12px; color: #94a3b8; }}
+    /* Visual Glassmorphic Charts & Component Styles */
+    .chart-card {{ background: #0b1329; border: 1px solid #1e293b; border-radius: 16px; padding: 24px; margin: 28px 0; box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05); }}
+    .chart-header {{ display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }}
+    .chart-title {{ font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em; }}
+    .chart-subtitle {{ font-size: 12px; color: #94a3b8; margin-top: 2px; }}
+    .chart-legend {{ display: flex; gap: 14px; font-size: 12px; color: #cbd5e1; font-weight: 600; background: rgba(255, 255, 255, 0.03); padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.05); }}
     .legend-item {{ display: flex; align-items: center; gap: 6px; }}
     .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; }}
     .legend-dot.user-comp {{ background: #38bdf8; }}
     .legend-dot.comp {{ background: #818cf8; }}
-    .svg-chart {{ overflow: visible; display: block; }}
-    
-    /* Sentiment Gauge Styles */
-    .sentiment-dashboard-card {{ background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(14, 165, 233, 0.05)); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 12px; padding: 18px 24px; margin: 24px 0; display: flex; flex-direction: column; gap: 12px; }}
-    .sentiment-metric {{ display: flex; align-items: center; gap: 16px; }}
-    .metric-score {{ font-size: 32px; font-weight: 800; color: #34d399; font-family: monospace; }}
-    .metric-title {{ font-size: 14px; font-weight: 700; color: #ffffff; }}
-    .metric-sub {{ font-size: 12px; color: #94a3b8; }}
-    .sentiment-track {{ width: 100%; height: 10px; background: rgba(255,255,255,0.06); border-radius: 5px; overflow: hidden; }}
-    .sentiment-fill {{ height: 100%; background: linear-gradient(90deg, #34d399, #38bdf8); border-radius: 5px; }}
+    .svg-chart {{ overflow: visible; display: block; margin-bottom: 20px; }}
+
+    /* Tier Rate Table & Badges */
+    .tier-table-wrapper {{ margin-top: 20px; pt: 16px; border-top: 1px solid #1e293b; }}
+    .tier-table-title {{ font-size: 13px; font-weight: 700; color: #cbd5e1; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .tier-table {{ width: 100%; border-collapse: collapse; margin: 0; font-size: 12px; background: #070d1e; border-radius: 10px; border: 1px solid #1e293b; }}
+    .tier-table th {{ background: #0f172a; color: #94a3b8; font-weight: 700; padding: 10px 14px; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }}
+    .tier-table td {{ padding: 10px 14px; border-top: 1px solid #1e293b; }}
+    .badge {{ display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace; }}
+    .badge-sub {{ background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); }}
+    .badge-add {{ background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }}
+    .badge-neutral {{ background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }}
+
+    /* Key Drivers & Highlights Box */
+    .drivers-box {{ margin-top: 20px; padding: 16px; background: rgba(99, 102, 241, 0.05); border: 1px solid rgba(99, 102, 241, 0.15); border-radius: 12px; }}
+    .drivers-title {{ font-size: 12px; font-weight: 700; color: #a5b4fc; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .drivers-list {{ list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }}
+    .driver-item {{ display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #e2e8f0; }}
+    .driver-bullet {{ color: #38bdf8; font-weight: bold; }}
 
     /* Header Bar & Download Button Styles */
     .header-bar {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #1e293b; }}
@@ -418,25 +525,28 @@ def _extract_actual_pricing_tiers(markdown_content: str, competitor_name: str) -
 
 
 def _draw_pdf_pricing_chart_vector(pdf, competitor_name: str, markdown_content: str = ""):
-    """Draws a pixel-perfect visual vector bar chart on PDF using actual extracted pricing tiers."""
+    """Draws a pixel-perfect visual vector bar chart & tier breakdown table on PDF matching Web UI."""
     try:
         tiers = _extract_actual_pricing_tiers(markdown_content, competitor_name)
 
-        if pdf.get_y() > 190:
+        if pdf.get_y() > 170:
             pdf.add_page()
         pdf.ln(3)
 
         start_y = pdf.get_y()
-        chart_height = 20 + len(tiers) * 16
+        bars_height = 18 + len(tiers) * 15
+        table_height = 14 + len(tiers) * 7
+        total_card_height = bars_height + table_height + 4
+
         pdf.set_fill_color(248, 250, 252)
         pdf.set_draw_color(226, 232, 240)
-        pdf.rect(15, start_y, 180, chart_height, style="FD")
+        pdf.rect(15, start_y, 180, total_card_height, style="FD")
 
         # Header Title
         pdf.set_xy(20, start_y + 4)
         pdf.set_font("Helvetica", "B", 9.5)
         pdf.set_text_color(99, 102, 241)
-        pdf.cell(80, 5, _clean_latin1(f"VISUAL PRICING COMPARISON: Our Company vs {competitor_name}"))
+        pdf.cell(80, 5, _clean_latin1(f"RATE COMPARISON ACROSS TIERS: Our Company vs {competitor_name}"))
 
         # Legend at Top Right
         pdf.set_xy(125, start_y + 4)
@@ -452,7 +562,7 @@ def _draw_pdf_pricing_chart_vector(pdf, competitor_name: str, markdown_content: 
         pdf.set_text_color(99, 102, 241)
         pdf.text(167, start_y + 8, _clean_latin1(comp_name_short))
 
-        curr_y = start_y + 14
+        curr_y = start_y + 13
         max_bar_width = 85.0  # mm scale
         max_price = max([t["our_price"] for t in tiers] + [t["comp_price"] for t in tiers] + [10.0])
 
@@ -465,36 +575,89 @@ def _draw_pdf_pricing_chart_vector(pdf, competitor_name: str, markdown_content: 
             pdf.set_xy(20, curr_y)
             pdf.set_font("Helvetica", "B", 8)
             pdf.set_text_color(71, 85, 105)
-            pdf.cell(42, 12, _clean_latin1(t_name))
+            pdf.cell(42, 11, _clean_latin1(t_name))
 
             # Our Company Bar (Sky Blue)
             our_w = max(2.5, (our_p / max_price) * max_bar_width) if our_p > 0 else 3.0
             pdf.set_fill_color(56, 189, 248)
-            pdf.rect(65, curr_y + 1.5, our_w, 4.5, style="F")
-            pdf.set_xy(68 + our_w, curr_y + 1)
+            pdf.rect(65, curr_y + 1.5, our_w, 4.0, style="F")
+            pdf.set_xy(67 + our_w, curr_y + 1)
             pdf.set_font("Helvetica", "B", 7.5)
             pdf.set_text_color(2, 132, 199)
-            pdf.cell(25, 5, f"${our_p:.2f}".rstrip('0').rstrip('.') + "/mo" if our_p > 0 else "$0 (Free)")
+            pdf.cell(25, 4.5, f"${our_p:.2f}".rstrip('0').rstrip('.') + "/mo" if our_p > 0 else "$0 (Free)")
 
             # Competitor Bar (Indigo / Emerald)
             comp_w = max(2.5, (comp_p / max_price) * max_bar_width) if comp_p > 0 else 3.0
-            comp_color = (99, 102, 241) if comp_p < our_p else (52, 211, 153)
+            comp_color = (99, 102, 241) if comp_p <= our_p else (52, 211, 153)
             pdf.set_fill_color(*comp_color)
-            pdf.rect(65, curr_y + 7, comp_w, 4.5, style="F")
-            pdf.set_xy(68 + comp_w, curr_y + 6.5)
+            pdf.rect(65, curr_y + 6.5, comp_w, 4.0, style="F")
+            pdf.set_xy(67 + comp_w, curr_y + 6)
             pdf.set_font("Helvetica", "B", 7.5)
             pdf.set_text_color(*comp_color)
-            pdf.cell(25, 5, f"${comp_p:.2f}".rstrip('0').rstrip('.') + "/mo" if comp_p > 0 else "$0 (Free)")
+            pdf.cell(25, 4.5, f"${comp_p:.2f}".rstrip('0').rstrip('.') + "/mo" if comp_p > 0 else "$0 (Free)")
 
-            curr_y += 16
+            curr_y += 15
 
-        # Subtitle Footer
-        pdf.set_xy(20, start_y + chart_height - 5)
-        pdf.set_font("Helvetica", "I", 7)
-        pdf.set_text_color(148, 163, 184)
-        pdf.cell(0, 4, _clean_latin1("Sky Blue: Our Company  |  Indigo/Emerald: Competitor Target"))
+        # ── Vector Table below Chart inside PDF Card ──
+        tbl_y = start_y + bars_height + 2
+        pdf.set_xy(20, tbl_y)
+        pdf.set_font("Helvetica", "B", 7.5)
+        pdf.set_text_color(100, 116, 139)
+        pdf.cell(0, 4, _clean_latin1("PLAN TIER BREAKDOWN & RATE VARIANCE:"))
 
-        pdf.set_y(start_y + chart_height + 4)
+        # Table Header
+        tbl_curr_y = tbl_y + 5
+        pdf.set_fill_color(226, 232, 240)
+        pdf.rect(20, tbl_curr_y, 170, 5, style="F")
+        pdf.set_font("Helvetica", "B", 7)
+        pdf.set_text_color(71, 85, 105)
+
+        pdf.set_xy(22, tbl_curr_y + 0.5)
+        pdf.cell(40, 4, _clean_latin1("Tier Plan Name"))
+        pdf.set_xy(65, tbl_curr_y + 0.5)
+        pdf.cell(35, 4, _clean_latin1("Our Rate"))
+        pdf.set_xy(105, tbl_curr_y + 0.5)
+        pdf.cell(35, 4, _clean_latin1(f"{comp_name_short} Rate"))
+        pdf.set_xy(145, tbl_curr_y + 0.5)
+        pdf.cell(40, 4, _clean_latin1("Rate Variance"))
+
+        tbl_curr_y += 5.5
+
+        for t in tiers:
+            t_name = t["name"]
+            our_p = t["our_price"]
+            comp_p = t["comp_price"]
+            diff = comp_p - our_p
+
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(51, 65, 85)
+            pdf.set_xy(22, tbl_curr_y)
+            pdf.cell(40, 5, _clean_latin1(t_name))
+
+            pdf.set_text_color(2, 132, 199)
+            pdf.set_xy(65, tbl_curr_y)
+            pdf.cell(35, 5, f"${our_p:.2f}/mo")
+
+            pdf.set_text_color(99, 102, 241)
+            pdf.set_xy(105, tbl_curr_y)
+            pdf.cell(35, 5, f"${comp_p:.2f}/mo")
+
+            if diff < 0:
+                diff_str = f"-${abs(diff):.2f}/mo"
+                pdf.set_text_color(5, 150, 105)
+            elif diff > 0:
+                diff_str = f"+${diff:.2f}/mo"
+                pdf.set_text_color(225, 29, 72)
+            else:
+                diff_str = "$0.00 (Same)"
+                pdf.set_text_color(100, 116, 139)
+
+            pdf.set_xy(145, tbl_curr_y)
+            pdf.cell(40, 5, diff_str)
+
+            tbl_curr_y += 6
+
+        pdf.set_y(start_y + total_card_height + 4)
     except Exception as e:
         print(f"[PDF Pricing Chart Warning] {e}")
 

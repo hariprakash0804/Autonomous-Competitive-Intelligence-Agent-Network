@@ -361,8 +361,11 @@ def _extract_actual_pricing_tiers(markdown_content: str, competitor_name: str) -
     tiers = []
     
     # Parse markdown tables under Section 2 / Pricing
-    pricing_match = re.search(r"## 2\. Pricing.*?\n(.*?)(?=\n## |\Z)", markdown_content, re.DOTALL | re.IGNORECASE)
+    pricing_match = re.search(r"## 2\.[^\n]*\n(.*)", markdown_content, re.DOTALL)
     section_text = pricing_match.group(1) if pricing_match else markdown_content
+    next_section = re.search(r"\n## [3-9]\.", section_text)
+    if next_section:
+        section_text = section_text[:next_section.start()]
 
     # Match table rows: | Tier | Price | ... |
     table_lines = [l.strip() for l in section_text.split("\n") if l.strip().startswith("|") and l.strip().endswith("|")]

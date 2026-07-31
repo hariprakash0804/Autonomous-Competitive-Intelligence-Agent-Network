@@ -918,6 +918,22 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
     lower_text = clean_text.lower()
     lower_html = html.lower() if html else ""
 
+    # Detect 404 / Page Not Found / Broken URL pages
+    not_found_patterns = [
+        r"^#\s*404\b",
+        r"\b404\s*-\s*page\s*not\s*found\b",
+        r"\bpage\s*not\s*found\b",
+        r"\b404\s*error\b",
+        r"\b404\s*not\s*found\b",
+        r"\bthis\s*page\s*does\s*not\s*exist\b",
+        r"\bthe\s*page\s*you\s*are\s*looking\s*for\s*could\s*not\s*be\s*found\b",
+        r"\b404:\s*page\s*not\s*found\b"
+    ]
+
+    for nf_pat in not_found_patterns:
+        if re.search(nf_pat, lower_text, re.MULTILINE):
+            return True, f"Detected 404 Not Found error page pattern: '{nf_pat}'"
+
     for pattern in JS_SHELL_PATTERNS:
         if re.search(pattern, lower_text) or re.search(pattern, lower_html):
             # Only flag as stale if the total content is very short (actual pages may contain these phrases incidentally)
@@ -1142,14 +1158,17 @@ def scrape_with_jina_reader(url: str, timeout_sec: float = 4.0) -> Optional[Dict
                 if not structured.get("key_internal_links"):
                     structured["key_internal_links"] = _extract_markdown_internal_links(clean_body, url)
 
+                # Check if Jina returned a 404 or stale error page
+                is_stale, stale_reason = check_is_stale("", clean_body, 200)
+
                 return {
                     "url": url,
                     "raw_content": text,
                     "clean_text": clean_body,
                     "content_hash": content_hash,
-                    "is_stale": False,
-                    "stale_reason": None,
-                    "status_code": 200,
+                    "is_stale": is_stale,
+                    "stale_reason": stale_reason,
+                    "status_code": 404 if is_stale else 200,
                     "content_type": "text/markdown",
                     "scraped_by": "jina_reader",
                     **structured,

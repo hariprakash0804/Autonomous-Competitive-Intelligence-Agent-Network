@@ -32,6 +32,31 @@ def ingest_url_for_competitor(
     is_stale = scrape_res["is_stale"]
     stale_reason = scrape_res["stale_reason"]
 
+    # If primary URL is 404 / broken / stale, automatically probe alternative sub-pages on the domain
+    if is_stale and competitor and competitor.domain:
+        print(f"[Ingestion] Primary URL '{url}' is 404/stale ({stale_reason}). Probing fallback sub-pages for {competitor.name}...", flush=True)
+        domain = competitor.domain.lower()
+        fallback_candidates = [
+            f"https://{domain}/pricing",
+            f"https://{domain}/plans",
+            f"https://{domain}/product",
+            f"https://{domain}/features",
+            f"https://{domain}/about",
+            f"https://{domain}/",
+        ]
+        for alt_url in fallback_candidates:
+            if alt_url.rstrip("/") != url.rstrip("/"):
+                alt_res = scrape_url(alt_url)
+                if not alt_res.get("is_stale") and alt_res.get("clean_text"):
+                    print(f"[Ingestion] Sub-page fallback succeeded! Found valid content at: {alt_url}", flush=True)
+                    scrape_res = alt_res
+                    clean_text = scrape_res["clean_text"]
+                    content_hash = scrape_res["content_hash"]
+                    is_stale = False
+                    stale_reason = None
+                    url = alt_url
+                    break
+
     # Enrich clean_text with metadata context for better FAISS indexing
     metadata = scrape_res.get("metadata", {})
     meta_title = metadata.get("title") or metadata.get("og_title") or ""

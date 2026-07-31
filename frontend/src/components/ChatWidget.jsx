@@ -231,12 +231,24 @@ export default function ChatWidget({ selectedCompetitor, onClose }) {
   const handleExportChat = () => {
     if (!messages || messages.length === 0) return;
 
+    // Filter out network errors and error notice messages from exported transcript
+    const validMessages = messages.filter((msg) => {
+      if (!msg || !msg.text) return false;
+      const lower = msg.text.toLowerCase();
+      if (lower.startsWith('error processing question') || lower.includes('check backend connection') || msg.isError) {
+        return false;
+      }
+      return true;
+    });
+
+    if (validMessages.length === 0) return;
+
     const compName = selectedCompetitor ? selectedCompetitor.name : 'Global Competitors';
     let md = `# Competitive Intelligence Chat Transcript\n`;
     md += `**Target Competitor**: ${compName}\n`;
     md += `**Exported At**: ${new Date().toLocaleString()}\n\n`;
 
-    messages.forEach((msg) => {
+    validMessages.forEach((msg) => {
       const role = msg.sender === 'user' ? 'User' : 'RAG Assistant';
       md += `### ${role}\n${msg.text}\n\n`;
       if (msg.image_url || msg.media_filename) {

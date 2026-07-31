@@ -539,6 +539,28 @@ class VectorStoreService:
 
         return results
 
+    def similarity_search(
+        self,
+        query: str,
+        k: int = 5,
+        competitor_id: Optional[str] = None,
+        allowed_competitor_ids: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """Alias method matching similarity_search(query, k=5) for feedback reflection memory & vector store compatibility."""
+        results = self.search(query, competitor_id=competitor_id, allowed_competitor_ids=allowed_competitor_ids, top_k=k)
+        
+        class VectorDoc:
+            def __init__(self, data: Dict[str, Any]):
+                self.page_content = data.get("chunk_text", "")
+                self.chunk_text = data.get("chunk_text", "")
+                self.metadata = data
+            def get(self, key: str, default: Any = None):
+                return self.metadata.get(key, default)
+            def __getitem__(self, item: str):
+                return self.metadata[item]
+
+        return [VectorDoc(res) for res in results]
+
     def rehydrate_from_db(self):
         """
         Auto-Rehydration for Ephemeral Cloud Deployments (Render Free Tier):

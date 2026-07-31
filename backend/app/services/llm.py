@@ -428,6 +428,7 @@ def generate_rag_answer(
     media_filename: Optional[str] = None,
     media_type: Optional[str] = None,
     media_content: Optional[str] = None,
+    target_competitor_name: Optional[str] = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """
     Generates grounded RAG answer from retrieved FAISS vector chunks.
@@ -478,6 +479,13 @@ def generate_rag_answer(
             media_context += f"- Visual Media: Attached image file ({media_filename or 'Screenshot'})\n"
         media_context += "- Instruction: Analyze and incorporate specific details from this attached document/media into your response.\n\n"
 
+    target_focus = ""
+    if target_competitor_name:
+        target_focus = (
+            f"5. TARGET COMPETITOR FOCUS: The user is currently chatting about target competitor '{target_competitor_name}'.\n"
+            f"   Answer directly and specifically about {target_competitor_name}. Do NOT include unrequested sections for other companies unless the user explicitly asks for a comparison.\n"
+        )
+
     prompt = f"""You are an Executive Competitive Intelligence RAG Assistant.
 
 CRITICAL INSTRUCTIONS:
@@ -485,12 +493,12 @@ CRITICAL INSTRUCTIONS:
 2. Under no circumstances must you disclose or reference information about competitors not belonging to the current user or outside the provided context.
 3. DO NOT make assumptions beyond what is explicitly stated in the context or attached media.
 4. If the retrieved context does NOT contain sufficient information about the user's tracked competitors, respond EXACTLY: "I cannot answer this question based on your tracked competitor data."
-5. FORMAT YOUR ANSWER BEAUTIFULLY:
+{target_focus}6. FORMAT YOUR ANSWER BEAUTIFULLY:
    - Use bold section headings (e.g. ### Executive Summary, ### Key Analysis, ### Pricing & Features).
    - Use bullet points with bold lead labels (e.g. - **Feature**: details).
    - Keep answers crisp, scannable, and directly focused on the user's query.
 
-RETRIEVED COMPETITOR SNAPSHOT CONTEXT:
+{history_context}{media_context}RETRIEVED COMPETITOR SNAPSHOT CONTEXT:
 {formatted_context}
 
 USER QUESTION:

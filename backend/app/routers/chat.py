@@ -109,7 +109,7 @@ def chat_query(
                 "chunk_text": text,
             })
 
-    # Generate grounded RAG answer with Chat Memory, Image, and Document Context
+    # Generate grounded RAG answer with Chat Memory, Image, Document Context, and Competitor Focus
     answer, cited_snapshots = generate_rag_answer(
         question=payload.question,
         retrieved_chunks=retrieved_chunks,
@@ -118,6 +118,7 @@ def chat_query(
         media_filename=payload.media_filename,
         media_type=payload.media_type,
         media_content=payload.media_content,
+        target_competitor_name=target_competitor.name if target_competitor else None,
     )
 
     return {

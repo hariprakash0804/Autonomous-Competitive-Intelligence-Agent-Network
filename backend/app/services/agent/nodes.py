@@ -529,8 +529,10 @@ def report_writer_node(state: AgentState) -> AgentState:
         from app.services.vector_store import vector_store
         fb_docs = vector_store.similarity_search("user_feedback_exemplar", k=3)
         for doc in fb_docs:
-            if doc and doc.page_content:
-                feedback_exemplars.append(doc.page_content[:600])
+            if doc:
+                text = getattr(doc, "page_content", "") or (doc.get("chunk_text") if isinstance(doc, dict) else "")
+                if text:
+                    feedback_exemplars.append(text[:600])
         if feedback_exemplars:
             print(f"[Report-Writer Node] Retained {len(feedback_exemplars)} user feedback exemplars for reflection tuning.", flush=True)
     except Exception as e_fb:

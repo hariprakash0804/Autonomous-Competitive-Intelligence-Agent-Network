@@ -74,6 +74,7 @@ def _convert_markdown_to_html(md_text: str) -> str:
         nonlocal in_table, table_rows
         if table_rows:
             header = table_rows[0]
+            header_len = len(header)
             body = [r for r in table_rows[1:] if not all(c.strip().startswith("-") for c in r)]
             table_html = ["<table><thead><tr>"]
             for h in header:
@@ -81,8 +82,11 @@ def _convert_markdown_to_html(md_text: str) -> str:
                 table_html.append(f"<th>{clean_h}</th>")
             table_html.append("</tr></thead><tbody>")
             for row in body:
+                padded_row = list(row)
+                while len(padded_row) < header_len:
+                    padded_row.append("—")
                 table_html.append("<tr>")
-                for cell in row:
+                for cell in padded_row[:header_len]:
                     clean_c = _format_inline_markdown(cell.strip())
                     table_html.append(f"<td>{clean_c}</td>")
                 table_html.append("</tr>")
@@ -96,7 +100,9 @@ def _convert_markdown_to_html(md_text: str) -> str:
         if stripped.startswith("|"):
             flush_list()
             in_table = True
-            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            raw_clean = re.sub(r"^\|", "", stripped)
+            raw_clean = re.sub(r"\|$", "", raw_clean)
+            cells = [c.strip() for c in raw_clean.split("|")]
             table_rows.append(cells)
             continue
         else:

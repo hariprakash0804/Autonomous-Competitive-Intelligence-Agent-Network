@@ -47,11 +47,39 @@ def _get_cached_client(api_key: str) -> OpenAI:
     return _cached_client
 
 
-def call_openrouter(prompt: str, api_key: str, max_tokens: int = 4000) -> Tuple[str, str]:
+def _repair_truncated_markdown(text: str) -> str:
+    """
+    Auto-repairs Markdown output that was truncated due to LLM max_tokens cutoff.
+    Fixes incomplete table rows, unclosed code blocks, and cut-off headers/lines.
+    """
+    if not text:
+        return ""
+
+    cleaned = text.strip()
+
+    # 1. Fix unclosed fenced code blocks ```
+    code_block_count = cleaned.count("```")
+    if code_block_count % 2 != 0:
+        cleaned += "\n```"
+
+    # 2. Fix incomplete table row at the end if truncated mid-line
+    lines = cleaned.split("\n")
+    if lines:
+        last_line = lines[-1].strip()
+        # If last line starts with '|' or contains multiple '|' columns but doesn't end with '|'
+        if last_line.startswith("|") or (last_line.count("|") >= 2 and not last_line.endswith("|")):
+            if not last_line.endswith("|"):
+                lines[-1] = last_line + " |"
+            cleaned = "\n".join(lines)
+
+    return cleaned
+
+
+def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[str, str]:
     """
     Invokes OpenRouter API using OpenAI SDK with active free models pool.
     Proactively enforces a 0.5s delay and reactively catches 429 rate limits
-    or API errors to automatically try fallbacks.
+    or API errors to automatically try fallbacks. Auto-repairs truncated outputs.
     Returns (response_text, actual_model_served).
     """
     client = _get_cached_client(api_key)
@@ -67,7 +95,7 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 4000) -> Tuple[
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}' with 25s HTTP timeout guard...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 25s HTTP timeout guard (max_tokens={max_tokens})...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
@@ -76,8 +104,14 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 4000) -> Tuple[
                 timeout=25.0,
             )
             model_served = getattr(response, "model", model)
+            finish_reason = getattr(response.choices[0], "finish_reason", "")
             content = response.choices[0].message.content or ""
-            return content, str(model_served)
+            
+            if finish_reason == "length":
+                print("[OpenRouter Warning] Response reached max_tokens limit. Auto-repairing truncated markdown structure...", flush=True)
+
+            repaired_content = _repair_truncated_markdown(content)
+            return repaired_content, str(model_served)
 
         except Exception as exc:
             last_exception = exc
@@ -278,7 +312,7 @@ CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-section or truncate.
     # 1. OpenRouter Provider Execution
     if provider == "openrouter" and api_key:
         try:
-            report_text, model_used = call_openrouter(prompt, api_key, max_tokens=4000)
+            report_text, model_used = call_openrouter(prompt, api_key, max_tokens=6000)
             return report_text, f"openrouter/{model_used}"
         except Exception as exc:
             print(f"[OpenRouter API Failure] {exc}. Falling back to instant structured comparative generator.")

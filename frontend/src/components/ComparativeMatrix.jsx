@@ -491,6 +491,7 @@ function renderMarkdownFormatted(mdText) {
   const flushTable = (key) => {
     if (tableRows && tableRows.length > 0) {
       const headerRow = tableRows[0] || [];
+      const headerCount = headerRow.length;
       const bodyRows = (tableRows.slice(1) || []).filter(
         (r) => r && Array.isArray(r) && !r.every((c) => (c || '').trim().startsWith('-'))
       );
@@ -505,13 +506,19 @@ function renderMarkdownFormatted(mdText) {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.03]">
-              {(Array.isArray(bodyRows) ? bodyRows : []).map((row, rIdx) => (
-                <tr key={rIdx} className="hover:bg-white/[0.02] transition">
-                  {(Array.isArray(row) ? row : []).map((cell, cIdx) => (
-                    <td key={cIdx} className="p-3 text-slate-300">{(cell || '').replace(/\*\*/g, '').trim()}</td>
-                  ))}
-                </tr>
-              ))}
+              {(Array.isArray(bodyRows) ? bodyRows : []).map((row, rIdx) => {
+                const paddedRow = [...(row || [])];
+                while (paddedRow.length < headerCount) {
+                  paddedRow.push('—');
+                }
+                return (
+                  <tr key={rIdx} className="hover:bg-white/[0.02] transition">
+                    {paddedRow.slice(0, Math.max(headerCount, paddedRow.length)).map((cell, cIdx) => (
+                      <td key={cIdx} className="p-3 text-slate-300">{(cell || '—').replace(/\*\*/g, '').trim()}</td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -523,9 +530,10 @@ function renderMarkdownFormatted(mdText) {
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+    if (trimmed.startsWith('|')) {
       inTable = true;
-      const cells = trimmed.split('|').slice(1, -1);
+      const rawClean = trimmed.replace(/^\|/, '').replace(/\|$/, '');
+      const cells = rawClean.split('|').map((c) => c.trim());
       tableRows.push(cells);
     } else {
       if (inTable) flushTable(`table-${idx}`);

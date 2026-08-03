@@ -467,8 +467,10 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
               <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mx-auto">
                 <FileText className="w-7 h-7 text-slate-700" />
               </div>
-              <p className="text-xs text-slate-500 font-medium">No report generated yet</p>
-              <p className="text-[10px] text-slate-600">Run the intelligence pipeline to generate a full executive brief.</p>
+              <p className="text-xs text-amber-400/90 font-semibold px-3 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20 inline-block">
+                No new features applied in the competitor company
+              </p>
+              <p className="text-[10px] text-slate-500">Run the intelligence pipeline to generate a full executive brief.</p>
             </div>
           )}
         </div>

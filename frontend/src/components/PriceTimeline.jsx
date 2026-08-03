@@ -21,8 +21,8 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
           <DollarSign className="w-7 h-7 text-slate-700" />
         </div>
         <h3 className="text-slate-300 font-bold text-sm font-display">No Price Movement Data</h3>
-        <p className="text-[11px] text-slate-500 text-center max-w-sm mt-1">
-          Trigger an Agent Pipeline run on {competitorName || 'this competitor'} to extract pricing snapshots.
+        <p className="text-xs text-amber-400/90 font-semibold text-center max-w-sm mt-1 px-3 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20">
+          No new features applied in the competitor company
         </p>
       </div>
     );

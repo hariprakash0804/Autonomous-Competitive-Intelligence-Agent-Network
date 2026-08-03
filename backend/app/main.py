@@ -32,9 +32,13 @@ def on_startup():
                 conn.execute(text("ALTER TABLE reports ADD COLUMN IF NOT EXISTS html_url TEXT;"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name VARCHAR(255);"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_url VARCHAR(1024);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_description TEXT;"))
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(1024);"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_onboarded BOOLEAN DEFAULT FALSE;"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS execution_logs JSON;"))
+                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS pages_visited JSON;"))
                 # Purge legacy corrupted PriceChange records ($650 / $750 regex artifacts from earlier tests)
                 conn.execute(text("DELETE FROM price_changes WHERE old_price IN (650, 750) OR new_price IN (650, 750);"))
 

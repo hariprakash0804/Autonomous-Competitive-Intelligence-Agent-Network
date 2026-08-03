@@ -945,7 +945,8 @@ def send_slack_notification(webhook_url: str, competitor_name: str, report_summa
     if not webhook_url or not webhook_url.strip():
         return {"status": "skipped", "reason": "No webhook URL configured"}
 
-    formatted_summary = _convert_markdown_to_slack_mrkdwn(report_summary[:600])
+    summary_text = report_summary[:600] if report_summary else "no new features applied in the competitor company"
+    formatted_summary = _convert_markdown_to_slack_mrkdwn(summary_text)
 
     payload = {
         "blocks": [

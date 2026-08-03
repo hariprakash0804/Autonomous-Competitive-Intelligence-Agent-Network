@@ -12,6 +12,8 @@ import ChatWidget from '../components/ChatWidget';
 import ReportsPanel from '../components/ReportsPanel';
 import ComparativeMatrix from '../components/ComparativeMatrix';
 import CompetitorNotes from '../components/CompetitorNotes';
+import OnboardingModal from '../components/OnboardingModal';
+import AgentRunLogModal from '../components/AgentRunLogModal';
 
 import {
   LogOut, Plus, Sparkles, Building2,
@@ -56,6 +58,7 @@ export default function DashboardPage() {
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logModalData, setLogModalData] = useState(null); // { runId, competitorName }
 
   // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
@@ -478,6 +481,7 @@ export default function DashboardPage() {
                       runId={run.runId}
                       competitorName={run.compName}
                       onComplete={() => handleRunComplete(run.runId, run.compId)}
+                      onViewLogs={(rId, name) => setLogModalData({ runId: rId, competitorName: name })}
                     />
                   ))}
                 </div>
@@ -785,6 +789,20 @@ export default function DashboardPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Onboarding Modal for First Time Signups */}
+      {user && !user.is_onboarded && (
+        <OnboardingModal onComplete={() => fetchCompetitors()} />
+      )}
+
+      {/* Agent Execution Logs Modal */}
+      {logModalData && (
+        <AgentRunLogModal
+          runId={logModalData.runId}
+          competitorName={logModalData.competitorName}
+          onClose={() => setLogModalData(null)}
+        />
       )}
 
       {/* Floating RAG Chat Widget */}

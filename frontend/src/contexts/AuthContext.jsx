@@ -54,10 +54,18 @@ export function AuthProvider({ children }) {
     return meRes.data;
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('access_token');
-    setToken(null);
-    setUser(null);
+  const completeOnboarding = useCallback(async (formData) => {
+    const res = await api.post('/auth/onboard', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    setUser(res.data);
+    return res.data;
+  }, []);
+
+  const updateUser = useCallback((updatedUserData) => {
+    setUser((prev) => ({ ...prev, ...updatedUserData }));
   }, []);
 
   const value = {
@@ -68,6 +76,8 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
+    completeOnboarding,
+    updateUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

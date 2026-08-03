@@ -235,7 +235,7 @@ SCRAPED PAGE DATA (Primary Source)
 ═══════════════════════════════════════════════
 PRICING CHANGES & TIERS DETECTED
 ═══════════════════════════════════════════════
-{diffs if diffs else "No pricing tier changes detected."}
+{diffs if diffs else "No pricing tier changes detected. no new features applied in the competitor company."}
 
 ═══════════════════════════════════════════════
 SENTIMENT & TOPIC ANALYSIS

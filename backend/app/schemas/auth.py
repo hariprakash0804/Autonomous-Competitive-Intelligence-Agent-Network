@@ -26,7 +26,9 @@ class UserResponse(BaseModel):
     name: str
     company_name: Optional[str] = None
     company_url: Optional[str] = None
+    company_description: Optional[str] = None
     slack_webhook_url: Optional[str] = None
+    is_onboarded: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -36,5 +38,15 @@ class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
     company_name: Optional[str] = None
     company_url: Optional[str] = None
+    company_description: Optional[str] = None
     slack_webhook_url: Optional[str] = None
+    is_onboarded: Optional[bool] = None
+
+
+class OnboardingRequest(BaseModel):
+    company_name: Optional[str] = None
+    method: str = Field(..., description="Method used: 'url', 'text', or 'document'")
+    company_url: Optional[str] = None
+    description_text: Optional[str] = None
+
 

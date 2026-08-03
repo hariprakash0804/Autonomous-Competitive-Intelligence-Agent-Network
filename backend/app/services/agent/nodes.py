@@ -14,6 +14,7 @@ from app.models.snapshot import Snapshot, SourceType
 from app.models.price_change import PriceChange
 from app.models.sentiment_score import SentimentScore
 from app.models.report import Report
+from app.models.agent_run import AgentRun
 from app.services.scraper import scrape_url
 from app.services.diff_pricing import diff_pricing, extract_plan_prices, smart_extract_plan_prices
 from app.services.sentiment import sentiment_score
@@ -21,6 +22,41 @@ from app.services.vector_store import vector_store
 from app.services.llm import generate_executive_report
 from app.services.agent.state import AgentState
 from app.services.reports_service import send_custom_price_alert_webhook
+
+
+def _append_agent_run_log(agent_run_id_str: str, step_name: str, status: str, details: str, pages_info: list = None):
+    """Persists clean execution log entries for user UI viewing."""
+    if not agent_run_id_str:
+        return
+    db = SessionLocal()
+    try:
+        run = db.get(AgentRun, uuid.UUID(agent_run_id_str))
+        if run:
+            current_logs = list(run.execution_logs or [])
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "step_name": step_name,
+                "status": status,
+                "details": details,
+            }
+            current_logs.append(log_entry)
+            run.execution_logs = current_logs
+
+            if pages_info:
+                current_pages = list(run.pages_visited or [])
+                existing_urls = {p.get("url") for p in current_pages}
+                for p in pages_info:
+                    if p.get("url") and p.get("url") not in existing_urls:
+                        current_pages.append(p)
+                        existing_urls.add(p.get("url"))
+                run.pages_visited = current_pages
+
+            db.commit()
+    except Exception as e:
+        print(f"[Run Log Error] {e}")
+    finally:
+        db.close()
+
 
 
 def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
@@ -220,6 +256,22 @@ def researcher_node(state: AgentState) -> AgentState:
         db.close()
 
     state["raw_pages"] = raw_pages
+    pages_info = [
+        {
+            "url": p.get("url"),
+            "title": (p.get("metadata", {}) or {}).get("title") or (p.get("metadata", {}) or {}).get("og_title") or "Page",
+            "source_type": _detect_source_type(p).value if p.get("clean_text") else "NEWS",
+            "status": "Success" if not p.get("is_stale") and p.get("clean_text") else "Stale/Failed",
+        }
+        for p in raw_pages
+    ]
+    _append_agent_run_log(
+        state.get("agent_run_id"),
+        "Researcher Workflow Step",
+        "COMPLETED",
+        f"Gathered and crawled {len(raw_pages)} pages for competitor analysis.",
+        pages_info=pages_info,
+    )
     print(f"[Researcher Node] TOTAL: {time.time() - node_start:.2f}s (Analyzed {len(raw_pages)} total pages)", flush=True)
     return state
 
@@ -375,7 +427,18 @@ def change_detector_node(state: AgentState) -> AgentState:
         db.close()
 
     state["diffs"] = diffs
-    print(f"[Change-Detector] TOTAL: {time.time() - node_start:.2f}s", flush=True)
+    if not diffs:
+        log_detail = "no new features applied in the competitor company"
+    else:
+        log_detail = f"Detected {len(diffs)} pricing/feature movements across monitored pages."
+
+    _append_agent_run_log(
+        state.get("agent_run_id"),
+        "Change & Pricing Detector Workflow Step",
+        "COMPLETED",
+        log_detail,
+    )
+    print(f"[Change-Detector] TOTAL: {time.time() - node_start:.2f}s ({log_detail})", flush=True)
     return state
 
 
@@ -450,6 +513,12 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
         db.close()
 
     state["sentiment_results"] = sentiment_results
+    _append_agent_run_log(
+        state.get("agent_run_id"),
+        "Sentiment Analyst Workflow Step",
+        "COMPLETED",
+        f"Analyzed customer sentiment across {len(sentiment_results)} pages.",
+    )
     print(f"[Sentiment-Analyst] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state
 
@@ -606,5 +675,11 @@ def report_writer_node(state: AgentState) -> AgentState:
     finally:
         db.close()
 
+    _append_agent_run_log(
+        state.get("agent_run_id"),
+        "Executive Report Synthesis Workflow Step",
+        "COMPLETED",
+        f"Generated executive report via {model_used}. Report saved & ready.",
+    )
     print(f"[Report-Writer] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state

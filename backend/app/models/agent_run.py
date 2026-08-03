@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, ForeignKey, Boolean, Text
+from sqlalchemy import String, DateTime, ForeignKey, Boolean, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,8 @@ class AgentRun(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reflection_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
+    execution_logs: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+    pages_visited: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
 
     # Relationships
     competitor = relationship("Competitor", back_populates="agent_runs")

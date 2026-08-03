@@ -1,6 +1,5 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -68,10 +67,98 @@ def update_profile(
         current_user.company_name = body.company_name.strip()
     if body.company_url is not None:
         current_user.company_url = body.company_url.strip()
+    if body.company_description is not None:
+        current_user.company_description = body.company_description.strip()
     if body.slack_webhook_url is not None:
         current_user.slack_webhook_url = body.slack_webhook_url.strip()
+    if body.is_onboarded is not None:
+        current_user.is_onboarded = body.is_onboarded
 
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.post("/onboard", response_model=UserResponse)
+async def complete_onboarding(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    method: str = Form("text"),
+    company_name: Optional[str] = Form(None),
+    company_url: Optional[str] = Form(None),
+    description_text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+):
+    """
+    Gather user company details via text description, URL scraping, or uploaded document,
+    extract intelligence, save to profile, and set is_onboarded = True.
+    """
+    collected_details = []
+
+    if company_name and company_name.strip():
+        current_user.company_name = company_name.strip()
+
+    # 1. URL Method: Scrape company website if URL provided
+    target_url = company_url.strip() if company_url and company_url.strip() else None
+    if target_url:
+        current_user.company_url = target_url
+        try:
+            from app.services.scraper import scrape_url
+            scrape_res = scrape_url(target_url)
+            if scrape_res.get("clean_text"):
+                collected_details.append(f"Company Website Content ({target_url}):\n" + scrape_res["clean_text"][:3000])
+        except Exception as e:
+            print(f"[Onboarding] Scrape URL error: {e}")
+
+    # 2. Text Method: User-provided text description
+    if description_text and description_text.strip():
+        collected_details.append("User Description:\n" + description_text.strip())
+
+    # 3. Document Method: File upload (PDF, TXT, MD, etc.)
+    if file:
+        try:
+            content = await file.read()
+            filename = file.filename.lower()
+            extracted_text = ""
+            if filename.endswith(".pdf"):
+                try:
+                    import pypdf
+                    import io
+                    reader = pypdf.PdfReader(io.BytesIO(content))
+                    extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages])
+                except Exception:
+                    extracted_text = content.decode("utf-8", errors="ignore")
+            else:
+                extracted_text = content.decode("utf-8", errors="ignore")
+
+            if extracted_text.strip():
+                collected_details.append(f"Uploaded Document ({file.filename}):\n" + extracted_text.strip()[:4000])
+        except Exception as e:
+            print(f"[Onboarding] File read error: {e}")
+
+    # Process and summarize collected details using LLM or structured formatting
+    raw_combined = "\n\n".join(collected_details)
+    if raw_combined:
+        try:
+            from app.services.llm import call_openrouter
+            from app.config import settings
+            if settings.LLM_API_KEY:
+                prompt = (
+                    f"Summarize the following company information for company '{current_user.company_name or 'User Company'}'. "
+                    "Provide a clean, executive synthesis of their product, value proposition, pricing model, and target customers:\n\n"
+                    f"{raw_combined[:4000]}"
+                )
+                summary, _ = call_openrouter(prompt, settings.LLM_API_KEY)
+                current_user.company_description = summary.strip()
+            else:
+                current_user.company_description = raw_combined[:2000]
+        except Exception as e:
+            print(f"[Onboarding] LLM summary warning: {e}")
+            current_user.company_description = raw_combined[:2000]
+
+    current_user.is_onboarded = True
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
 

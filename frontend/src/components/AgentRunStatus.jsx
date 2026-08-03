@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle, StopCircle } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, RefreshCw, XCircle, StopCircle, FileText } from 'lucide-react';
 import api from '../api/client';
 
-export default function AgentRunStatus({ runId, competitorName, onComplete }) {
+export default function AgentRunStatus({ runId, competitorName, onComplete, onViewLogs }) {
   const [statusData, setStatusData] = useState(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -142,7 +142,16 @@ export default function AgentRunStatus({ runId, competitorName, onComplete }) {
         </div>
       </div>
 
-      <div className="relative flex items-center gap-3">
+      <div className="relative flex items-center gap-2">
+        <button
+          onClick={() => onViewLogs?.(runId, competitorName)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl transition-all duration-200 active:scale-95 shadow-sm"
+          title="View Agent Execution Logs & Visited Pages"
+        >
+          <FileText className="w-3.5 h-3.5 text-indigo-400" />
+          <span>View Logs</span>
+        </button>
+
         {isRunning && (
           <button
             onClick={handleCancel}

@@ -117,13 +117,17 @@ def create_competitor(
                 detail=f"Competitor with domain/URL '{target_domain}' already exists in your account.",
             )
 
-    company_url = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else current_user.company_url
+    raw_company = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else current_user.company_url
+    company_url = raw_company if (raw_company and raw_company.startswith(("http://", "https://"))) else (f"https://{raw_company}" if raw_company else None)
+
+    raw_pricing = payload.pricing_url.strip() if payload.pricing_url and payload.pricing_url.strip() else None
+    pricing_url = raw_pricing if (raw_pricing and raw_pricing.startswith(("http://", "https://"))) else (f"https://{raw_pricing}" if raw_pricing else None)
 
     competitor = Competitor(
         user_id=current_user.id,
         name=payload.name.strip(),
         company_url=company_url,
-        pricing_url=payload.pricing_url.strip() if payload.pricing_url else None,
+        pricing_url=pricing_url,
         domain=target_domain,
         review_urls=payload.review_urls,
         news_keywords=payload.news_keywords,

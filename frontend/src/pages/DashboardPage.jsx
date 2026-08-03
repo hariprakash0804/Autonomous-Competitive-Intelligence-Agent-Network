@@ -55,6 +55,16 @@ export default function DashboardPage() {
   const [activeRuns, setActiveRuns] = useState([]); // [{ runId, compId, compName }]
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Dual URL competitor form state
+  const [newCompName, setNewCompName] = useState('');
+  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || localStorage.getItem('ci_saved_company_url') || '');
+  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url || localStorage.getItem('ci_saved_company_url')));
+  const [newPricingUrl, setNewPricingUrl] = useState('');
+  const [addError, setAddError] = useState('');
+  const [submittingAdd, setSubmittingAdd] = useState(false);
+
   // Edit competitor state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingComp, setEditingComp] = useState(null);

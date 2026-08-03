@@ -54,6 +54,12 @@ export function AuthProvider({ children }) {
     return meRes.data;
   }, []);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem('access_token');
+    setToken(null);
+    setUser(null);
+  }, []);
+
   const completeOnboarding = useCallback(async (formData) => {
     const res = await api.post('/auth/onboard', formData, {
       headers: {

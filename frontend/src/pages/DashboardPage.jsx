@@ -55,15 +55,16 @@ export default function DashboardPage() {
   const [activeRuns, setActiveRuns] = useState([]); // [{ runId, compId, compName }]
   const [showChat, setShowChat] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Dual URL competitor form state
-  const [newCompName, setNewCompName] = useState('');
-  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || localStorage.getItem('ci_saved_company_url') || '');
-  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url || localStorage.getItem('ci_saved_company_url')));
-  const [newPricingUrl, setNewPricingUrl] = useState('');
-  const [addError, setAddError] = useState('');
-  const [submittingAdd, setSubmittingAdd] = useState(false);
+  // Edit competitor state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingComp, setEditingComp] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editPricingUrl, setEditPricingUrl] = useState('');
+  const [editCompanyUrl, setEditCompanyUrl] = useState('');
+  const [editReviewUrls, setEditReviewUrls] = useState('');
+  const [editNewsKeywords, setEditNewsKeywords] = useState('');
+  const [editError, setEditError] = useState('');
+  const [submittingEdit, setSubmittingEdit] = useState(false);
 
   const savedCompanyUrl = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
 
@@ -234,6 +235,44 @@ export default function DashboardPage() {
       }
     } finally {
       setSubmittingAdd(false);
+    }
+  };
+
+  const handleOpenEditModal = (comp) => {
+    if (!comp) return;
+    setEditingComp(comp);
+    setEditName(comp.name || '');
+    setEditPricingUrl(comp.pricing_url || '');
+    setEditCompanyUrl(comp.company_url || '');
+    setEditReviewUrls(Array.isArray(comp.review_urls) ? comp.review_urls.join(', ') : '');
+    setEditNewsKeywords(Array.isArray(comp.news_keywords) ? comp.news_keywords.join(', ') : '');
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const handleEditCompetitorSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingComp || !editName.trim()) return;
+    setSubmittingEdit(true);
+    setEditError('');
+
+    try {
+      const payload = {
+        name: editName.trim(),
+        company_url: editCompanyUrl.trim() || null,
+        pricing_url: editPricingUrl.trim() || null,
+        review_urls: editReviewUrls.split(',').map((s) => s.trim()).filter(Boolean),
+        news_keywords: editNewsKeywords.split(',').map((s) => s.trim()).filter(Boolean),
+      };
+      await api.put(`/competitors/${editingComp.id}`, payload);
+      setShowEditModal(false);
+      toast.show('Competitor updated successfully!', 'success');
+      await fetchCompetitors();
+    } catch (err) {
+      console.error('Failed to update competitor:', err);
+      setEditError(err.response?.data?.detail || 'Failed to update competitor details.');
+    } finally {
+      setSubmittingEdit(false);
     }
   };
 
@@ -456,6 +495,7 @@ export default function DashboardPage() {
                     setShowChat(true);
                   }}
                   onAddCompetitor={handleOpenAddModal}
+                  onEditCompetitor={handleOpenEditModal}
                   onDeleteCompetitor={handleDeleteCompetitor}
                 />
               </div>
@@ -620,6 +660,116 @@ export default function DashboardPage() {
                   className="px-4 py-2.5 btn-gradient rounded-xl transition-all duration-200 text-xs disabled:opacity-50 disabled:hover:scale-100"
                 >
                   {submittingAdd ? 'Adding...' : 'Save Competitor'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Competitor Modal */}
+      {showEditModal && editingComp && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="glass-card neon-border rounded-2xl p-6 w-full max-w-md shadow-2xl relative animate-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Edit Competitor Details</h3>
+                  <p className="text-xs text-slate-400">Update configuration for {editingComp.name}</p>
+                </div>
+              </div>
+            </div>
+
+            {editError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{editError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleEditCompetitorSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Competitor Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Pricing / Target URL
+                </label>
+                <input
+                  type="url"
+                  value={editPricingUrl}
+                  onChange={(e) => setEditPricingUrl(e.target.value)}
+                  placeholder="https://competitor.com/pricing"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Company / Homepage URL
+                </label>
+                <input
+                  type="url"
+                  value={editCompanyUrl}
+                  onChange={(e) => setEditCompanyUrl(e.target.value)}
+                  placeholder="https://competitor.com"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Custom Review URLs (Comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={editReviewUrls}
+                  onChange={(e) => setEditReviewUrls(e.target.value)}
+                  placeholder="https://g2.com/products/groq/reviews, https://trustpilot.com/review/groq.com"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  News / Search Keywords (Comma-separated)
+                </label>
+                <input
+                  type="text"
+                  value={editNewsKeywords}
+                  onChange={(e) => setEditNewsKeywords(e.target.value)}
+                  placeholder="Groq, GroqCloud, LPU silicon"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 rounded-xl transition-all duration-200 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingEdit}
+                  className="px-4 py-2.5 btn-gradient rounded-xl transition-all duration-200 text-xs disabled:opacity-50 disabled:hover:scale-100"
+                >
+                  {submittingEdit ? 'Saving...' : 'Update Competitor'}
                 </button>
               </div>
             </form>

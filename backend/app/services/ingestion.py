@@ -204,11 +204,21 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
         res = ingest_url_for_competitor(db, competitor, SourceType.PRICING, competitor.pricing_url)
         results.append(res)
 
-    # 2. Review URLs
-    if competitor.review_urls:
-        for rev_url in competitor.review_urls:
-            res = ingest_url_for_competitor(db, competitor, SourceType.REVIEW, rev_url)
+    # 2. Review URLs & Customer Sentiment Sources (Auto-generate targets if none provided)
+    review_targets = list(competitor.review_urls) if competitor.review_urls else []
+    if not review_targets:
+        c_name_clean = competitor.name.lower().replace(" ", "-")
+        if competitor.domain:
+            review_targets.append(f"https://www.trustpilot.com/review/{competitor.domain}")
+        review_targets.append(f"https://www.g2.com/products/{c_name_clean}/reviews")
+        review_targets.append(f"https://www.google.com/search?q={competitor.name}+customer+reviews+and+ratings")
+
+    for rev_url in review_targets[:3]:
+        try:
+            res = ingest_url_for_competitor(db, competitor, SourceType.REVIEW, rev_url, discover_subpages=False)
             results.append(res)
+        except Exception as rev_err:
+            print(f"[Ingestion] Review scraping note for {rev_url}: {rev_err}", flush=True)
 
     # 3. News URLs / Keyword Searches
     if competitor.news_keywords:

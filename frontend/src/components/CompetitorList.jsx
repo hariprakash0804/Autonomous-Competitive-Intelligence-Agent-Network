@@ -1,4 +1,4 @@
-import { Play, MessageSquare, Plus, Globe, Trash2, Zap, Loader2 } from 'lucide-react';
+import { Play, MessageSquare, Plus, Globe, Trash2, Zap, Loader2, Edit2 } from 'lucide-react';
 
 export default function CompetitorList({
   competitors,
@@ -9,6 +9,7 @@ export default function CompetitorList({
   onRunAllPipelines,
   onOpenChat,
   onAddCompetitor,
+  onEditCompetitor,
   onDeleteCompetitor,
 }) {
   const compList = Array.isArray(competitors) ? competitors : [];
@@ -137,6 +138,16 @@ export default function CompetitorList({
                   className="p-2 bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white rounded-lg border border-white/[0.06] transition-all duration-200 hover:scale-110 active:scale-95"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onEditCompetitor) onEditCompetitor(comp);
+                  }}
+                  title="Edit Competitor Details"
+                  className="p-2 bg-indigo-500/[0.06] hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-lg border border-indigo-500/15 transition-all duration-200 hover:scale-110 active:scale-95"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => {

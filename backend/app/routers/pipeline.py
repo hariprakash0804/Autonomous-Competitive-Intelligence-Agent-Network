@@ -277,10 +277,18 @@ def start_pipeline_run(
             competitor_homepage = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
             _add_url(competitor_homepage)
 
-    if competitor.review_urls:
-        for ru in competitor.review_urls:
-            if ru:
-                _add_url(ru)
+    review_sources = list(competitor.review_urls) if competitor.review_urls else []
+    if not review_sources:
+        c_name_clean = competitor.name.lower().replace(" ", "-")
+        if competitor.domain:
+            review_sources.append(f"https://www.trustpilot.com/review/{competitor.domain}")
+        review_sources.append(f"https://www.g2.com/products/{c_name_clean}/reviews")
+        review_sources.append(f"https://www.google.com/search?q={competitor.name}+customer+reviews+and+ratings")
+
+    for ru in review_sources[:3]:
+        if ru:
+            _add_url(ru)
+
     if competitor.news_keywords:
         for kw in competitor.news_keywords:
             if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")):

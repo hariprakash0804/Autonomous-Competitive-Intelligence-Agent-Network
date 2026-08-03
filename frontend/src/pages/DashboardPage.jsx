@@ -192,14 +192,26 @@ export default function DashboardPage() {
     }
   };
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = (overrideUrl) => {
     setAddError('');
     setNewCompName('');
     setNewPricingUrl('');
-    const currentSaved = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    const currentSaved = overrideUrl || user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
     setNewCompanyUrl(currentSaved);
     setUseSavedUrl(Boolean(currentSaved));
     setShowAddModal(true);
+  };
+
+  const handleOnboardingComplete = async (updatedUserData) => {
+    await fetchCompetitors();
+    const effectiveCompanyUrl = updatedUserData?.company_url || user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    if (effectiveCompanyUrl) {
+      setNewCompanyUrl(effectiveCompanyUrl);
+      setUseSavedUrl(true);
+      localStorage.setItem('ci_saved_company_url', effectiveCompanyUrl);
+    }
+    toast.info('Fetching your onboarded company details for competitor comparison...', 'Onboarding Auto-Sync');
+    handleOpenAddModal(effectiveCompanyUrl);
   };
 
   const handleAddCompetitorSubmit = async (e) => {
@@ -570,6 +582,25 @@ export default function DashboardPage() {
               </button>
             </div>
 
+            {user?.company_name && (
+              <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-200 animate-fade-in space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-white">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Onboarded Company Profile: {user.company_name}</span>
+                </div>
+                {user.company_url && (
+                  <p className="text-[11px] font-mono text-indigo-300 truncate">
+                    URL: {user.company_url}
+                  </p>
+                )}
+                {user.company_description && (
+                  <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
+                    {user.company_description}
+                  </p>
+                )}
+              </div>
+            )}
+
             {addError && (
               <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl text-xs flex items-center gap-2 animate-scale-in">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -793,7 +824,7 @@ export default function DashboardPage() {
 
       {/* Onboarding Modal for First Time Signups */}
       {user && !user.is_onboarded && (
-        <OnboardingModal onComplete={() => fetchCompetitors()} />
+        <OnboardingModal onComplete={(updatedUser) => handleOnboardingComplete(updatedUser)} />
       )}
 
       {/* Agent Execution Logs Modal */}

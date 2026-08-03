@@ -77,10 +77,10 @@ export default function OnboardingModal({ onComplete }) {
         formData.append('file', selectedFile);
       }
 
-      await completeOnboarding(formData);
+      const updatedUserData = await completeOnboarding(formData);
 
       toast.success('Company intelligence onboarding completed successfully!', 'Onboarding Complete');
-      if (onComplete) onComplete();
+      if (onComplete) onComplete(updatedUserData);
     } catch (err) {
       console.error('Onboarding failed:', err);
       setError(err.response?.data?.detail || 'Failed to complete onboarding. Please try again.');

@@ -343,14 +343,36 @@ def change_detector_node(state: AgentState) -> AgentState:
         competitor_id = uuid.UUID(state["competitor_id"])
         competitor = db.get(Competitor, competitor_id)
 
-        # Get prior pricing snapshot
-        stmt = (
+        # Get current run start time to distinguish current-run snapshots from prior-run snapshots
+        agent_run_id = state.get("agent_run_id")
+        run_start_time = datetime.now(timezone.utc)
+        if agent_run_id:
+            try:
+                ar = db.get(AgentRun, uuid.UUID(agent_run_id))
+                if ar and ar.started_at:
+                    run_start_time = ar.started_at
+            except Exception:
+                pass
+
+        # Query latest snapshot created BEFORE the current pipeline run started
+        prior_snapshot_stmt = (
+            select(Snapshot)
+            .where(
+                Snapshot.competitor_id == competitor_id,
+                Snapshot.fetched_at < run_start_time
+            )
+            .order_by(Snapshot.fetched_at.desc())
+        )
+        prior_snapshot = db.scalars(prior_snapshot_stmt).first()
+        prev_text = prior_snapshot.raw_content if prior_snapshot else ""
+
+        # Latest snapshot created in current run (for linking PriceChange records)
+        current_snapshot_stmt = (
             select(Snapshot)
             .where(Snapshot.competitor_id == competitor_id)
             .order_by(Snapshot.fetched_at.desc())
         )
-        snapshots = db.scalars(stmt).all()
-        prev_text = snapshots[1].raw_content if len(snapshots) > 1 else ""
+        current_snapshot = db.scalars(current_snapshot_stmt).first()
 
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
@@ -368,8 +390,8 @@ def change_detector_node(state: AgentState) -> AgentState:
 
                 pc = PriceChange(
                     competitor_id=competitor_id,
-                    snapshot_before_id=snapshots[1].id if len(snapshots) > 1 else None,
-                    snapshot_after_id=snapshots[0].id if len(snapshots) > 0 else None,
+                    snapshot_before_id=prior_snapshot.id if prior_snapshot else None,
+                    snapshot_after_id=current_snapshot.id if current_snapshot else None,
                     tier_name=tier,
                     old_price=old_val,
                     new_price=price_val,
@@ -387,9 +409,10 @@ def change_detector_node(state: AgentState) -> AgentState:
                     user_webhook_url=user_webhook,
                 )
 
-            # 2. Detect feature changes vs previous snapshot
-            detected_feature_diffs = diff_features(prev_text, clean_txt)
-            feature_changes.extend(detected_feature_diffs)
+            # 2. Detect feature changes vs previous snapshot (only if previous run snapshot exists)
+            if prev_text:
+                detected_feature_diffs = diff_features(prev_text, clean_txt)
+                feature_changes.extend(detected_feature_diffs)
 
         # 3. Extract real plan tier prices for both Competitor and User's Company
         #    Only extract from pages that are likely pricing pages (URL or content signals)

@@ -289,16 +289,11 @@ def start_pipeline_run(
             seen_urls.add(u)
             urls.append(u)
 
-    # 1. User's own company URL + pricing & homepage (equal treatment as competitor)
+    # 1. User's own company URL (for side-by-side comparison analysis)
+    # Pricing discovery is handled automatically by Pass 2 pricing probes in the researcher node
     user_url = getattr(current_user, "company_url", None)
     if user_url and user_url.strip():
         _add_url(user_url.strip())
-        # Derive pricing URL and homepage for user's company (same as competitor treatment)
-        from urllib.parse import urlparse as _urlparse
-        _parsed_user = _urlparse(user_url.strip())
-        if _parsed_user.netloc:
-            user_homepage = f"{_parsed_user.scheme or 'https'}://{_parsed_user.netloc}/"
-            _add_url(user_homepage + "pricing")
 
     # 2. Competitor's company URL
     if competitor.company_url:

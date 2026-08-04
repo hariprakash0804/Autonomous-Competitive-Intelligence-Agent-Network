@@ -1295,12 +1295,12 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                 # If content is a JS shell / Cloudflare bot challenge / empty / blocked (e.g. 403),
                 # try Jina AI Reader FIRST (sub-second API call, bypasses bot challenges without Chromium overhead)
                 if is_stale:
-                    jina_res = scrape_with_jina_reader(url, timeout_sec=6.0)
+                    jina_res = scrape_with_jina_reader(url, timeout_sec=4.0)
                     if jina_res and not jina_res.get("is_stale"):
                         return jina_res
 
                     if use_playwright and content_type == "html":
-                        pw_res = scrape_with_playwright(url, timeout_sec=6.0)
+                        pw_res = scrape_with_playwright(url, timeout_sec=4.0)
                         if pw_res and not pw_res.get("is_stale"):
                             return pw_res
 
@@ -1339,12 +1339,12 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                 continue
 
     # Final fallback attempt: Try Jina AI Reader first, then Playwright
-    jina_res = scrape_with_jina_reader(url, timeout_sec=6.0)
+    jina_res = scrape_with_jina_reader(url, timeout_sec=4.0)
     if jina_res and not jina_res.get("is_stale"):
         return jina_res
 
     if use_playwright:
-        pw_res = scrape_with_playwright(url, timeout_sec=6.0)
+        pw_res = scrape_with_playwright(url, timeout_sec=4.0)
         if pw_res and not pw_res.get("is_stale"):
             return pw_res
 

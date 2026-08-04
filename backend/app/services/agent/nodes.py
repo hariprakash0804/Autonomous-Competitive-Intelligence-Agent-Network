@@ -156,35 +156,28 @@ def researcher_node(state: AgentState) -> AgentState:
 
         print(f"[Researcher Node] Pass 1 scraping ({len(urls)} seed URLs) completed in {time.time() - scrape_start:.2f}s", flush=True)
 
-        # Pass 1.5: Fallback URL generation for failed/stale URLs
-        # If any URL failed, try alternative URLs from the same domain
+        # Pass 1.5: Lightweight fallback for failed company/pricing URLs only
+        # Skip review/search URLs (they often fail legitimately). Only try homepage root.
+        _skip_domains = {"trustpilot.com", "g2.com", "google.com", "capterra.com"}
         fallback_urls = []
-        _fallback_paths = ["/", "/pricing", "/features", "/products", "/about"]
         for res in raw_pages:
             if res.get("is_stale") and res.get("url"):
-                failed_url = res["url"]
-                parsed_failed = urlparse(failed_url)
-                if parsed_failed.netloc:
-                    domain_base = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}"
-                    for fallback_path in _fallback_paths:
-                        fallback_candidate = (domain_base + fallback_path).rstrip("/")
-                        if fallback_candidate not in scraped_urls and fallback_candidate not in [u.rstrip("/") for u in fallback_urls]:
-                            fallback_urls.append(domain_base + fallback_path)
-                    # Cap fallback URLs per failed URL to 3
-                    if len(fallback_urls) >= 6:
-                        break
+                parsed_failed = urlparse(res["url"])
+                if parsed_failed.netloc and not any(sd in parsed_failed.netloc for sd in _skip_domains):
+                    homepage = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}/"
+                    if homepage.rstrip("/") not in scraped_urls:
+                        fallback_urls.append(homepage)
+                if len(fallback_urls) >= 2:
+                    break
 
         if fallback_urls:
-            fallback_urls = fallback_urls[:6]
-            print(f"[Researcher Node] Fallback: {len(fallback_urls)} alternative URLs for failed scrapes: {fallback_urls}", flush=True)
-            fallback_start = time.time()
-            with ThreadPoolExecutor(max_workers=min(len(fallback_urls), 6)) as executor:
+            print(f"[Researcher Node] Fallback: trying {len(fallback_urls)} homepage(s) for failed URLs", flush=True)
+            with ThreadPoolExecutor(max_workers=len(fallback_urls)) as executor:
                 fallback_results = list(executor.map(scrape_url, fallback_urls))
             for res in fallback_results:
                 if not res.get("is_stale") and res.get("clean_text"):
                     raw_pages.append(res)
                     scraped_urls.add(res.get("url", "").rstrip("/"))
-            print(f"[Researcher Node] Fallback scraping completed in {time.time() - fallback_start:.2f}s", flush=True)
 
         # Pass 2: Automatic discovery of sub-pages & proactive pricing probes
         # PRIORITY 1: Proactive pricing page probes (Highest priority for Competitive Intelligence)

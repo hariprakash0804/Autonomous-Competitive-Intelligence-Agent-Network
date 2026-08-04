@@ -1230,11 +1230,11 @@ def _run_concurrent_fallbacks(url: str, use_playwright: bool = True) -> Optional
 
     futures = {}
     with ThreadPoolExecutor(max_workers=2) as executor:
-        futures[executor.submit(scrape_with_jina_reader, url, 6.0)] = "jina"
+        futures[executor.submit(scrape_with_jina_reader, url, 4.0)] = "jina"
         if use_playwright:
-            futures[executor.submit(scrape_with_playwright, url, 8.0)] = "playwright"
+            futures[executor.submit(scrape_with_playwright, url, 6.0)] = "playwright"
 
-        for future in as_completed(futures, timeout=10.0):
+        for future in as_completed(futures, timeout=7.0):
             try:
                 result = future.result()
                 if result and not result.get("is_stale"):
@@ -1244,7 +1244,7 @@ def _run_concurrent_fallbacks(url: str, use_playwright: bool = True) -> Optional
     return None
 
 
-def scrape_url(url: str, timeout_sec: float = 5.0, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
+def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
     """
     High-Performance Multi-Engine Hybrid Scraper:
     1. Fast-Path HTTPX Scraper (sub-second performance).
@@ -1292,7 +1292,7 @@ def scrape_url(url: str, timeout_sec: float = 5.0, max_retries: int = 1, use_pla
 
     for attempt in range(max_retries + 1):
         headers = _build_browser_headers(url)
-        timeout_config = httpx.Timeout(timeout_sec, connect=4.0)
+        timeout_config = httpx.Timeout(timeout_sec, connect=2.0)
 
         try:
             with httpx.Client(

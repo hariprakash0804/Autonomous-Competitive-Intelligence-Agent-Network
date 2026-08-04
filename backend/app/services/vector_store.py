@@ -126,7 +126,7 @@ class VectorStoreService:
                 OPENROUTER_EMBED_URL,
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": OPENROUTER_EMBED_MODEL, "input": ["connectivity test"]},
-                timeout=8.0,
+                timeout=3.0,
             )
             return response.status_code == 200 and "data" in response.json()
         except Exception as e:
@@ -142,7 +142,7 @@ class VectorStoreService:
                 HF_API_URL,
                 headers={"Authorization": f"Bearer {hf_token.strip()}"},
                 json={"inputs": "test", "options": {"wait_for_model": False}},
-                timeout=5.0,
+                timeout=3.0,
             )
             is_ok = response.status_code in (200, 503)
             if not is_ok:
@@ -193,13 +193,13 @@ class VectorStoreService:
             batch_truncated = [t[:512] for t in batch]
             batch_succeeded = False
 
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
                     response = httpx.post(
                         OPENROUTER_EMBED_URL,
                         headers=headers,
                         json={"model": OPENROUTER_EMBED_MODEL, "input": batch_truncated},
-                        timeout=15.0,
+                        timeout=4.0,
                     )
 
                     if response.status_code == 429:
@@ -228,11 +228,11 @@ class VectorStoreService:
                         print(f"[Vector Store] OpenRouter embed unrecoverable error: {exc}. Switching to hash.", flush=True)
                         use_hash_fallback = True
                         break
-                    if attempt < 2:
+                    if attempt < 1:
                         print(f"[Vector Store] OpenRouter embed attempt {attempt + 1} failed: {exc}. Retrying...", flush=True)
-                        time.sleep(1.0)
+                        time.sleep(0.5)
                     else:
-                        print(f"[Vector Store] OpenRouter embed failed after 3 attempts: {exc}.", flush=True)
+                        print(f"[Vector Store] OpenRouter embed failed after 2 attempts: {exc}.", flush=True)
 
             if not batch_succeeded:
                 hash_vecs = self._hash_encode(batch)

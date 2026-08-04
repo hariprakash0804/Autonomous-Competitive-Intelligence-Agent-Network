@@ -156,29 +156,30 @@ def researcher_node(state: AgentState) -> AgentState:
 
         print(f"[Researcher Node] Pass 1 scraping ({len(urls)} seed URLs) completed in {time.time() - scrape_start:.2f}s", flush=True)
 
-        # Pass 1.5: Lightweight fallback for failed company/pricing URLs only
-        # Skip review/search URLs (they often fail legitimately). Only try homepage root.
-        _skip_domains = {"trustpilot.com", "g2.com", "google.com", "capterra.com"}
-        fallback_urls = []
-        for res in raw_pages:
-            if res.get("is_stale") and res.get("url"):
-                _failed_url = res["url"] if res["url"].startswith(("http://", "https://")) else "https://" + res["url"]
-                parsed_failed = urlparse(_failed_url)
-                if parsed_failed.netloc and not any(sd in parsed_failed.netloc for sd in _skip_domains):
-                    homepage = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}/"
-                    if homepage.rstrip("/") not in scraped_urls:
-                        fallback_urls.append(homepage)
-                if len(fallback_urls) >= 2:
-                    break
+        # Pass 1.5: Lightweight fallback for failed company/pricing URLs ONLY if no valid pages were retrieved in Pass 1
+        valid_pages_count = sum(1 for p in raw_pages if not p.get("is_stale") and p.get("clean_text"))
+        if valid_pages_count == 0:
+            _skip_domains = {"trustpilot.com", "g2.com", "google.com", "capterra.com"}
+            fallback_urls = []
+            for res in raw_pages:
+                if res.get("is_stale") and res.get("url"):
+                    _failed_url = res["url"] if res["url"].startswith(("http://", "https://")) else "https://" + res["url"]
+                    parsed_failed = urlparse(_failed_url)
+                    if parsed_failed.netloc and not any(sd in parsed_failed.netloc for sd in _skip_domains):
+                        homepage = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}/"
+                        if homepage.rstrip("/") not in scraped_urls:
+                            fallback_urls.append(homepage)
+                    if len(fallback_urls) >= 1:
+                        break
 
-        if fallback_urls:
-            print(f"[Researcher Node] Fallback: trying {len(fallback_urls)} homepage(s) for failed URLs", flush=True)
-            with ThreadPoolExecutor(max_workers=len(fallback_urls)) as executor:
-                fallback_results = list(executor.map(scrape_url, fallback_urls))
-            for res in fallback_results:
-                if not res.get("is_stale") and res.get("clean_text"):
-                    raw_pages.append(res)
-                    scraped_urls.add(res.get("url", "").rstrip("/"))
+            if fallback_urls:
+                print(f"[Researcher Node] Fallback: trying {len(fallback_urls)} homepage(s) for failed URLs", flush=True)
+                with ThreadPoolExecutor(max_workers=len(fallback_urls)) as executor:
+                    fallback_results = list(executor.map(scrape_url, fallback_urls))
+                for res in fallback_results:
+                    if not res.get("is_stale") and res.get("clean_text"):
+                        raw_pages.append(res)
+                        scraped_urls.add(res.get("url", "").rstrip("/"))
 
         # Pass 2: Automatic discovery of sub-pages & proactive pricing probes
         # PRIORITY 1: Proactive pricing page probes (Highest priority for Competitive Intelligence)
@@ -201,7 +202,7 @@ def researcher_node(state: AgentState) -> AgentState:
                     homepage_text = page.get("clean_text", "")
                     break
 
-            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=3)
+            probe_urls = generate_pricing_probe_urls(seed_url, homepage_text=homepage_text, max_probes=2)
             for probe_url in probe_urls:
                 probe_clean = probe_url.rstrip("/")
                 if probe_clean not in scraped_urls and probe_clean not in [u.rstrip("/") for u in pricing_probe_urls]:
@@ -223,13 +224,13 @@ def researcher_node(state: AgentState) -> AgentState:
                 ):
                     general_internal_urls.append(link_item.get("url"))
 
-        # Combine: Pricing probes FIRST, then general internal links fill remaining slots (Cap: 3 max for ultra-fast execution)
-        discovered_urls = (pricing_probe_urls + general_internal_urls)[:3]
+        # Combine: Pricing probes FIRST, then general internal links fill remaining slots (Cap: 2 max for ultra-fast execution)
+        discovered_urls = (pricing_probe_urls + general_internal_urls)[:2]
 
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)
             pass2_start = time.time()
-            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 10)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 5)) as executor:
                 pass2_results = list(executor.map(scrape_url, discovered_urls))
             for res in pass2_results:
                 raw_pages.append(res)
@@ -305,7 +306,7 @@ def should_reflect_edge(state: AgentState) -> str:
     """
     Conditional Reflection Edge: Pure routing function.
     Only reflects to Researcher if ALL scraped pages failed/stale and retry_count < 1.
-    If at least one valid page was scraped, proceeds directly to Change-Detector.
+    If at least one valid page was scraped, proceeds directly to Parallel-Analysis.
     """
     raw_pages = state.get("raw_pages", [])
     all_stale = all(page.get("is_stale", True) for page in raw_pages) if raw_pages else True
@@ -313,7 +314,7 @@ def should_reflect_edge(state: AgentState) -> str:
     if all_stale and state.get("retry_count", 0) < 1:
         return "Researcher"
 
-    return "Change-Detector"
+    return "Parallel-Analysis"
 
 
 def change_detector_node(state: AgentState) -> AgentState:

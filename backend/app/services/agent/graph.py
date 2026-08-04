@@ -9,6 +9,7 @@ from app.services.agent.nodes import (
     should_reflect_edge,
     change_detector_node,
     sentiment_analyst_node,
+    parallel_analysis_node,
     report_writer_node,
 )
 

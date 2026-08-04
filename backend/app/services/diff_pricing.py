@@ -404,6 +404,14 @@ def extract_features(text: str) -> List[str]:
 
     features = set()
 
+    _FEATURE_SIGNALS = (
+        "ai", "api", "chat", "code", "data", "integration", "security", "feature", "model",
+        "support", "tool", "analytics", "workflow", "automation", "agent", "search", "export",
+        "storage", "access", "custom", "management", "dashboard", "sso", "mfa", "cloud",
+        "voice", "image", "file", "tier", "plan", "unlimited", "real-time", "enterprise",
+        "performance", "speed", "compliance", "audit", "developer", "sdk", "plugin", "app"
+    )
+
     lines = text.split("\n")
     for line in lines:
         stripped = line.strip()
@@ -414,10 +422,10 @@ def extract_features(text: str) -> List[str]:
         heading_match = re.match(r"^#{1,4}\s+(.+)$", stripped)
         if heading_match:
             heading_text = heading_match.group(1).strip().rstrip("#").strip()
-            # Only keep headings that are feature-relevant (not just "Home", "About", etc.)
             heading_lower = heading_text.lower()
-            if len(heading_text) >= 5 and heading_lower not in _FEATURE_NOISE:
-                features.add(heading_text)
+            if 5 <= len(heading_text) <= 80 and heading_lower not in _FEATURE_NOISE:
+                if any(sig in heading_lower for sig in _FEATURE_SIGNALS) or "introducing" in heading_lower:
+                    features.add(heading_text)
             continue
 
         # Extract bullet points that describe features (- Feature name or * Feature description)
@@ -425,11 +433,10 @@ def extract_features(text: str) -> List[str]:
         if bullet_match:
             bullet_text = bullet_match.group(1).strip()
             bullet_lower = bullet_text.lower()
-            # Keep meaningful bullets (not too short, not noise)
-            if 8 <= len(bullet_text) <= 200 and bullet_lower not in _FEATURE_NOISE:
-                # Only include if it reads like a feature (has substance)
-                if not bullet_lower.startswith(("click ", "go to ", "see ", "visit ")):
-                    features.add(bullet_text)
+            if 8 <= len(bullet_text) <= 120 and bullet_lower not in _FEATURE_NOISE:
+                if not bullet_lower.startswith(("click ", "go to ", "see ", "visit ", "http://", "https://", "www.")):
+                    if any(sig in bullet_lower for sig in _FEATURE_SIGNALS):
+                        features.add(bullet_text)
             continue
 
     # Also scan for explicit "feature" keyword patterns in prose
@@ -444,7 +451,7 @@ def extract_features(text: str) -> List[str]:
             if len(phrase) >= 8 and phrase not in _FEATURE_NOISE:
                 features.add(phrase)
 
-    return sorted(features)
+    return sorted(list(features))[:25]
 
 
 def _normalize_feature(f: str) -> str:
@@ -478,24 +485,39 @@ def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
     old_keys = set(old_normalized.keys())
     new_keys = set(new_normalized.keys())
 
+    import difflib
+
+    def _is_fuzzy_match(key: str, key_set: set) -> bool:
+        """Checks if a feature key is identical, substring-matched, or fuzzy-similar (>=80%) to any existing feature key."""
+        if key in key_set:
+            return True
+        for k in key_set:
+            if k in key or key in k:
+                return True
+            if difflib.SequenceMatcher(None, key, k).ratio() >= 0.80:
+                return True
+        return False
+
     changes = []
 
-    # Features added (present in new, not in old)
+    # Features added (present in new, but NOT fuzzy-matched in old)
     for key in (new_keys - old_keys):
-        feature_text = new_normalized[key]
-        changes.append({
-            "change_type": "feature_added",
-            "feature": feature_text,
-            "details": f"New feature detected: {feature_text}",
-        })
+        if not _is_fuzzy_match(key, old_keys):
+            feature_text = new_normalized[key]
+            changes.append({
+                "change_type": "feature_added",
+                "feature": feature_text,
+                "details": f"New feature detected: {feature_text}",
+            })
 
-    # Features removed (present in old, not in new)
+    # Features removed (present in old, but NOT fuzzy-matched in new)
     for key in (old_keys - new_keys):
-        feature_text = old_normalized[key]
-        changes.append({
-            "change_type": "feature_removed",
-            "feature": feature_text,
-            "details": f"Feature no longer listed: {feature_text}",
-        })
+        if not _is_fuzzy_match(key, new_keys):
+            feature_text = old_normalized[key]
+            changes.append({
+                "change_type": "feature_removed",
+                "feature": feature_text,
+                "details": f"Feature no longer listed: {feature_text}",
+            })
 
     return changes

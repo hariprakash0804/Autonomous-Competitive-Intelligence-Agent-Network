@@ -386,10 +386,24 @@ def change_detector_node(state: AgentState) -> AgentState:
 
         for page in company_pages:
             clean_txt = page.get("clean_text", "")
+            page_src_type = _detect_source_type(page)
 
-            # 1. Detect genuine price changes vs previous run snapshot (only if prior run snapshot exists)
-            if prev_text:
-                detected_diffs = diff_pricing(prev_text, clean_txt)
+            # Query prior run snapshot for THIS specific source_type (e.g. PRICING vs PRICING, COMPANY vs COMPANY)
+            prior_snap_stmt = (
+                select(Snapshot)
+                .where(
+                    Snapshot.competitor_id == competitor_id,
+                    Snapshot.source_type == page_src_type,
+                    Snapshot.fetched_at < run_start_time,
+                )
+                .order_by(Snapshot.fetched_at.desc())
+            )
+            page_prior_snap = db.scalars(prior_snap_stmt).first()
+            page_prev_text = page_prior_snap.raw_content if page_prior_snap else ""
+
+            # 1. Detect genuine price changes vs previous run snapshot for SAME source_type
+            if page_prev_text:
+                detected_diffs = diff_pricing(page_prev_text, clean_txt)
                 diffs.extend(detected_diffs)
 
                 for d in detected_diffs:
@@ -399,7 +413,7 @@ def change_detector_node(state: AgentState) -> AgentState:
 
                     pc = PriceChange(
                         competitor_id=competitor_id,
-                        snapshot_before_id=prior_snapshot.id if prior_snapshot else None,
+                        snapshot_before_id=page_prior_snap.id if page_prior_snap else None,
                         snapshot_after_id=current_snapshot.id if current_snapshot else None,
                         tier_name=tier,
                         old_price=old_val,
@@ -418,8 +432,8 @@ def change_detector_node(state: AgentState) -> AgentState:
                         user_webhook_url=user_webhook,
                     )
 
-                # 2. Detect feature changes vs previous run snapshot (only if prior run snapshot exists)
-                detected_feature_diffs = diff_features(prev_text, clean_txt)
+                # 2. Detect feature changes vs previous run snapshot for SAME source_type
+                detected_feature_diffs = diff_features(page_prev_text, clean_txt)
                 feature_changes.extend(detected_feature_diffs)
 
         # 3. Extract real plan tier prices for both Competitor and User's Company

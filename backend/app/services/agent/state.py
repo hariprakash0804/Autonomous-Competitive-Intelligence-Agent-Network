@@ -8,6 +8,7 @@ class AgentState(TypedDict):
     raw_pages: List[Dict[str, Any]]
     prev_snapshot: Optional[Dict[str, Any]]
     diffs: List[Dict[str, Any]]
+    feature_diffs: List[Dict[str, Any]]
     sentiment_results: List[Dict[str, Any]]
     report_draft: str
     model_used: Optional[str]

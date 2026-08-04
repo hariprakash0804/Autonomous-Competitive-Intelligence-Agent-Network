@@ -364,3 +364,138 @@ def _llm_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
             })
 
     return changes
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Feature Change Detection
+# ═══════════════════════════════════════════════════════════════════════
+
+# Feature-related heading/section keywords
+_FEATURE_SECTION_KW = (
+    "feature", "capability", "integration", "what's new", "changelog",
+    "update", "release", "improvement", "enhancement", "benefit",
+    "tool", "module", "solution", "product", "platform", "service",
+    "api", "sdk", "plugin", "addon", "add-on", "extension",
+    "automation", "analytics", "dashboard", "workflow", "security",
+    "compliance", "support", "collaboration", "reporting",
+)
+
+# Noise phrases to filter out (navigation, CTA, generic marketing)
+_FEATURE_NOISE = {
+    "sign up", "log in", "login", "sign in", "get started", "contact us",
+    "learn more", "read more", "see more", "view all", "try free",
+    "book a demo", "request demo", "start free trial", "free trial",
+    "cookie", "privacy policy", "terms of service", "terms and conditions",
+    "copyright", "all rights reserved", "back to top", "menu", "navigation",
+    "home", "about us", "careers", "blog", "press", "news",
+    "follow us", "subscribe", "newsletter", "social media",
+}
+
+
+def extract_features(text: str) -> List[str]:
+    """
+    Extracts a normalized set of feature phrases from page content.
+    Looks at headings (## lines), bullet points (- or * lines), and
+    key feature-related phrases in the text.
+    Returns a deduplicated sorted list of cleaned feature strings.
+    """
+    if not text or len(text.strip()) < 100:
+        return []
+
+    features = set()
+
+    lines = text.split("\n")
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Extract Markdown headings (## Feature Name)
+        heading_match = re.match(r"^#{1,4}\s+(.+)$", stripped)
+        if heading_match:
+            heading_text = heading_match.group(1).strip().rstrip("#").strip()
+            # Only keep headings that are feature-relevant (not just "Home", "About", etc.)
+            heading_lower = heading_text.lower()
+            if len(heading_text) >= 5 and heading_lower not in _FEATURE_NOISE:
+                features.add(heading_text)
+            continue
+
+        # Extract bullet points that describe features (- Feature name or * Feature description)
+        bullet_match = re.match(r"^[-*•]\s+(.+)$", stripped)
+        if bullet_match:
+            bullet_text = bullet_match.group(1).strip()
+            bullet_lower = bullet_text.lower()
+            # Keep meaningful bullets (not too short, not noise)
+            if 8 <= len(bullet_text) <= 200 and bullet_lower not in _FEATURE_NOISE:
+                # Only include if it reads like a feature (has substance)
+                if not bullet_lower.startswith(("click ", "go to ", "see ", "visit ")):
+                    features.add(bullet_text)
+            continue
+
+    # Also scan for explicit "feature" keyword patterns in prose
+    feature_patterns = [
+        r"(?:new|added|introducing|launched|now supports?|now includes?)\s+(.{10,80}?)(?:\.|,|$)",
+        r"(?:integration with|integrates with|connects to|compatible with)\s+(.{5,60}?)(?:\.|,|$)",
+    ]
+    text_lower = text.lower()
+    for pattern in feature_patterns:
+        for match in re.finditer(pattern, text_lower):
+            phrase = match.group(1).strip().rstrip(".,;:")
+            if len(phrase) >= 8 and phrase not in _FEATURE_NOISE:
+                features.add(phrase)
+
+    return sorted(features)
+
+
+def _normalize_feature(f: str) -> str:
+    """Normalizes a feature string for comparison (lowercase, strip punctuation)."""
+    return re.sub(r"[^\w\s]", "", f.lower()).strip()
+
+
+def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
+    """
+    Compares features between old and new page content.
+    Returns a list of feature changes: additions, removals, and modifications.
+    
+    Each change dict has:
+      - change_type: "feature_added" | "feature_removed" | "feature_modified"
+      - feature: the feature name/description
+      - details: human-readable description of the change
+    """
+    new_features = extract_features(new_text)
+
+    if not old_text or not old_text.strip():
+        # First run — no previous data to compare against.
+        # These are baseline features, NOT changes.
+        return []
+
+    old_features = extract_features(old_text)
+
+    # Normalize for comparison
+    old_normalized = {_normalize_feature(f): f for f in old_features}
+    new_normalized = {_normalize_feature(f): f for f in new_features}
+
+    old_keys = set(old_normalized.keys())
+    new_keys = set(new_normalized.keys())
+
+    changes = []
+
+    # Features added (present in new, not in old)
+    for key in (new_keys - old_keys):
+        feature_text = new_normalized[key]
+        changes.append({
+            "change_type": "feature_added",
+            "feature": feature_text,
+            "details": f"New feature detected: {feature_text}",
+        })
+
+    # Features removed (present in old, not in new)
+    for key in (old_keys - new_keys):
+        feature_text = old_normalized[key]
+        changes.append({
+            "change_type": "feature_removed",
+            "feature": feature_text,
+            "details": f"Feature no longer listed: {feature_text}",
+        })
+
+    return changes

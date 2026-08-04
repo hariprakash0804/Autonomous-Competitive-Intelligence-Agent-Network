@@ -101,10 +101,22 @@ def _validate_url(url: str) -> Tuple[bool, str]:
 
         # SSRF Protection: Block access to localhost, loopback, and private internal IP spaces
         domain_lower = parsed.netloc.split(":")[0].lower()
+        # Also check raw URL for IPv6 loopback since urlparse may not parse ::1 into netloc
+        raw_lower = url.lower()
         if domain_lower in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or domain_lower.endswith(".local"):
             return False, "Access to localhost or loopback target addresses is forbidden (SSRF Block)"
-        if domain_lower.startswith(("192.168.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.31.", "169.254.")):
-            return False, "Access to private internal IP ranges is forbidden (SSRF Block)"
+        if "//::1" in raw_lower or "//[::1]" in raw_lower:
+            return False, "Access to localhost or loopback target addresses is forbidden (SSRF Block)"
+
+        # Full RFC 1918 private range check using ipaddress module
+        import ipaddress
+        try:
+            ip = ipaddress.ip_address(domain_lower)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False, "Access to private/reserved IP ranges is forbidden (SSRF Block)"
+        except ValueError:
+            # Not a raw IP address — it's a hostname, which is fine
+            pass
 
         return True, url
     except Exception as e:
@@ -931,20 +943,23 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
     lower_html = html.lower() if html else ""
 
     # Detect 404 / Page Not Found / Broken URL pages
-    not_found_patterns = [
-        r"^#\s*404\b",
-        r"\b404\s*-\s*page\s*not\s*found\b",
-        r"\bpage\s*not\s*found\b",
-        r"\b404\s*error\b",
-        r"\b404\s*not\s*found\b",
-        r"\bthis\s*page\s*does\s*not\s*exist\b",
-        r"\bthe\s*page\s*you\s*are\s*looking\s*for\s*could\s*not\s*be\s*found\b",
-        r"\b404:\s*page\s*not\s*found\b"
-    ]
+    # Only flag as 404 on SHORT pages (<1500 chars) — long pages that mention '404'
+    # in docs/FAQs are legitimate content, not error pages.
+    if len(clean_text) < 1500:
+        not_found_patterns = [
+            r"^#\s*404\b",
+            r"\b404\s*-\s*page\s*not\s*found\b",
+            r"\bpage\s*not\s*found\b",
+            r"\b404\s*error\b",
+            r"\b404\s*not\s*found\b",
+            r"\bthis\s*page\s*does\s*not\s*exist\b",
+            r"\bthe\s*page\s*you\s*are\s*looking\s*for\s*could\s*not\s*be\s*found\b",
+            r"\b404:\s*page\s*not\s*found\b"
+        ]
 
-    for nf_pat in not_found_patterns:
-        if re.search(nf_pat, lower_text, re.MULTILINE):
-            return True, f"Detected 404 Not Found error page pattern: '{nf_pat}'"
+        for nf_pat in not_found_patterns:
+            if re.search(nf_pat, lower_text, re.MULTILINE):
+                return True, f"Detected 404 Not Found error page pattern: '{nf_pat}'"
 
     for pattern in JS_SHELL_PATTERNS:
         if re.search(pattern, lower_text) or re.search(pattern, lower_html):
@@ -1190,12 +1205,34 @@ def scrape_with_jina_reader(url: str, timeout_sec: float = 4.0) -> Optional[Dict
     return None
 
 
-def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
+def _run_concurrent_fallbacks(url: str, use_playwright: bool = True) -> Optional[Dict[str, Any]]:
+    """
+    Runs Jina AI Reader and Playwright fallbacks CONCURRENTLY for maximum speed.
+    Returns the first successful non-stale result, or None if both fail.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    futures = {}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures[executor.submit(scrape_with_jina_reader, url, 6.0)] = "jina"
+        if use_playwright:
+            futures[executor.submit(scrape_with_playwright, url, 8.0)] = "playwright"
+
+        for future in as_completed(futures, timeout=10.0):
+            try:
+                result = future.result()
+                if result and not result.get("is_stale"):
+                    return result
+            except Exception:
+                pass
+    return None
+
+
+def scrape_url(url: str, timeout_sec: float = 5.0, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
     """
     High-Performance Multi-Engine Hybrid Scraper:
     1. Fast-Path HTTPX Scraper (sub-second performance).
-    2. Headless Playwright Fallback (for JS SPAs).
-    3. Jina AI Reader Proxy Fallback (bypasses Cloudflare & anti-bot protection).
+    2. Concurrent Jina + Playwright Fallback (parallel for max speed).
     """
     _empty_structured = {
         "metadata": {
@@ -1226,6 +1263,8 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
             "is_stale": True,
             "stale_reason": f"Invalid URL: {url_or_error}",
             "status_code": 0,
+            "content_type": "",
+            "scraped_by": "none",
             **_empty_structured,
         }
     url = url_or_error
@@ -1233,10 +1272,11 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
     # 2. Fast-Path Engine: HTTPX Client (sub-second performance)
     last_error = None
     verify_ssl = True
+    jina_tried = False  # Track to avoid duplicate Jina calls
 
     for attempt in range(max_retries + 1):
         headers = _build_browser_headers(url)
-        timeout_config = httpx.Timeout(timeout_sec, connect=3.0)
+        timeout_config = httpx.Timeout(timeout_sec, connect=4.0)
 
         try:
             with httpx.Client(
@@ -1249,16 +1289,21 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                 response = client.get(url)
                 status_code = response.status_code
 
+                # Check actual response body size (handles servers that don't send content-length)
                 content_length = int(response.headers.get("content-length", 0))
-                if content_length > MAX_RESPONSE_BYTES:
+                actual_size = len(response.content)
+                effective_size = max(content_length, actual_size)
+                if effective_size > MAX_RESPONSE_BYTES:
                     return {
                         "url": url,
                         "raw_content": "",
                         "clean_text": "",
                         "content_hash": "",
                         "is_stale": True,
-                        "stale_reason": f"Response too large ({content_length / 1024 / 1024:.1f}MB > 10MB cap)",
+                        "stale_reason": f"Response too large ({effective_size / 1024 / 1024:.1f}MB > 10MB cap)",
                         "status_code": status_code,
+                        "content_type": "",
+                        "scraped_by": "httpx",
                     }
 
                 if status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
@@ -1292,17 +1337,12 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                         **structured,
                     }
 
-                # If content is a JS shell / Cloudflare bot challenge / empty / blocked (e.g. 403),
-                # try Jina AI Reader FIRST (sub-second API call, bypasses bot challenges without Chromium overhead)
+                # Stale content detected — run Jina + Playwright CONCURRENTLY for max speed
                 if is_stale:
-                    jina_res = scrape_with_jina_reader(url, timeout_sec=4.0)
-                    if jina_res and not jina_res.get("is_stale"):
-                        return jina_res
-
-                    if use_playwright and content_type == "html":
-                        pw_res = scrape_with_playwright(url, timeout_sec=4.0)
-                        if pw_res and not pw_res.get("is_stale"):
-                            return pw_res
+                    jina_tried = True
+                    concurrent_res = _run_concurrent_fallbacks(url, use_playwright=(use_playwright and content_type == "html"))
+                    if concurrent_res:
+                        return concurrent_res
 
                 return {
                     "url": url,
@@ -1338,15 +1378,11 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                 time.sleep(0.5 * (attempt + 1))
                 continue
 
-    # Final fallback attempt: Try Jina AI Reader first, then Playwright
-    jina_res = scrape_with_jina_reader(url, timeout_sec=4.0)
-    if jina_res and not jina_res.get("is_stale"):
-        return jina_res
-
-    if use_playwright:
-        pw_res = scrape_with_playwright(url, timeout_sec=4.0)
-        if pw_res and not pw_res.get("is_stale"):
-            return pw_res
+    # Final fallback: Run concurrent Jina + Playwright ONLY if not already tried
+    if not jina_tried:
+        concurrent_res = _run_concurrent_fallbacks(url, use_playwright=use_playwright)
+        if concurrent_res:
+            return concurrent_res
 
     return {
         "url": url,
@@ -1356,10 +1392,13 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
         "is_stale": True,
         "stale_reason": f"Failed after {max_retries + 1} attempts: {type(last_error).__name__}: {str(last_error)[:200]}",
         "status_code": 0,
+        "content_type": "",
+        "scraped_by": "none",
         **_empty_structured,
     }
 
 
 async def scrape_url_async(url: str, timeout_sec: float = 10.0) -> Dict[str, Any]:
-    """Asynchronous wrapper for scrape_url."""
-    return scrape_url(url, timeout_sec=timeout_sec)
+    """Truly asynchronous wrapper — runs scrape_url in a thread pool to avoid blocking the event loop."""
+    import asyncio
+    return await asyncio.to_thread(scrape_url, url, timeout_sec)

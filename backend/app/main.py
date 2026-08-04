@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import engine, Base
 import app.models  # Ensures all SQLAlchemy models register with Base.metadata
-from app.routers import auth, competitors, snapshots, reports, chat, pipeline
+from app.routers import auth, competitors, snapshots, reports, chat, pipeline, upload
 
 app = FastAPI(
     title="Competitive Intelligence Agent Network",
@@ -115,6 +115,7 @@ app.include_router(snapshots.router)
 app.include_router(reports.router)
 app.include_router(chat.router)
 app.include_router(pipeline.router)
+app.include_router(upload.router)
 
 
 @app.get("/health")

@@ -79,8 +79,10 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
             "raw_pages": [],
             "prev_snapshot": None,
             "diffs": [],
+            "feature_diffs": [],
             "sentiment_results": [],
             "report_draft": "",
+            "model_used": None,
             "retry_count": 0,
             "reflection_triggered": False,
             "is_incomplete": False,
@@ -283,11 +285,39 @@ def start_pipeline_run(
     urls = []
     seen_urls = set()
 
-    def _add_url(u: str):
+    def _normalize_url(u: str) -> str:
+        """Normalizes a URL for deduplication: adds scheme, strips trailing slash, fragments, and tracking params."""
         u = u.strip()
-        if u and u not in seen_urls:
-            seen_urls.add(u)
-            urls.append(u)
+        if not u:
+            return ""
+        # Add scheme if missing
+        if not u.startswith(("http://", "https://")):
+            u = "https://" + u
+        from urllib.parse import urlparse, urlunparse, unquote, parse_qs, urlencode
+        try:
+            u = unquote(u)  # Decode %20-style encoding
+            parsed = urlparse(u)
+            # Strip fragment
+            # Strip tracking query params (utm_*, ref, source, etc.) but keep meaningful ones
+            tracking_prefixes = ("utm_", "ref", "source", "campaign", "fbclid", "gclid", "mc_")
+            if parsed.query:
+                params = parse_qs(parsed.query, keep_blank_values=True)
+                clean_params = {k: v for k, v in params.items() if not any(k.lower().startswith(tp) for tp in tracking_prefixes)}
+                clean_query = urlencode(clean_params, doseq=True) if clean_params else ""
+            else:
+                clean_query = ""
+            # Rebuild with clean path (strip trailing slash), no fragment
+            clean_path = parsed.path.rstrip("/") or "/"
+            normalized = urlunparse((parsed.scheme, parsed.netloc.lower(), clean_path, parsed.params, clean_query, ""))
+            return normalized
+        except Exception:
+            return u.rstrip("/")
+
+    def _add_url(u: str):
+        normalized = _normalize_url(u)
+        if normalized and normalized not in seen_urls:
+            seen_urls.add(normalized)
+            urls.append(normalized)
 
     # 1. User's own company URL (for side-by-side comparison analysis)
     # Pricing discovery is handled automatically by Pass 2 pricing probes in the researcher node
@@ -303,7 +333,8 @@ def start_pipeline_run(
     if competitor.pricing_url:
         _add_url(competitor.pricing_url.strip())
         from urllib.parse import urlparse
-        parsed = urlparse(competitor.pricing_url.strip())
+        pricing_normalized = _normalize_url(competitor.pricing_url.strip())
+        parsed = urlparse(pricing_normalized)
         if parsed.netloc:
             competitor_homepage = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
             _add_url(competitor_homepage)

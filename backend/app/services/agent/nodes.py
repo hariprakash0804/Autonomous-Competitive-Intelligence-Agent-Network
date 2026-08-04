@@ -16,7 +16,7 @@ from app.models.sentiment_score import SentimentScore
 from app.models.report import Report
 from app.models.agent_run import AgentRun
 from app.services.scraper import scrape_url
-from app.services.diff_pricing import diff_pricing, extract_plan_prices, smart_extract_plan_prices
+from app.services.diff_pricing import diff_pricing, diff_features, extract_plan_prices, smart_extract_plan_prices
 from app.services.sentiment import sentiment_score
 from app.services.vector_store import vector_store
 from app.services.llm import generate_executive_report
@@ -334,6 +334,7 @@ def change_detector_node(state: AgentState) -> AgentState:
         state["is_incomplete"] = True
 
     diffs = []
+    feature_changes = []
     db: Session = SessionLocal()
     try:
         competitor_id = uuid.UUID(state["competitor_id"])
@@ -383,9 +384,11 @@ def change_detector_node(state: AgentState) -> AgentState:
                     user_webhook_url=user_webhook,
                 )
 
-        # 2. Extract real plan tier prices for both Competitor and User's Company
-        #    Only extract from pages that are likely pricing pages (URL or content signals)
-        # 2. Extract & Sync real plan tier prices for both Competitor and User's Company
+            # 2. Detect feature changes vs previous snapshot
+            detected_feature_diffs = diff_features(prev_text, clean_txt)
+            feature_changes.extend(detected_feature_diffs)
+
+        # 3. Extract real plan tier prices for both Competitor and User's Company
         #    Only extract from pages that are likely pricing pages (URL or content signals)
         existing_baseline_tiers = set(
             db.scalars(
@@ -449,11 +452,26 @@ def change_detector_node(state: AgentState) -> AgentState:
     finally:
         db.close()
 
-    state["diffs"] = diffs
-    if not diffs:
-        log_detail = "no new features applied in the competitor company"
+    # Filter: Only count GENUINE pricing changes (old_price -> new_price) as diffs.
+    # Baseline detections (old_price is None = first-time price discovery) are already
+    # persisted to DB for price history, but should NOT trigger LLM report generation.
+    genuine_price_diffs = [d for d in diffs if d.get("old_price") is not None]
+
+    state["diffs"] = genuine_price_diffs
+    state["feature_diffs"] = feature_changes
+
+    # Build log message
+    has_changes = bool(genuine_price_diffs or feature_changes)
+    log_parts = []
+    if genuine_price_diffs:
+        log_parts.append(f"{len(genuine_price_diffs)} pricing change(s)")
+    if feature_changes:
+        log_parts.append(f"{len(feature_changes)} feature change(s)")
+
+    if has_changes:
+        log_detail = f"Detected {', '.join(log_parts)} across monitored pages."
     else:
-        log_detail = f"Detected {len(diffs)} pricing/feature movements across monitored pages."
+        log_detail = "No changes in pricing or features detected for the competitor."
 
     _append_agent_run_log(
         state.get("agent_run_id"),
@@ -583,9 +601,11 @@ def report_writer_node(state: AgentState) -> AgentState:
     print(f"[Report-Writer] Starting...", flush=True)
 
     diffs = state.get("diffs", [])
+    feature_diffs = state.get("feature_diffs", [])
+    has_any_changes = bool(diffs or feature_diffs)
 
-    # ── Skip report generation if no pricing or feature changes detected ──
-    if not diffs:
+    # ── Skip report generation if no pricing AND no feature changes detected ──
+    if not has_any_changes:
         print(f"[Report-Writer] No pricing or feature changes detected. Skipping LLM report generation.", flush=True)
 
         no_change_summary = (
@@ -636,6 +656,17 @@ def report_writer_node(state: AgentState) -> AgentState:
         return state
 
     # ── Full report generation when changes ARE detected ──
+    # Build change summary for the LLM context
+    change_parts = []
+    if diffs:
+        change_parts.append(f"PRICING CHANGES ({len(diffs)}):")
+        for d in diffs:
+            change_parts.append(f"  - {d.get('details', str(d))}")
+    if feature_diffs:
+        change_parts.append(f"\nFEATURE CHANGES ({len(feature_diffs)}):")
+        for fd in feature_diffs:
+            change_parts.append(f"  - {fd.get('details', str(fd))}")
+
     pages_summary = []
     for p in state.get("raw_pages", []):
         page_entry = {
@@ -685,10 +716,20 @@ def report_writer_node(state: AgentState) -> AgentState:
     except Exception as e_fb:
         print(f"[Report-Writer Node] Feedback memory query notice: {e_fb}", flush=True)
 
+    # Combine pricing diffs + feature diffs for the LLM
+    combined_diffs = list(diffs)
+    for fd in feature_diffs:
+        combined_diffs.append({
+            "tier_name": f"[Feature] {fd.get('change_type', 'change')}",
+            "old_price": fd.get("change_type"),
+            "new_price": fd.get("feature"),
+            "details": fd.get("details", ""),
+        })
+
     llm_start = time.time()
     report_md, model_used = generate_executive_report(
         competitor_name=state.get("competitor_name", "Competitor"),
-        diffs=diffs,
+        diffs=combined_diffs,
         sentiment_results=state.get("sentiment_results", []),
         pages_summary=pages_summary,
         is_incomplete=state.get("is_incomplete", False),

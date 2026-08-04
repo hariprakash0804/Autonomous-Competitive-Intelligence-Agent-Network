@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -118,10 +119,14 @@ def create_competitor(
             )
 
     raw_company = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else current_user.company_url
-    company_url = raw_company if (raw_company and raw_company.startswith(("http://", "https://"))) else (f"https://{raw_company}" if raw_company else None)
+    if raw_company and not raw_company.startswith(("http://", "https://")):
+        raw_company = "https://" + raw_company
+    company_url = raw_company if raw_company else None
 
     raw_pricing = payload.pricing_url.strip() if payload.pricing_url and payload.pricing_url.strip() else None
-    pricing_url = raw_pricing if (raw_pricing and raw_pricing.startswith(("http://", "https://"))) else (f"https://{raw_pricing}" if raw_pricing else None)
+    if raw_pricing and not raw_pricing.startswith(("http://", "https://")):
+        raw_pricing = "https://" + raw_pricing
+    pricing_url = raw_pricing if raw_pricing else None
 
     competitor = Competitor(
         user_id=current_user.id,
@@ -161,9 +166,14 @@ def update_competitor(
     if payload.name is not None:
         competitor.name = payload.name.strip()
     if payload.company_url is not None:
-        competitor.company_url = payload.company_url.strip()
+        clean_company_url = payload.company_url.strip()
+        if clean_company_url and not clean_company_url.startswith(("http://", "https://")):
+            clean_company_url = "https://" + clean_company_url
+        competitor.company_url = clean_company_url
     if payload.pricing_url is not None:
         new_pricing = payload.pricing_url.strip()
+        if new_pricing and not new_pricing.startswith(("http://", "https://")):
+            new_pricing = "https://" + new_pricing
         new_domain = normalize_domain(new_pricing or competitor.name)
         if new_domain and new_domain != competitor.domain:
             existing = db.scalar(

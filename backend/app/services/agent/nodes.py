@@ -80,23 +80,19 @@ def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
     heading_texts = " ".join(h.get("text", "").lower() for h in headings[:10])
     combined_meta = f"{title} {description} {og_title} {heading_texts}"
 
-    # Pricing signals
+    # Explicit external review sites
+    if any(ext in url for ext in ["trustpilot.com", "g2.com", "capterra.com", "trustradius.com"]):
+        return SourceType.REVIEW
+
+    # Pricing pages
     pricing_url_kw = any(kw in url for kw in ["pricing", "plans", "packages", "subscription", "billing", "quote", "calculator", "cost", "tier"])
     pricing_meta_kw = any(kw in combined_meta for kw in ["pricing", "plans", "per month", "per user", "free tier", "enterprise pricing", "subscription", "quote"])
     pricing_text_kw = any(kw in clean_text for kw in ["$/mo", "per month", "per user", "free plan", "pricing", "billed annually", "billed monthly", "custom pricing"])
     if pricing_url_kw or (pricing_meta_kw and pricing_text_kw):
         return SourceType.PRICING
 
-    # Review / Product / Company signals
-    review_url_kw = any(kw in url for kw in [
-        "review", "about", "docs", "features", "product", "solutions", "customers",
-        "testimonial", "case-stud", "enterprise", "security", "trust", "integrations", "marketplace", "compare", "vs"
-    ])
-    review_meta_kw = any(kw in combined_meta for kw in [
-        "review", "features", "about us", "our product", "solutions", "documentation",
-        "customer", "testimonial", "enterprise", "security", "integrations", "capabilities"
-    ])
-    if review_url_kw or review_meta_kw:
+    # External review search query URLs
+    if "review" in url or "reviews" in url or "google.com/search" in url:
         return SourceType.REVIEW
 
     return SourceType.NEWS
@@ -400,6 +396,12 @@ def change_detector_node(state: AgentState) -> AgentState:
             )
             page_prior_snap = db.scalars(prior_snap_stmt).first()
             page_prev_text = page_prior_snap.raw_content if page_prior_snap else ""
+
+            # Fast-path check: if content hash or clean_text is identical to prior snapshot, skip diffing
+            page_hash = page.get("content_hash")
+            if page_prior_snap and (page_prev_text == clean_txt or (page_hash and page_prior_snap.content_hash == page_hash)):
+                print(f"[Change-Detector] Content hash unchanged for {page.get('url')}. Skipping diffing.", flush=True)
+                continue
 
             # 1. Detect genuine price changes vs previous run snapshot for SAME source_type
             if page_prev_text:

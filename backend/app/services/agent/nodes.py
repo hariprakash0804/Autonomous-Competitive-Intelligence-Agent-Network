@@ -382,29 +382,69 @@ def change_detector_node(state: AgentState) -> AgentState:
 
         for page in company_pages:
             clean_txt = page.get("clean_text", "")
-            page_src_type = _detect_source_type(page)
+            page_hash = page.get("content_hash", "")
 
-            # Query prior run snapshot for THIS specific source_type (e.g. PRICING vs PRICING, COMPANY vs COMPANY)
-            prior_snap_stmt = (
+            # Try to match prior snapshot by content_hash first (exact same page content)
+            page_prior_snap = None
+            if page_hash:
+                hash_stmt = (
+                    select(Snapshot)
+                    .where(
+                        Snapshot.competitor_id == competitor_id,
+                        Snapshot.content_hash == page_hash,
+                        Snapshot.fetched_at < run_start_time,
+                    )
+                    .order_by(Snapshot.fetched_at.desc())
+                )
+                page_prior_snap = db.scalars(hash_stmt).first()
+
+            # If content_hash matches a prior snapshot, page is UNCHANGED — skip diffing
+            if page_prior_snap:
+                print(f"[Change-Detector] Content hash unchanged for {page.get('url')}. Skipping diffing.", flush=True)
+                continue
+
+            # No hash match — fall back to most recent prior snapshot for this competitor
+            # (without source_type filter to avoid REVIEW/NEWS/PRICING mismatch from old runs)
+            fallback_stmt = (
                 select(Snapshot)
                 .where(
                     Snapshot.competitor_id == competitor_id,
-                    Snapshot.source_type == page_src_type,
                     Snapshot.fetched_at < run_start_time,
                 )
                 .order_by(Snapshot.fetched_at.desc())
             )
-            page_prior_snap = db.scalars(prior_snap_stmt).first()
-            page_prev_text = page_prior_snap.raw_content if page_prior_snap else ""
+            prior_snaps = db.scalars(fallback_stmt).all()
 
-            # Fast-path check: if content hash or clean_text is identical to prior snapshot, skip diffing
-            page_hash = page.get("content_hash")
-            if page_prior_snap and (page_prev_text == clean_txt or (page_hash and page_prior_snap.content_hash == page_hash)):
-                print(f"[Change-Detector] Content hash unchanged for {page.get('url')}. Skipping diffing.", flush=True)
+            # Pick the prior snapshot with the highest text overlap to the current page
+            page_prior_snap = None
+            page_prev_text = ""
+            if prior_snaps:
+                # Fast: check if any prior snapshot text is identical
+                for ps in prior_snaps:
+                    if ps.raw_content and ps.raw_content == clean_txt:
+                        page_prior_snap = ps
+                        page_prev_text = ps.raw_content
+                        break
+                # If no exact match, use the most recent one
+                if not page_prior_snap:
+                    page_prior_snap = prior_snaps[0]
+                    page_prev_text = page_prior_snap.raw_content or ""
+
+            # Skip if text is identical (belt-and-suspenders with hash check above)
+            if page_prev_text == clean_txt:
+                print(f"[Change-Detector] Text identical for {page.get('url')}. Skipping diffing.", flush=True)
                 continue
 
-            # 1. Detect genuine price changes vs previous run snapshot for SAME source_type
+            # 1. Detect genuine price changes vs previous run snapshot
+            #    Only diff if there's a prior snapshot with different content
             if page_prev_text:
+                # Text similarity gate: if >=85% similar, the page hasn't materially changed
+                from app.services.diff_pricing import _text_similarity_ratio
+                sim = _text_similarity_ratio(page_prev_text, clean_txt)
+                if sim >= 0.85:
+                    print(f"[Change-Detector] Text {sim:.0%} similar for {page.get('url')}. Skipping diffing.", flush=True)
+                    continue
+
                 detected_diffs = diff_pricing(page_prev_text, clean_txt)
                 diffs.extend(detected_diffs)
 

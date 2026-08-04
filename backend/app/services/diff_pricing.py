@@ -395,21 +395,23 @@ _FEATURE_NOISE = {
 def extract_features(text: str) -> List[str]:
     """
     Extracts a normalized set of feature phrases from page content.
-    Looks at headings (## lines), bullet points (- or * lines), and
-    key feature-related phrases in the text.
-    Returns a deduplicated sorted list of cleaned feature strings.
+    Looks at headings (## lines) and bullet points (- or * lines)
+    that contain product/capability signal keywords.
+    Returns a deduplicated sorted list of cleaned feature strings (max 20).
     """
     if not text or len(text.strip()) < 100:
         return []
 
     features = set()
 
+    # Only match terms that are clearly product/capability features, NOT generic words
     _FEATURE_SIGNALS = (
-        "ai", "api", "chat", "code", "data", "integration", "security", "feature", "model",
-        "support", "tool", "analytics", "workflow", "automation", "agent", "search", "export",
-        "storage", "access", "custom", "management", "dashboard", "sso", "mfa", "cloud",
-        "voice", "image", "file", "tier", "plan", "unlimited", "real-time", "enterprise",
-        "performance", "speed", "compliance", "audit", "developer", "sdk", "plugin", "app"
+        "ai model", "api", "chatbot", "integration", "security", "analytics",
+        "workflow", "automation", "real-time", "enterprise", "sso", "mfa",
+        "sdk", "plugin", "dashboard", "compliance", "audit", "voice",
+        "multi-modal", "embedding", "fine-tun", "rag", "vector",
+        "deployment", "on-prem", "self-host", "token", "context window",
+        "rate limit", "batch", "streaming", "function call", "tool use",
     )
 
     lines = text.split("\n")
@@ -424,34 +426,22 @@ def extract_features(text: str) -> List[str]:
             heading_text = heading_match.group(1).strip().rstrip("#").strip()
             heading_lower = heading_text.lower()
             if 5 <= len(heading_text) <= 80 and heading_lower not in _FEATURE_NOISE:
-                if any(sig in heading_lower for sig in _FEATURE_SIGNALS) or "introducing" in heading_lower:
+                if any(sig in heading_lower for sig in _FEATURE_SIGNALS):
                     features.add(heading_text)
             continue
 
-        # Extract bullet points that describe features (- Feature name or * Feature description)
+        # Extract bullet points that describe features
         bullet_match = re.match(r"^[-*•]\s+(.+)$", stripped)
         if bullet_match:
             bullet_text = bullet_match.group(1).strip()
             bullet_lower = bullet_text.lower()
-            if 8 <= len(bullet_text) <= 120 and bullet_lower not in _FEATURE_NOISE:
-                if not bullet_lower.startswith(("click ", "go to ", "see ", "visit ", "http://", "https://", "www.")):
+            if 10 <= len(bullet_text) <= 100 and bullet_lower not in _FEATURE_NOISE:
+                if not bullet_lower.startswith(("click ", "go to ", "see ", "visit ", "http://", "https://", "www.", "learn more")):
                     if any(sig in bullet_lower for sig in _FEATURE_SIGNALS):
                         features.add(bullet_text)
             continue
 
-    # Also scan for explicit "feature" keyword patterns in prose
-    feature_patterns = [
-        r"(?:new|added|introducing|launched|now supports?|now includes?)\s+(.{10,80}?)(?:\.|,|$)",
-        r"(?:integration with|integrates with|connects to|compatible with)\s+(.{5,60}?)(?:\.|,|$)",
-    ]
-    text_lower = text.lower()
-    for pattern in feature_patterns:
-        for match in re.finditer(pattern, text_lower):
-            phrase = match.group(1).strip().rstrip(".,;:")
-            if len(phrase) >= 8 and phrase not in _FEATURE_NOISE:
-                features.add(phrase)
-
-    return sorted(list(features))[:25]
+    return sorted(list(features))[:20]
 
 
 def _normalize_feature(f: str) -> str:
@@ -459,23 +449,37 @@ def _normalize_feature(f: str) -> str:
     return re.sub(r"[^\w\s]", "", f.lower()).strip()
 
 
+def _text_similarity_ratio(a: str, b: str, sample_size: int = 4000) -> float:
+    """Fast text similarity ratio using SequenceMatcher on a trimmed sample."""
+    import difflib
+    sa = a[:sample_size].strip().lower()
+    sb = b[:sample_size].strip().lower()
+    if not sa or not sb:
+        return 0.0
+    return difflib.SequenceMatcher(None, sa, sb).ratio()
+
+
 def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
     """
     Compares features between old and new page content.
     Returns a list of feature changes: additions, removals, and modifications.
-    
+
     Each change dict has:
       - change_type: "feature_added" | "feature_removed" | "feature_modified"
       - feature: the feature name/description
       - details: human-readable description of the change
     """
-    new_features = extract_features(new_text)
-
     if not old_text or not old_text.strip():
         # First run — no previous data to compare against.
         # These are baseline features, NOT changes.
         return []
 
+    # Overall text similarity gate: if texts are >=85% similar, the page
+    # has not materially changed — skip feature diffing entirely.
+    if _text_similarity_ratio(old_text, new_text) >= 0.85:
+        return []
+
+    new_features = extract_features(new_text)
     old_features = extract_features(old_text)
 
     # Normalize for comparison
@@ -488,13 +492,13 @@ def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
     import difflib
 
     def _is_fuzzy_match(key: str, key_set: set) -> bool:
-        """Checks if a feature key is identical, substring-matched, or fuzzy-similar (>=80%) to any existing feature key."""
+        """Checks if a feature key is identical, substring-matched, or fuzzy-similar (>=75%) to any existing feature key."""
         if key in key_set:
             return True
         for k in key_set:
             if k in key or key in k:
                 return True
-            if difflib.SequenceMatcher(None, key, k).ratio() >= 0.80:
+            if difflib.SequenceMatcher(None, key, k).ratio() >= 0.75:
                 return True
         return False
 
@@ -521,3 +525,4 @@ def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
             })
 
     return changes
+

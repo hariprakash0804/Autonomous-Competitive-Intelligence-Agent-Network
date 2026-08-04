@@ -423,7 +423,7 @@ def change_detector_node(state: AgentState) -> AgentState:
             ).all()
         )
 
-        if snapshots and valid_pages:
+        if current_snapshot and valid_pages:
             extracted_plans = []
             seen_tiers = set()
 
@@ -466,7 +466,7 @@ def change_detector_node(state: AgentState) -> AgentState:
                 baseline_pc = PriceChange(
                     competitor_id=competitor_id,
                     snapshot_before_id=None,
-                    snapshot_after_id=snapshots[0].id,
+                    snapshot_after_id=current_snapshot.id,
                     tier_name=plan.get("tier_name", "General"),
                     old_price=None,
                     new_price=price_val,

@@ -156,6 +156,36 @@ def researcher_node(state: AgentState) -> AgentState:
 
         print(f"[Researcher Node] Pass 1 scraping ({len(urls)} seed URLs) completed in {time.time() - scrape_start:.2f}s", flush=True)
 
+        # Pass 1.5: Fallback URL generation for failed/stale URLs
+        # If any URL failed, try alternative URLs from the same domain
+        fallback_urls = []
+        _fallback_paths = ["/", "/pricing", "/features", "/products", "/about"]
+        for res in raw_pages:
+            if res.get("is_stale") and res.get("url"):
+                failed_url = res["url"]
+                parsed_failed = urlparse(failed_url)
+                if parsed_failed.netloc:
+                    domain_base = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}"
+                    for fallback_path in _fallback_paths:
+                        fallback_candidate = (domain_base + fallback_path).rstrip("/")
+                        if fallback_candidate not in scraped_urls and fallback_candidate not in [u.rstrip("/") for u in fallback_urls]:
+                            fallback_urls.append(domain_base + fallback_path)
+                    # Cap fallback URLs per failed URL to 3
+                    if len(fallback_urls) >= 6:
+                        break
+
+        if fallback_urls:
+            fallback_urls = fallback_urls[:6]
+            print(f"[Researcher Node] Fallback: {len(fallback_urls)} alternative URLs for failed scrapes: {fallback_urls}", flush=True)
+            fallback_start = time.time()
+            with ThreadPoolExecutor(max_workers=min(len(fallback_urls), 6)) as executor:
+                fallback_results = list(executor.map(scrape_url, fallback_urls))
+            for res in fallback_results:
+                if not res.get("is_stale") and res.get("clean_text"):
+                    raw_pages.append(res)
+                    scraped_urls.add(res.get("url", "").rstrip("/"))
+            print(f"[Researcher Node] Fallback scraping completed in {time.time() - fallback_start:.2f}s", flush=True)
+
         # Pass 2: Automatic discovery of sub-pages & proactive pricing probes
         # PRIORITY 1: Proactive pricing page probes (Highest priority for Competitive Intelligence)
         from app.services.scraper import generate_pricing_probe_urls
@@ -549,6 +579,7 @@ def report_writer_node(state: AgentState) -> AgentState:
     """
     4. Report-Writer Node:
        Synthesizes report draft using LLM provider abstraction module and saves Report row to DB.
+       Skips LLM report generation if no pricing or feature changes were detected.
     """
     if _check_cancellation(state):
         print(f"[Report-Writer Node] Pipeline run CANCELLED. Aborting node.", flush=True)
@@ -558,6 +589,60 @@ def report_writer_node(state: AgentState) -> AgentState:
     node_start = time.time()
     print(f"[Report-Writer] Starting...", flush=True)
 
+    diffs = state.get("diffs", [])
+
+    # ── Skip report generation if no pricing or feature changes detected ──
+    if not diffs:
+        print(f"[Report-Writer] No pricing or feature changes detected. Skipping LLM report generation.", flush=True)
+
+        no_change_summary = (
+            f"# No Changes Detected\n\n"
+            f"**Competitor:** {state.get('competitor_name', 'Competitor')}\n\n"
+            f"The automated pipeline scanned all monitored URLs and found **no changes** "
+            f"in pricing or features since the last analysis run.\n\n"
+            f"- **Pricing:** No tier price movements detected\n"
+            f"- **Features:** No new features or removals detected\n\n"
+            f"*Next scheduled scan will check for updates automatically.*"
+        )
+
+        state["report_draft"] = no_change_summary
+        state["model_used"] = "skipped (no changes)"
+
+        # Save a lightweight record so the user has a history of pipeline runs
+        db: Session = SessionLocal()
+        try:
+            competitor_id = uuid.UUID(state["competitor_id"])
+            competitor = db.get(Competitor, competitor_id)
+            user_id = competitor.user_id if competitor else None
+
+            if user_id:
+                report_row = Report(
+                    user_id=user_id,
+                    competitor_id=competitor_id,
+                    pdf_url=None,
+                    summary=no_change_summary,
+                    model_used="skipped (no changes)",
+                    generated_at=datetime.now(timezone.utc),
+                    delivered_channels=["dashboard"],
+                )
+                db.add(report_row)
+                db.commit()
+                db.refresh(report_row)
+                report_row.html_url = f"/reports/{report_row.id}/html"
+                db.commit()
+        finally:
+            db.close()
+
+        _append_agent_run_log(
+            state.get("agent_run_id"),
+            "Report Writer Workflow Step",
+            "COMPLETED",
+            "No changes in pricing or features detected — report generation skipped.",
+        )
+        print(f"[Report-Writer] TOTAL: {time.time() - node_start:.2f}s (skipped — no changes)", flush=True)
+        return state
+
+    # ── Full report generation when changes ARE detected ──
     pages_summary = []
     for p in state.get("raw_pages", []):
         page_entry = {
@@ -610,7 +695,7 @@ def report_writer_node(state: AgentState) -> AgentState:
     llm_start = time.time()
     report_md, model_used = generate_executive_report(
         competitor_name=state.get("competitor_name", "Competitor"),
-        diffs=state.get("diffs", []),
+        diffs=diffs,
         sentiment_results=state.get("sentiment_results", []),
         pages_summary=pages_summary,
         is_incomplete=state.get("is_incomplete", False),

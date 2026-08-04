@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
+import LogsPage from './pages/LogsPage';
 
 function App() {
   return (
@@ -26,6 +27,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/logs"
+              element={
+                <ProtectedRoute>
+                  <LogsPage />
                 </ProtectedRoute>
               }
             />

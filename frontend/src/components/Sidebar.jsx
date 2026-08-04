@@ -12,6 +12,7 @@ import {
   DollarSign,
   X,
   NotebookPen,
+  ScrollText,
 } from 'lucide-react';
 
 export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClose }) {
@@ -53,6 +54,7 @@ export default function Sidebar({ onToggleChat, mobileOpen = false, onMobileClos
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard', color: 'text-indigo-400' },
     { label: 'Profile & Targets', icon: User, path: '/profile', color: 'text-violet-400' },
+    { label: 'Agent Logs', icon: ScrollText, path: '/logs', color: 'text-amber-400' },
   ];
 
   const toolItems = [

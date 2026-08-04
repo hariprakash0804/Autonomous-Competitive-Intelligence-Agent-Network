@@ -234,6 +234,36 @@ def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls:
         db.close()
 
 
+@router.get("/runs")
+def list_pipeline_runs(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+):
+    """Lists all agent pipeline runs for the current user, ordered by most recent first."""
+    runs = (
+        db.query(AgentRun)
+        .join(Competitor, AgentRun.competitor_id == Competitor.id)
+        .filter(Competitor.user_id == current_user.id)
+        .order_by(AgentRun.started_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": str(run.id),
+            "competitor_id": str(run.competitor_id),
+            "competitor_name": run.competitor.name if run.competitor else "",
+            "status": run.status,
+            "started_at": run.started_at.isoformat() if run.started_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "reflection_triggered": run.reflection_triggered,
+            "execution_logs": run.execution_logs or [],
+            "pages_visited": run.pages_visited or [],
+        }
+        for run in runs
+    ]
+
+
 @router.post("/run/{competitor_id}")
 def start_pipeline_run(
     competitor_id: uuid.UUID,
@@ -259,10 +289,16 @@ def start_pipeline_run(
             seen_urls.add(u)
             urls.append(u)
 
-    # 1. User's own company URL (for side-by-side comparison analysis)
+    # 1. User's own company URL + pricing & homepage (equal treatment as competitor)
     user_url = getattr(current_user, "company_url", None)
     if user_url and user_url.strip():
         _add_url(user_url.strip())
+        # Derive pricing URL and homepage for user's company (same as competitor treatment)
+        from urllib.parse import urlparse as _urlparse
+        _parsed_user = _urlparse(user_url.strip())
+        if _parsed_user.netloc:
+            user_homepage = f"{_parsed_user.scheme or 'https'}://{_parsed_user.netloc}/"
+            _add_url(user_homepage + "pricing")
 
     # 2. Competitor's company URL
     if competitor.company_url:

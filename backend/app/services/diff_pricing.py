@@ -39,14 +39,12 @@ PRICE_PATTERNS = [
 def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     """
     Extracts distinct plan tiers (Free, Team, Pro, Enterprise, etc.) and binds them
-    to their actual price values extracted from surrounding text. Evaluates all occurrences
-    of a tier name to select the true pricing card header.
-    Filters out false positives from navigation text (e.g. 'Free API key', 'Free trial').
+    to their actual price values extracted from surrounding text. Evaluates occurrences
+    within single-line windows (stopping at newlines) to prevent cross-line price leaks.
     """
     if not text:
         return []
 
-    # Context phrases that indicate a tier name is used as a nav/CTA element, not a pricing card
     _NAV_CONTEXT_PHRASES = [
         "free api key", "free trial", "free sign up", "free signup", "free account",
         "start free", "try free", "get started free", "sign up free", "free download",
@@ -63,65 +61,62 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
 
         best_candidate: Optional[Dict[str, Any]] = None
 
-        for match in matches:
-            start_pos = match.start()
-            # Inspect 150 characters right after the tier name
-            forward_window = text[start_pos : min(len(text), start_pos + 180)]
-
-            # Skip if this is a navigation/CTA context (e.g. "Free API key", "Free trial")
-            forward_lower = forward_window[:60].lower()
-            if any(phrase in forward_lower for phrase in _NAV_CONTEXT_PHRASES):
-                continue
-
-            for pattern in PRICE_PATTERNS:
-                price_match = re.search(pattern, forward_window, re.IGNORECASE)
-                if price_match:
-                    try:
-                        val_float = float(price_match.group(1))
-                        matched_str = price_match.group(0).strip()
-                        distance = price_match.start()
-
-                        # Prefer non-zero prices for non-Free tiers (prevents intro text like 'team... $0' from matching Free card)
-                        is_better = False
-                        if best_candidate is None or best_candidate.get("price") is None:
-                            is_better = True
-                        else:
-                            best_val = best_candidate["price"]
-                            if tier.lower() != "free":
-                                if best_val == 0.0 and val_float > 0.0:
-                                    is_better = True
-                                elif (best_val == 0.0 or val_float > 0.0) and distance < best_candidate.get("distance", 999):
-                                    is_better = True
-                            else:
-                                if distance < best_candidate.get("distance", 999):
-                                    is_better = True
-
-                        if is_better:
-                            best_candidate = {
-                                "tier_name": tier.capitalize(),
-                                "price": val_float,
-                                "price_str": matched_str,
-                                "distance": distance,
-                            }
-                        break
-                    except ValueError:
-                        continue
-
-        # Only set Contact Us / Custom if no numeric price candidate was found across all matches
-        if best_candidate is None:
-            # Check full text for custom/contact tier mentions
+        if tier.lower() == "free":
+            # Free tier is ALWAYS $0.00 / Free
+            best_candidate = {
+                "tier_name": "Free",
+                "price": 0.0,
+                "price_str": "$0.00 / Free",
+            }
+        else:
             for match in matches:
-                forward_window = text[match.start() : min(len(text), match.start() + 180)]
-                if "contact" in forward_window.lower() or "custom" in forward_window.lower() or "enterprise" in tier.lower():
-                    best_candidate = {
-                        "tier_name": tier.capitalize(),
-                        "price": None,
-                        "price_str": "Contact Us / Custom",
-                    }
-                    break
+                start_pos = match.start()
+                # Inspect window up to newline or max 90 chars to prevent cross-paragraph leaks
+                raw_window = text[start_pos : min(len(text), start_pos + 90)]
+                newline_idx = raw_window.find("\n")
+                forward_window = raw_window[:newline_idx] if newline_idx != -1 else raw_window
+
+                forward_lower = forward_window[:40].lower()
+                if any(phrase in forward_lower for phrase in _NAV_CONTEXT_PHRASES):
+                    continue
+
+                for pattern in PRICE_PATTERNS:
+                    price_match = re.search(pattern, forward_window, re.IGNORECASE)
+                    if price_match:
+                        try:
+                            val_float = float(price_match.group(1))
+                            matched_str = price_match.group(0).strip()
+                            distance = price_match.start()
+
+                            is_better = False
+                            if best_candidate is None or best_candidate.get("price") is None:
+                                is_better = True
+                            elif distance < best_candidate.get("distance", 999):
+                                is_better = True
+
+                            if is_better:
+                                best_candidate = {
+                                    "tier_name": tier.capitalize(),
+                                    "price": val_float,
+                                    "price_str": matched_str,
+                                    "distance": distance,
+                                }
+                            break
+                        except ValueError:
+                            continue
+
+            if best_candidate is None:
+                for match in matches:
+                    raw_window = text[match.start() : min(len(text), match.start() + 90)]
+                    if any(w in raw_window.lower() for w in ["contact", "custom", "enterprise"]):
+                        best_candidate = {
+                            "tier_name": tier.capitalize(),
+                            "price": None,
+                            "price_str": "Contact Us / Custom",
+                        }
+                        break
 
         if best_candidate:
-            # Remove helper distance key
             best_candidate.pop("distance", None)
             results.append(best_candidate)
 

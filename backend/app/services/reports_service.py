@@ -486,8 +486,8 @@ def _extract_actual_pricing_tiers(markdown_content: str, competitor_name: str) -
         if not cells or any(c.startswith("-") for c in cells):
             continue
         
-        t_name = cells[0]
-        if t_name.lower() in ("tier", "plan", "pricing", "name", "category", "feature", "core product"):
+        t_name = cells[0].strip()
+        if not t_name or t_name.lower() in ("tier", "plan", "pricing", "name", "category", "feature", "core product", "dimension", "provider"):
             continue
         
         row_str = " ".join(cells)
@@ -692,10 +692,12 @@ def _extract_actual_sentiment_data(markdown_content: str, competitor_name: str) 
 
     drivers = []
     bullet_matches = re.findall(r"[-*]\s*([^\n]+)", section_text)
-    for b in bullet_matches[:3]:
+    for b in bullet_matches[:5]:
         clean_b = b.replace("**", "").replace("__", "").strip()
-        if len(clean_b) > 5 and not clean_b.lower().startswith("section"):
-            drivers.append(clean_b[:55])
+        if len(clean_b) > 5 and not clean_b.lower().startswith("section") and not re.match(r"^[\s\|\-\:\+\=\*]+$", clean_b):
+            drivers.append(clean_b[:75])
+            if len(drivers) >= 3:
+                break
 
     if not drivers:
         drivers = [

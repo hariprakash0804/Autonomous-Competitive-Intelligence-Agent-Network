@@ -376,41 +376,49 @@ def change_detector_node(state: AgentState) -> AgentState:
 
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
-        for page in valid_pages:
+        # Filter to ONLY company/pricing pages on the competitor's own domain for change detection.
+        # External review/search pages (Trustpilot, G2, Google Search) are used for Sentiment Analysis, NOT change detection.
+        _EXTERNAL_SEARCH_DOMAINS = {"trustpilot.com", "g2.com", "google.com", "capterra.com", "news.google.com"}
+        company_pages = [
+            p for p in valid_pages
+            if not any(ext in p.get("url", "").lower() for ext in _EXTERNAL_SEARCH_DOMAINS)
+        ]
+
+        for page in company_pages:
             clean_txt = page.get("clean_text", "")
 
-            # 1. Detect genuine price changes vs previous snapshot
-            detected_diffs = diff_pricing(prev_text, clean_txt)
-            diffs.extend(detected_diffs)
-
-            for d in detected_diffs:
-                price_val = d.get("new_price") if isinstance(d.get("new_price"), (int, float)) else None
-                old_val = d.get("old_price") if isinstance(d.get("old_price"), (int, float)) else None
-                tier = d.get("tier_name", "General")
-
-                pc = PriceChange(
-                    competitor_id=competitor_id,
-                    snapshot_before_id=prior_snapshot.id if prior_snapshot else None,
-                    snapshot_after_id=current_snapshot.id if current_snapshot else None,
-                    tier_name=tier,
-                    old_price=old_val,
-                    new_price=price_val,
-                    detected_at=datetime.now(timezone.utc),
-                )
-                db.add(pc)
-
-                # Trigger custom alert webhooks for detected price shifts
-                user_webhook = (competitor.user.slack_webhook_url or "").strip() if competitor and competitor.user else None
-                send_custom_price_alert_webhook(
-                    competitor_name=competitor.name if competitor else "Competitor",
-                    tier_name=tier,
-                    old_price=old_val,
-                    new_price=price_val,
-                    user_webhook_url=user_webhook,
-                )
-
-            # 2. Detect feature changes vs previous snapshot (only if previous run snapshot exists)
+            # 1. Detect genuine price changes vs previous run snapshot (only if prior run snapshot exists)
             if prev_text:
+                detected_diffs = diff_pricing(prev_text, clean_txt)
+                diffs.extend(detected_diffs)
+
+                for d in detected_diffs:
+                    price_val = d.get("new_price") if isinstance(d.get("new_price"), (int, float)) else None
+                    old_val = d.get("old_price") if isinstance(d.get("old_price"), (int, float)) else None
+                    tier = d.get("tier_name", "General")
+
+                    pc = PriceChange(
+                        competitor_id=competitor_id,
+                        snapshot_before_id=prior_snapshot.id if prior_snapshot else None,
+                        snapshot_after_id=current_snapshot.id if current_snapshot else None,
+                        tier_name=tier,
+                        old_price=old_val,
+                        new_price=price_val,
+                        detected_at=datetime.now(timezone.utc),
+                    )
+                    db.add(pc)
+
+                    # Trigger custom alert webhooks for detected price shifts
+                    user_webhook = (competitor.user.slack_webhook_url or "").strip() if competitor and competitor.user else None
+                    send_custom_price_alert_webhook(
+                        competitor_name=competitor.name if competitor else "Competitor",
+                        tier_name=tier,
+                        old_price=old_val,
+                        new_price=price_val,
+                        user_webhook_url=user_webhook,
+                    )
+
+                # 2. Detect feature changes vs previous run snapshot (only if prior run snapshot exists)
                 detected_feature_diffs = diff_features(prev_text, clean_txt)
                 feature_changes.extend(detected_feature_diffs)
 

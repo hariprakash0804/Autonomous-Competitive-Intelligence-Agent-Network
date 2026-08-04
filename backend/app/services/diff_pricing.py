@@ -230,10 +230,15 @@ If no real pricing tiers are found, return: []"""
         response_text, model_used = call_openrouter(prompt, api_key)
         print(f"[LLM Pricing] Extraction completed via {model_used}", flush=True)
 
-        json_text = response_text.strip()
-        if json_text.startswith("```"):
-            json_text = re.sub(r"```(?:json)?\s*", "", json_text)
-            json_text = json_text.rstrip("`").strip()
+        # Robustly extract JSON array or object from raw LLM output (handles leading text & markdown blocks)
+        json_match = re.search(r"(\[[\s\S]*\])", response_text)
+        if json_match:
+            json_text = json_match.group(1).strip()
+        else:
+            json_text = response_text.strip()
+            if json_text.startswith("```"):
+                json_text = re.sub(r"```(?:json)?\s*", "", json_text)
+                json_text = json_text.rstrip("`").strip()
 
         parsed = json.loads(json_text)
         if not isinstance(parsed, list):

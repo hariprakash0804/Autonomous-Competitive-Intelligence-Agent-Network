@@ -769,15 +769,21 @@ def report_writer_node(state: AgentState) -> AgentState:
             report_row.html_url = f"/reports/{report_row.id}/html"
             db.commit()
 
-            # Auto-render HTML report immediately so first click is instant
+            # Auto-render HTML and PDF reports concurrently so response is instant
             try:
                 from app.services.reports_service import render_html_report, render_pdf_report
-                render_html_report(str(report_row.id), competitor.name if competitor else "Competitor", report_md)
-                print(f"[Report-Writer] HTML report rendered: /reports/{report_row.id}/html", flush=True)
-                render_pdf_report(str(report_row.id), competitor.name if competitor else "Competitor", report_md)
+                comp_name = competitor.name if competitor else "Competitor"
+                r_id_str = str(report_row.id)
+
+                with ThreadPoolExecutor(max_workers=2) as render_pool:
+                    h_fut = render_pool.submit(render_html_report, r_id_str, comp_name, report_md)
+                    p_fut = render_pool.submit(render_pdf_report, r_id_str, comp_name, report_md)
+                    h_fut.result()
+                    p_fut.result()
+
                 report_row.pdf_url = f"/reports/{report_row.id}/pdf"
                 db.commit()
-                print(f"[Report-Writer] PDF report rendered: /reports/{report_row.id}/pdf", flush=True)
+                print(f"[Report-Writer] HTML & PDF reports rendered concurrently for report {report_row.id}", flush=True)
             except Exception as html_exc:
                 print(f"[Report-Writer] Report render warning: {html_exc}", flush=True)
 

@@ -1223,25 +1223,10 @@ def scrape_with_jina_reader(url: str, timeout_sec: float = 4.0) -> Optional[Dict
 
 def _run_concurrent_fallbacks(url: str, use_playwright: bool = True) -> Optional[Dict[str, Any]]:
     """
-    Runs Jina AI Reader and Playwright fallbacks CONCURRENTLY for maximum speed.
-    Returns the first successful non-stale result, or None if both fail.
+    Runs Jina AI Reader fallback engine for blocked or JS-shell target URLs.
+    Returns clean markdown content without browser automation overhead.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    futures = {}
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        futures[executor.submit(scrape_with_jina_reader, url, 4.0)] = "jina"
-        if use_playwright:
-            futures[executor.submit(scrape_with_playwright, url, 6.0)] = "playwright"
-
-        for future in as_completed(futures, timeout=7.0):
-            try:
-                result = future.result()
-                if result and not result.get("is_stale"):
-                    return result
-            except Exception:
-                pass
-    return None
+    return scrape_with_jina_reader(url, timeout_sec=4.0)
 
 
 def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:

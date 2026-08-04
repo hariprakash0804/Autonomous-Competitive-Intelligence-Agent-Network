@@ -341,11 +341,29 @@ def start_pipeline_run(
 
     review_sources = list(competitor.review_urls) if competitor.review_urls else []
     if not review_sources:
-        from urllib.parse import quote, quote_plus
+        from urllib.parse import quote, quote_plus, urlparse as _urlparse
         import re as _re
+
+        # Derive the real website domain from company_url or pricing_url
+        # (competitor.domain may just be the competitor name slug, e.g. "claude")
+        _trustpilot_domain = ""
+        for _src_url in [competitor.company_url, competitor.pricing_url]:
+            if _src_url and _src_url.strip():
+                _raw = _src_url.strip()
+                if not _raw.startswith(("http://", "https://")):
+                    _raw = "https://" + _raw
+                _parsed = _urlparse(_raw)
+                _host = (_parsed.netloc or "").lower().split(":")[0]
+                if _host.startswith("www."):
+                    _host = _host[4:]
+                # Only use if it looks like a real domain (contains a dot)
+                if "." in _host:
+                    _trustpilot_domain = _host
+                    break
+
         c_slug = quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
-        if competitor.domain:
-            review_sources.append(f"https://www.trustpilot.com/review/{quote(competitor.domain)}")
+        if _trustpilot_domain:
+            review_sources.append(f"https://www.trustpilot.com/review/{quote(_trustpilot_domain)}")
         if c_slug:
             review_sources.append(f"https://www.g2.com/products/{c_slug}/reviews")
         g_query = quote_plus(f"{competitor.name} customer reviews and ratings")

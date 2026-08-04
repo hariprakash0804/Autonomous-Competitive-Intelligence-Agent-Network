@@ -38,18 +38,21 @@ def _format_inline_markdown(text: str) -> str:
         r"<code style='background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em;'>\1</code>",
         res,
     )
+
+    def _clean_md_link(match):
+        link_text = match.group(1)
+        raw_url = match.group(2).rstrip(":.,;)]}")
+        return f"<a href='{raw_url}' target='_blank' style='color: #818cf8; text-decoration: underline;'>{link_text}</a>"
+
     # Markdown links: [text](url) -> <a href="url">text</a>
-    res = re.sub(
-        r"\[(.*?)\]\((.*?)\)",
-        r"<a href='\2' target='_blank' style='color: #818cf8; text-decoration: underline;'>\1</a>",
-        res,
-    )
-    # Auto-link raw URLs: https://... -> <a href="https://...">https://...</a>
-    res = re.sub(
-        r"(?<!href=['\"])(https?://[^\s<]+)",
-        r"<a href='\1' target='_blank' style='color: #818cf8; text-decoration: underline;'>\1</a>",
-        res,
-    )
+    res = re.sub(r"\[(.*?)\]\((.*?)\)", _clean_md_link, res)
+
+    def _clean_raw_url(match):
+        raw_url = match.group(1).rstrip(":.,;)]}")
+        return f"<a href='{raw_url}' target='_blank' style='color: #818cf8; text-decoration: underline;'>{raw_url}</a>"
+
+    # Auto-link raw URLs: https://... -> <a href="https://...">https://...</a> (strips trailing punctuation like :)
+    res = re.sub(r"(?<!href=['\"])(https?://[^\s<]+)", _clean_raw_url, res)
     return res
 
 

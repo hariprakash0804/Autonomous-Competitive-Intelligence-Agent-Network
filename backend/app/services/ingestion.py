@@ -209,9 +209,24 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
     if not review_targets:
         import urllib.parse
         import re as _re
+        _trustpilot_domain = ""
+        for _src_url in [competitor.company_url, competitor.pricing_url]:
+            if _src_url and _src_url.strip():
+                _raw = _src_url.strip().rstrip(":/")
+                if not _raw.startswith(("http://", "https://")):
+                    _raw = "https://" + _raw
+                _parsed = urllib.parse.urlparse(_raw)
+                _host = (_parsed.netloc or "").lower().split(":")[0]
+                if _host.startswith("www."):
+                    _host = _host[4:]
+                _host = _host.rstrip(":/")
+                if "." in _host:
+                    _trustpilot_domain = _host
+                    break
+
         c_slug = urllib.parse.quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
-        if competitor.domain:
-            review_targets.append(f"https://www.trustpilot.com/review/{urllib.parse.quote(competitor.domain)}")
+        if _trustpilot_domain:
+            review_targets.append(f"https://www.trustpilot.com/review/{urllib.parse.quote(_trustpilot_domain)}")
         if c_slug:
             review_targets.append(f"https://www.g2.com/products/{c_slug}/reviews")
         g_query = urllib.parse.quote_plus(f"{competitor.name} customer reviews and ratings")

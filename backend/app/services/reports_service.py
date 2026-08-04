@@ -951,6 +951,12 @@ def send_slack_notification(webhook_url: str, competitor_name: str, report_summa
     if not webhook_url or not webhook_url.strip():
         return {"status": "skipped", "reason": "No webhook URL configured"}
 
+    from app.services.scraper import _validate_url
+    is_valid, valid_url_or_err = _validate_url(webhook_url.strip())
+    if not is_valid:
+        return {"status": "skipped", "reason": f"Webhook URL validation failed: {valid_url_or_err}"}
+
+    webhook_url = valid_url_or_err
     summary_text = report_summary[:600] if report_summary else "no new features applied in the competitor company"
     formatted_summary = _convert_markdown_to_slack_mrkdwn(summary_text)
 
@@ -1072,13 +1078,20 @@ def send_custom_price_alert_webhook(
     ).strip() or None
 
     target_webhooks = []
-    if user_webhook_url and user_webhook_url.strip().startswith("http"):
-        target_webhooks.append(user_webhook_url.strip())
-    if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
-        target_webhooks.append(env_webhook)
+    from app.services.scraper import _validate_url
+
+    if user_webhook_url and user_webhook_url.strip():
+        is_v, val_or_err = _validate_url(user_webhook_url.strip())
+        if is_v:
+            target_webhooks.append(val_or_err)
+
+    if env_webhook and env_webhook.strip():
+        is_v, val_or_err = _validate_url(env_webhook.strip())
+        if is_v and val_or_err not in target_webhooks:
+            target_webhooks.append(val_or_err)
 
     if not target_webhooks:
-        return {"status": "skipped", "reason": "No webhook URLs configured"}
+        return {"status": "skipped", "reason": "No valid public webhook URLs configured"}
 
     old_str = f"${old_price:.2f}" if isinstance(old_price, (int, float)) else "N/A"
     new_str = f"${new_price:.2f}" if isinstance(new_price, (int, float)) else "N/A"

@@ -66,7 +66,10 @@ def update_profile(
     if body.company_name is not None:
         current_user.company_name = body.company_name.strip()
     if body.company_url is not None:
-        current_user.company_url = body.company_url.strip()
+        clean_company_url = body.company_url.strip()
+        if clean_company_url and not clean_company_url.startswith(("http://", "https://")):
+            clean_company_url = "https://" + clean_company_url
+        current_user.company_url = clean_company_url if clean_company_url else None
     if body.company_description is not None:
         current_user.company_description = body.company_description.strip()
     if body.slack_webhook_url is not None:
@@ -101,6 +104,8 @@ async def complete_onboarding(
     # 1. URL Method: Scrape company website if URL provided
     target_url = company_url.strip() if company_url and company_url.strip() else None
     if target_url:
+        if not target_url.startswith(("http://", "https://")):
+            target_url = "https://" + target_url
         current_user.company_url = target_url
         try:
             from app.services.scraper import scrape_url

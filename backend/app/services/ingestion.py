@@ -207,11 +207,15 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
     # 2. Review URLs & Customer Sentiment Sources (Auto-generate targets if none provided)
     review_targets = list(competitor.review_urls) if competitor.review_urls else []
     if not review_targets:
-        c_name_clean = competitor.name.lower().replace(" ", "-")
+        import urllib.parse
+        import re as _re
+        c_slug = urllib.parse.quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
         if competitor.domain:
-            review_targets.append(f"https://www.trustpilot.com/review/{competitor.domain}")
-        review_targets.append(f"https://www.g2.com/products/{c_name_clean}/reviews")
-        review_targets.append(f"https://www.google.com/search?q={competitor.name}+customer+reviews+and+ratings")
+            review_targets.append(f"https://www.trustpilot.com/review/{urllib.parse.quote(competitor.domain)}")
+        if c_slug:
+            review_targets.append(f"https://www.g2.com/products/{c_slug}/reviews")
+        g_query = urllib.parse.quote_plus(f"{competitor.name} customer reviews and ratings")
+        review_targets.append(f"https://www.google.com/search?q={g_query}")
 
     for rev_url in review_targets[:3]:
         try:
@@ -222,11 +226,15 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
 
     # 3. News URLs / Keyword Searches
     if competitor.news_keywords:
+        import urllib.parse
         for kw in competitor.news_keywords:
-            if kw.startswith("http://") or kw.startswith("https://"):
-                news_url = kw
+            if not kw or not kw.strip():
+                continue
+            kw_clean = kw.strip()
+            if kw_clean.startswith(("http://", "https://")):
+                news_url = kw_clean
             else:
-                news_url = f"https://news.google.com/search?q={kw}&hl=en-US"
+                news_url = f"https://news.google.com/search?q={urllib.parse.quote_plus(kw_clean)}&hl=en-US"
             res = ingest_url_for_competitor(db, competitor, SourceType.NEWS, news_url)
             results.append(res)
 

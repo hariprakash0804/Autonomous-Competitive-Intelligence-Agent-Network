@@ -341,20 +341,30 @@ def start_pipeline_run(
 
     review_sources = list(competitor.review_urls) if competitor.review_urls else []
     if not review_sources:
-        c_name_clean = competitor.name.lower().replace(" ", "-")
+        from urllib.parse import quote, quote_plus
+        import re as _re
+        c_slug = quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
         if competitor.domain:
-            review_sources.append(f"https://www.trustpilot.com/review/{competitor.domain}")
-        review_sources.append(f"https://www.g2.com/products/{c_name_clean}/reviews")
-        review_sources.append(f"https://www.google.com/search?q={competitor.name}+customer+reviews+and+ratings")
+            review_sources.append(f"https://www.trustpilot.com/review/{quote(competitor.domain)}")
+        if c_slug:
+            review_sources.append(f"https://www.g2.com/products/{c_slug}/reviews")
+        g_query = quote_plus(f"{competitor.name} customer reviews and ratings")
+        review_sources.append(f"https://www.google.com/search?q={g_query}")
 
     for ru in review_sources[:3]:
         if ru:
             _add_url(ru)
 
     if competitor.news_keywords:
+        from urllib.parse import quote_plus
         for kw in competitor.news_keywords:
-            if kw and (kw.strip().startswith("http://") or kw.strip().startswith("https://")):
-                _add_url(kw)
+            if not kw or not kw.strip():
+                continue
+            kw_clean = kw.strip()
+            if kw_clean.startswith(("http://", "https://")):
+                _add_url(kw_clean)
+            else:
+                _add_url(f"https://news.google.com/search?q={quote_plus(kw_clean)}&hl=en-US")
 
     if not urls:
         raise HTTPException(

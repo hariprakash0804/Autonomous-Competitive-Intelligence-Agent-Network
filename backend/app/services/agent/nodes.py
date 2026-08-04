@@ -162,7 +162,8 @@ def researcher_node(state: AgentState) -> AgentState:
         fallback_urls = []
         for res in raw_pages:
             if res.get("is_stale") and res.get("url"):
-                parsed_failed = urlparse(res["url"])
+                _failed_url = res["url"] if res["url"].startswith(("http://", "https://")) else "https://" + res["url"]
+                parsed_failed = urlparse(_failed_url)
                 if parsed_failed.netloc and not any(sd in parsed_failed.netloc for sd in _skip_domains):
                     homepage = f"{parsed_failed.scheme or 'https'}://{parsed_failed.netloc}/"
                     if homepage.rstrip("/") not in scraped_urls:
@@ -186,7 +187,8 @@ def researcher_node(state: AgentState) -> AgentState:
         pricing_probe_urls = []
         probed_domains = set()
         for seed_url in urls:
-            parsed = urlparse(seed_url)
+            _safe_seed = seed_url if seed_url.startswith(("http://", "https://")) else "https://" + seed_url
+            parsed = urlparse(_safe_seed)
             domain_key = f"{parsed.scheme}://{parsed.netloc}"
             if domain_key in probed_domains:
                 continue

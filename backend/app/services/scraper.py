@@ -42,6 +42,16 @@ MIN_CONTENT_LENGTH = 100
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10MB safety cap
 
 
+def _ensure_scheme(url: str) -> str:
+    """Ensures a URL has an http(s) scheme. Prevents urlparse from returning empty netloc."""
+    if not url:
+        return url
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    return url
+
+
 def _get_random_ua() -> str:
     """Returns a random realistic browser User-Agent."""
     return random.choice(USER_AGENTS)
@@ -52,6 +62,7 @@ def _build_browser_headers(url: str) -> Dict[str, str]:
     Builds a full set of browser-like headers tailored to the target domain.
     This dramatically reduces bot detection compared to a bare User-Agent.
     """
+    url = _ensure_scheme(url)
     parsed = urlparse(url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
     ua = _get_random_ua()
@@ -616,7 +627,10 @@ def generate_pricing_probe_urls(
     Returns:
         List of unique pricing URLs to probe
     """
+    base_url = _ensure_scheme(base_url)
     parsed = urlparse(base_url)
+    if not parsed.netloc:
+        return []
     domain_key = f"{parsed.scheme}://{parsed.netloc}"
 
     probes = []
@@ -713,6 +727,7 @@ def extract_key_internal_links(soup: BeautifulSoup, base_url: str, max_links_per
     discovered = []
     seen_urls = set()
 
+    base_url = _ensure_scheme(base_url)
     parsed_base = urlparse(base_url)
     base_domain = parsed_base.netloc.lower()
 
@@ -1074,6 +1089,7 @@ def _extract_markdown_internal_links(markdown_text: str, base_url: str, max_link
     """
     discovered = []
     seen_urls = set()
+    base_url = _ensure_scheme(base_url)
     parsed_base = urlparse(base_url)
     base_domain = parsed_base.netloc.lower()
     if not base_domain:
@@ -1304,6 +1320,7 @@ def scrape_url(url: str, timeout_sec: float = 5.0, max_retries: int = 1, use_pla
                         "status_code": status_code,
                         "content_type": "",
                         "scraped_by": "httpx",
+                        **_empty_structured,
                     }
 
                 if status_code in (429, 500, 502, 503, 504) and attempt < max_retries:

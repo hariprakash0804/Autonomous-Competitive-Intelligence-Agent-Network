@@ -2,7 +2,7 @@ import uuid
 import time
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session

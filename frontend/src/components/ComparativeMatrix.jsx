@@ -87,6 +87,8 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
 
     // Format markdown text for clean speech reading
     const cleanText = reportSummary
+      .replace(/^>\s*/gm, '')
+      .replace(/⚠️\s*/g, '')
       .replace(/#+/g, '')
       .replace(/\*+/g, '')
       .replace(/\|/g, ' ')
@@ -522,7 +524,18 @@ function renderMarkdownFormatted(mdText) {
       tableRows.push(cells);
     } else {
       if (inTable) flushTable(`table-${idx}`);
-      if (trimmed.startsWith('## ')) {
+      if (trimmed.startsWith('>')) {
+        const cleanText = trimmed.replace(/^>\s*/, '').replace(/⚠️\s*/, '');
+        elements.push(
+          <div key={idx} className="p-3.5 my-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-start gap-2.5 shadow-md font-sans animate-fade-in">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong className="text-amber-300 font-bold">Previous Pipeline Data:</strong>{' '}
+              {cleanText.replace(/\*\*Previous Pipeline Data\*\*:\s*/, '').replace(/\*\*(.*?)\*\*/g, '$1')}
+            </div>
+          </div>
+        );
+      } else if (trimmed.startsWith('## ')) {
         elements.push(
           <h3 key={idx} className="text-sm font-bold text-indigo-400 mt-5 mb-2 font-display border-b border-white/[0.04] pb-1.5 flex items-center gap-2">
             {trimmed.replace('## ', '')}

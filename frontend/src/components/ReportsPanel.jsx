@@ -38,6 +38,8 @@ export default function ReportsPanel({ selectedCompetitorId }) {
     window.speechSynthesis.cancel();
 
     const cleanText = (report.summary || report.content || `Executive report for ${report.competitor_name}`)
+      .replace(/^>\s*/gm, '')
+      .replace(/⚠️\s*/g, '')
       .replace(/#+/g, '')
       .replace(/\*+/g, '')
       .replace(/\|/g, ' ')

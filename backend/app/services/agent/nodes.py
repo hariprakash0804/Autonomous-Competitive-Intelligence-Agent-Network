@@ -832,6 +832,14 @@ def parallel_analysis_node(state: AgentState) -> AgentState:
     return state
 
 
+def _format_gmt_datetime(dt: Optional[datetime], fmt: str = "%b %d, %Y %H:%M GMT") -> str:
+    if not dt:
+        return "Unknown"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone().strftime(fmt)
+
+
 def report_writer_node(state: AgentState) -> AgentState:
     """
     4. Report-Writer Node:
@@ -869,7 +877,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         if existing_real_report:
             has_prior_real_report = True
             prior_report_summary = existing_real_report.summary or ""
-            prior_report_date = existing_real_report.generated_at.strftime("%b %d, %Y %H:%M GMT") if existing_real_report.generated_at else "Unknown"
+            prior_report_date = _format_gmt_datetime(existing_real_report.generated_at)
             prior_report_model = existing_real_report.model_used or "unknown"
     finally:
         db.close()

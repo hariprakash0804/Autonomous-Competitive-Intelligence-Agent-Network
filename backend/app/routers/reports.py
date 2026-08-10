@@ -39,22 +39,23 @@ class FeedbackRequest(BaseModel):
     comments: Optional[str] = None
 
 
+def _format_gmt_datetime(dt: Optional[datetime], fmt: str = "%b %d, %Y %H:%M GMT") -> str:
+    if not dt:
+        return "Unknown"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone().strftime(fmt)
+
+
 @router.get("/")
 def list_reports(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user_or_api_key)],
 ):
-    """Lists all generated competitive intelligence reports for current user's competitors."""
-    user_competitors = db.scalars(
-        select(Competitor.id).where(Competitor.user_id == current_user.id)
-    ).all()
-
-    if not user_competitors:
-        return []
-
+    """Lists all generated reports across all competitors for the current user."""
     reports = db.scalars(
         select(Report)
-        .where(Report.competitor_id.in_(user_competitors))
+        .where(Report.user_id == current_user.id)
         .order_by(Report.generated_at.desc())
     ).all()
 
@@ -67,11 +68,14 @@ def list_reports(
             "competitor_name": comp.name if comp else "Unknown",
             "model_used": r.model_used or "unknown",
             "generated_at": r.generated_at.isoformat(),
-            "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M GMT"),
+            "formatted_date": _format_gmt_datetime(r.generated_at),
             "content_snippet": (r.summary or "")[:200] + "...",
             "html_url": f"/reports/{r.id}/html",
             "pdf_url": f"/reports/{r.id}/pdf",
         })
+
+    return results
+
 
 @router.get("/competitor/{competitor_id}")
 def get_reports_by_competitor(
@@ -98,7 +102,7 @@ def get_reports_by_competitor(
             "model_used": r.model_used or "unknown",
             "summary": r.summary or "",
             "generated_at": r.generated_at.isoformat(),
-            "formatted_date": r.generated_at.strftime("%b %d, %Y %H:%M GMT"),
+            "formatted_date": _format_gmt_datetime(r.generated_at),
             "content_snippet": (r.summary or "")[:200] + "...",
             "html_url": f"/reports/{r.id}/html",
             "pdf_url": f"/reports/{r.id}/pdf",

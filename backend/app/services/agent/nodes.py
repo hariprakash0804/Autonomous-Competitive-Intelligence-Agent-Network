@@ -727,9 +727,24 @@ def report_writer_node(state: AgentState) -> AgentState:
     feature_diffs = state.get("feature_diffs", [])
     has_any_changes = bool(diffs or feature_diffs)
 
-    # ── Skip report generation if no pricing AND no feature changes detected ──
-    if not has_any_changes:
-        print(f"[Report-Writer] No pricing or feature changes detected. Skipping LLM report generation.", flush=True)
+    db: Session = SessionLocal()
+    has_prior_real_report = False
+    try:
+        competitor_id = uuid.UUID(state["competitor_id"])
+        existing_real_report = db.scalars(
+            select(Report)
+            .where(
+                Report.competitor_id == competitor_id,
+                Report.model_used != "skipped (no changes)",
+            )
+        ).first()
+        has_prior_real_report = (existing_real_report is not None)
+    finally:
+        db.close()
+
+    # ── Skip report generation ONLY if a prior real report exists AND no new pricing/feature changes were detected ──
+    if has_prior_real_report and not has_any_changes:
+        print(f"[Report-Writer] Prior report exists and no new changes detected. Skipping LLM report generation.", flush=True)
 
         no_change_summary = (
             f"# No Changes Detected\n\n"

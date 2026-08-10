@@ -162,7 +162,11 @@ export default function DashboardPage() {
   const handleRunComplete = (finishedRunId, compId) => {
     setActiveRuns((prev) => prev.filter((r) => r.runId !== finishedRunId));
     fetchCompetitors();
-    if (selectedCompId === compId) fetchDetails(selectedCompId);
+    const targetId = compId || selectedCompId;
+    if (targetId) {
+      if (!selectedCompId) setSelectedCompId(targetId);
+      fetchDetails(targetId);
+    }
     const comp = competitors.find((c) => c.id === compId);
     toast.success(`Agent pipeline for ${comp?.name || 'Competitor'} completed!`, 'Pipeline Finished');
   };
@@ -533,6 +537,7 @@ export default function DashboardPage() {
                   userProfile={user}
                   latestReport={latestReport}
                   intelligenceData={intelligenceData}
+                  isPipelineRunning={activeRuns.some((r) => r.compId === selectedCompId)}
                 />
 
                 <div id="price-timeline-section">

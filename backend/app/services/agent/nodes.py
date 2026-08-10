@@ -194,11 +194,15 @@ def researcher_node(state: AgentState) -> AgentState:
         # PRIORITY 1: Proactive pricing page probes (Highest priority for Competitive Intelligence)
         from app.services.scraper import generate_pricing_probe_urls
 
+        _SKIP_PROBE_DOMAINS = {"trustpilot.com", "g2.com", "google.com", "capterra.com", "news.google.com", "trustradius.com"}
+
         pricing_probe_urls = []
         probed_domains = set()
         for seed_url in urls:
             _safe_seed = seed_url if seed_url.startswith(("http://", "https://")) else "https://" + seed_url
             parsed = urlparse(_safe_seed)
+            if any(sd in (parsed.netloc or "").lower() for sd in _SKIP_PROBE_DOMAINS):
+                continue
             domain_key = f"{parsed.scheme}://{parsed.netloc}"
             if domain_key in probed_domains:
                 continue
@@ -222,12 +226,16 @@ def researcher_node(state: AgentState) -> AgentState:
         for page in raw_pages:
             if page.get("is_stale"):
                 continue
+            page_url_check = page.get("url", "").lower()
+            if any(sd in page_url_check for sd in _SKIP_PROBE_DOMAINS):
+                continue
             internal_links = page.get("key_internal_links", [])
             for link_item in internal_links:
                 target_url = link_item.get("url", "").rstrip("/")
                 if (
                     target_url
                     and target_url not in scraped_urls
+                    and not any(sd in target_url.lower() for sd in _SKIP_PROBE_DOMAINS)
                     and target_url not in [u.rstrip("/") for u in pricing_probe_urls]
                     and target_url not in [u.rstrip("/") for u in general_internal_urls]
                 ):

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown, Volume2, Pause, Play, Square, Headphones, Mail } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Building2, ExternalLink, Award, FileText, TrendingUp, TrendingDown, Volume2, Pause, Play, Square, Headphones, Mail, Loader2 } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 
 import { sanitizeUrl } from '../utils/url';
@@ -36,7 +36,7 @@ function extractBulletPointsFromSection(markdown, sectionKeywords) {
   return [];
 }
 
-export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData }) {
+export default function ComparativeMatrix({ selectedCompetitor, userProfile, latestReport, intelligenceData, isPipelineRunning }) {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState('matrix');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -437,6 +437,16 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
 
               {renderMarkdownFormatted(reportSummary)}
             </>
+          ) : isPipelineRunning ? (
+            <div className="text-center py-12 space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto">
+                <Loader2 className="w-7 h-7 text-indigo-400 animate-spin" />
+              </div>
+              <p className="text-xs text-indigo-300 font-semibold px-4 py-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20 inline-block animate-pulse">
+                ⚡ Agent Pipeline is actively gathering intelligence & synthesizing executive brief...
+              </p>
+              <p className="text-[10px] text-slate-500">Scraping pricing, features, customer reviews & market news across both companies.</p>
+            </div>
           ) : (
             <div className="text-center py-12 space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mx-auto">

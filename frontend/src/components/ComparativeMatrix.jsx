@@ -256,65 +256,36 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
             const extractedAdvantages = extractBulletPointsFromSection(reportSummary, ['Key Advantages', 'Advantages', 'Wins']);
             const extractedGaps = extractBulletPointsFromSection(reportSummary, ['Key Disadvantages', 'Gaps', 'Disadvantages', 'Address']);
 
-            // Fallback points dynamically tailored to the selected competitor
-            const defaultAdvantages = [
-              {
-                title: 'Faster Onboarding & Implementation:',
-                body: `Lower time-to-value for development teams compared to ${competitorName}'s setup process.`,
-                strength: 85,
-              },
-              {
-                title: 'Predictable Pricing Model:',
-                body: `User-based tiers and spend controls tailored for cost predictability against ${competitorName}.`,
-                strength: 78,
-              },
-              {
-                title: 'Modern Architecture:',
-                body: 'Native multi-agent background orchestration and instant automated intelligence reports.',
-                strength: 92,
-              },
-              {
-                title: 'Responsive Customer Support:',
-                body: 'Faster response SLAs and direct support channel access for engineering teams.',
-                strength: 70,
-              },
-            ];
+            // If no report has been generated yet, show empty state instead of fake data
+            if (extractedAdvantages.length === 0 && extractedGaps.length === 0) {
+              return (
+                <div className="rounded-xl p-8 text-center space-y-3 bg-white/[0.02] border border-white/[0.04]">
+                  <div className="w-12 h-12 rounded-2xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mx-auto">
+                    <AlertTriangle className="w-6 h-6 text-slate-700" />
+                  </div>
+                  <p className="text-xs text-amber-400/90 font-semibold px-3 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20 inline-block">
+                    No competitive analysis data yet
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Run the intelligence pipeline to generate advantages & gaps analysis.
+                  </p>
+                </div>
+              );
+            }
 
-            const defaultGaps = [
-              {
-                title: `${competitorName} Market Positioning:`,
-                body: `${competitorName} maintains targeted positioning and web assets across ${selectedCompetitor.domain || competitorName}.`,
-                gap: 65,
-              },
-              {
-                title: 'Ecosystem & Integration Footprint:',
-                body: `${competitorName} leverages specific tech stack integrations (${technographics.slice(0, 3).join(', ') || 'third-party APIs'}).`,
-                gap: 55,
-              },
-              {
-                title: 'Specialized Vertical Capabilities:',
-                body: `${competitorName} highlights targeted feature sets and specialized deployment options for its user base.`,
-                gap: 45,
-              },
-            ];
+            const advantageItems = extractedAdvantages.map((bullet, idx) => {
+              const parts = bullet.split(':');
+              const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Advantage ${idx + 1}:`;
+              const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
+              return { title, body, strength: Math.max(65, 95 - idx * 8) };
+            });
 
-            const advantageItems = extractedAdvantages.length > 0
-              ? extractedAdvantages.map((bullet, idx) => {
-                  const parts = bullet.split(':');
-                  const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Advantage ${idx + 1}:`;
-                  const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
-                  return { title, body, strength: Math.max(65, 95 - idx * 8) };
-                })
-              : defaultAdvantages;
-
-            const gapItems = extractedGaps.length > 0
-              ? extractedGaps.map((bullet, idx) => {
-                  const parts = bullet.split(':');
-                  const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Gap ${idx + 1}:`;
-                  const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
-                  return { title, body, gap: Math.max(45, 75 - idx * 10) };
-                })
-              : defaultGaps;
+            const gapItems = extractedGaps.map((bullet, idx) => {
+              const parts = bullet.split(':');
+              const title = parts.length > 1 ? parts[0].replace(/\*\*/g, '').trim() + ':' : `Gap ${idx + 1}:`;
+              const body = parts.length > 1 ? parts.slice(1).join(':').replace(/\*\*/g, '').trim() : bullet.replace(/\*\*/g, '').trim();
+              return { title, body, gap: Math.max(45, 75 - idx * 10) };
+            });
 
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

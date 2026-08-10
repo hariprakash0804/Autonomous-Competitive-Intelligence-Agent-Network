@@ -325,11 +325,21 @@ def start_pipeline_run(
     if user_url and user_url.strip():
         _add_url(user_url.strip())
 
-    # 2. Competitor's company URL
+    # 2. Competitor's company URL & Auto-derived Pricing Probe URLs
     if competitor.company_url:
-        _add_url(competitor.company_url.strip())
+        comp_url_clean = competitor.company_url.strip()
+        _add_url(comp_url_clean)
 
-    # 3. Competitor's pricing URL & root homepage
+        from urllib.parse import urlparse
+        parsed = urlparse(_normalize_url(comp_url_clean))
+        if parsed.netloc:
+            base_site = f"{parsed.scheme or 'https'}://{parsed.netloc}"
+            # Automatically register common pricing subpaths if no specific pricing_url is set
+            if not competitor.pricing_url:
+                for probe_path in ["/pricing", "/plans", "/rates", "/prices"]:
+                    _add_url(f"{base_site}{probe_path}")
+
+    # 3. Competitor's explicit pricing URL & root homepage
     if competitor.pricing_url:
         _add_url(competitor.pricing_url.strip())
         from urllib.parse import urlparse

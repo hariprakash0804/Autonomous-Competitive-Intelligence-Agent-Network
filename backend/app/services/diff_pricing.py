@@ -23,16 +23,34 @@ TARGET_TIERS = [
     "Flex",
     "Pay-As-You-Go",
     "API",
+    # Extended coverage for modern SaaS pricing
+    "Hobby",
+    "Personal",
+    "Individual",
+    "Professional",
+    "Advanced",
+    "Scale",
+    "Essentials",
+    "Unlimited",
+    "Organization",
+    "Education",
+    "Startup",
+    "Solo",
+    "Creator",
+    "Agency",
+    "Custom",
 ]
 
 # Regex patterns to detect price values following a tier header
 PRICE_PATTERNS = [
-    # Monthly/annual user subscriptions e.g. $20/mo, $25/user/month, $200/month
-    r"(?:starting\s+at\s+|from\s+)?[\$\€\£]\s*(\d+(?:\.\d{2})?)\s*(?:USD|EUR|GBP)?(?:\s*(?:per|/)\s*(?:user/month|user/mo|month|mo|year|yr))?",
-    # Per-token / usage rates e.g. $0.05 / 1M tokens, $0.59/M tokens
-    r"[\$\€\£]\s*(\d+(?:\.\d+)?)\s*(?:/|per|\s+per\s+)\s*(?:1m|m|million|100k|k|token|tokens)",
-    # Fallback dollar price e.g. $20, $200, $0
-    r"[\$\€\£]\s*(\d+(?:\.\d{2})?)",
+    # Monthly/annual user subscriptions e.g. $20/mo, $25/user/month, $200/month, $20 per seat/month
+    r"(?:starting\s+at\s+|from\s+)?[\$\€\£]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:USD|EUR|GBP)?(?:\s*(?:per|/)\s*(?:user[/\s]*month|user[/\s]*mo|seat[/\s]*month|seat[/\s]*mo|month|mo|year|yr|annually))?",
+    # Per-token / usage rates e.g. $0.05 / 1M tokens, $0.59/M tokens, $15 per 1M tokens
+    r"[\$\€\£]\s*(\d+(?:\.\d+)?)\s*(?:/|per|\s+per\s+)\s*(?:1m|m|million|100k|k|token|tokens|request|requests|credit|credits)",
+    # Prices with "per" before currency e.g. "from $20", "starting at $50"
+    r"(?:from|starting\s+at|starts\s+at|only)\s+[\$\€\£]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)",
+    # Fallback dollar price e.g. $20, $200, $0, $1,000
+    r"[\$\€\£]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)",
 ]
 
 
@@ -41,6 +59,7 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     Extracts distinct plan tiers (Free, Team, Pro, Enterprise, etc.) and binds them
     to their actual price values extracted from surrounding text. Evaluates occurrences
     within single-line windows (stopping at newlines) to prevent cross-line price leaks.
+    Also looks backwards from tier name to catch "$20/mo - Pro Plan" patterns.
     """
     if not text:
         return []
@@ -52,9 +71,12 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     ]
 
     results = []
+    seen_tiers = set()
 
     for tier in TARGET_TIERS:
-        tier_pattern = re.compile(r"\b" + tier + r"\b", re.IGNORECASE)
+        if tier.lower() in seen_tiers:
+            continue
+        tier_pattern = re.compile(r"\b" + re.escape(tier) + r"\b", re.IGNORECASE)
         matches = list(tier_pattern.finditer(text))
         if not matches:
             continue
@@ -68,23 +90,33 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
                 "price": 0.0,
                 "price_str": "$0.00 / Free",
             }
+        elif tier.lower() == "custom":
+            best_candidate = {
+                "tier_name": "Custom",
+                "price": None,
+                "price_str": "Contact Us / Custom",
+            }
         else:
             for match in matches:
                 start_pos = match.start()
-                # Inspect window up to newline or max 90 chars to prevent cross-paragraph leaks
-                raw_window = text[start_pos : min(len(text), start_pos + 90)]
+                end_pos = match.end()
+
+                # ── Forward scan: look 150 chars ahead (within same line) ──
+                raw_window = text[start_pos : min(len(text), start_pos + 150)]
                 newline_idx = raw_window.find("\n")
                 forward_window = raw_window[:newline_idx] if newline_idx != -1 else raw_window
 
-                forward_lower = forward_window[:40].lower()
+                forward_lower = forward_window[:50].lower()
                 if any(phrase in forward_lower for phrase in _NAV_CONTEXT_PHRASES):
                     continue
 
+                found_forward = False
                 for pattern in PRICE_PATTERNS:
                     price_match = re.search(pattern, forward_window, re.IGNORECASE)
                     if price_match:
                         try:
-                            val_float = float(price_match.group(1))
+                            val_str = price_match.group(1).replace(",", "")
+                            val_float = float(val_str)
                             matched_str = price_match.group(0).strip()
                             distance = price_match.start()
 
@@ -101,14 +133,42 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
                                     "price_str": matched_str,
                                     "distance": distance,
                                 }
+                            found_forward = True
                             break
                         except ValueError:
                             continue
 
+                # ── Backward scan: look 100 chars before (within same line) ──
+                # Catches "$20/mo - Pro Plan" patterns
+                if not found_forward and not best_candidate:
+                    back_start = max(0, start_pos - 100)
+                    backward_raw = text[back_start:end_pos]
+                    # Only look at the same line
+                    last_newline = backward_raw.rfind("\n")
+                    backward_window = backward_raw[last_newline + 1:] if last_newline != -1 else backward_raw
+
+                    for pattern in PRICE_PATTERNS:
+                        price_match = re.search(pattern, backward_window, re.IGNORECASE)
+                        if price_match:
+                            try:
+                                val_str = price_match.group(1).replace(",", "")
+                                val_float = float(val_str)
+                                matched_str = price_match.group(0).strip()
+                                if best_candidate is None or best_candidate.get("price") is None:
+                                    best_candidate = {
+                                        "tier_name": tier.capitalize(),
+                                        "price": val_float,
+                                        "price_str": matched_str,
+                                        "distance": 50,
+                                    }
+                                break
+                            except ValueError:
+                                continue
+
             if best_candidate is None:
                 for match in matches:
-                    raw_window = text[match.start() : min(len(text), match.start() + 90)]
-                    if any(w in raw_window.lower() for w in ["contact", "custom", "enterprise"]):
+                    raw_window = text[match.start() : min(len(text), match.start() + 150)]
+                    if any(w in raw_window.lower() for w in ["contact", "custom", "enterprise", "talk to sales", "get a quote"]):
                         best_candidate = {
                             "tier_name": tier.capitalize(),
                             "price": None,
@@ -119,6 +179,7 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
         if best_candidate:
             best_candidate.pop("distance", None)
             results.append(best_candidate)
+            seen_tiers.add(tier.lower())
 
     return results
 
@@ -190,7 +251,7 @@ def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
     if not text:
         return []
 
-    cache_key = hashlib.md5(text[:4000].encode("utf-8")).hexdigest()
+    cache_key = hashlib.md5(text[:6000].encode("utf-8")).hexdigest()
     if cache_key in _LLM_PRICING_CACHE:
         print(f"[LLM Pricing Cache] Hit for text hash {cache_key[:8]}", flush=True)
         return _LLM_PRICING_CACHE[cache_key]
@@ -199,7 +260,7 @@ def _llm_extract_pricing(text: str) -> List[Dict[str, Any]]:
     if not api_key:
         return extract_plan_prices(text)
 
-    sample_text = text[:4000]
+    sample_text = text[:6000]
 
     prompt = f"""Extract ALL real subscription/pricing tiers from this pricing page content.
 
@@ -280,19 +341,23 @@ def smart_extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     """
     Unified high-speed pricing plan extractor.
     1. Try fast local regex extraction first (sub-millisecond execution).
-    2. Fall back to LLM extraction only if regex finds 0 plans.
+    2. If regex finds <=1 plan (e.g. only "Free"), escalate to LLM for deeper extraction.
+    3. Return whichever found more plans.
     """
     regex_plans = extract_plan_prices(text)
-    if regex_plans:
+
+    # If regex found a decent number of plans, trust it
+    if len(regex_plans) >= 2:
         return regex_plans
 
     provider = (settings.LLM_PROVIDER or "").lower().strip()
     api_key = settings.LLM_API_KEY or ""
 
     if provider == "openrouter" and api_key:
-        plans = _llm_extract_pricing(text)
-        if plans:
-            return plans
+        llm_plans = _llm_extract_pricing(text)
+        # Return whichever found more plans
+        if len(llm_plans) > len(regex_plans):
+            return llm_plans
 
     return regex_plans
 
@@ -330,8 +395,8 @@ def _llm_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:
             })
         return changes
 
-    # For the old text, use regex (faster, no extra API call) since we just need tier→price mapping
-    old_plans = extract_plan_prices(old_text)
+    # Use smart extraction for old text too to ensure consistent tier naming
+    old_plans = smart_extract_plan_prices(old_text)
     old_map = {item["tier_name"]: item for item in old_plans}
     new_map = {item["tier_name"]: item for item in new_plans}
 

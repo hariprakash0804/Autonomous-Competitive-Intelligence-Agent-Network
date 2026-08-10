@@ -85,9 +85,9 @@ def _detect_source_type(scrape_res: Dict[str, Any]) -> SourceType:
         return SourceType.REVIEW
 
     # Pricing pages
-    pricing_url_kw = any(kw in url for kw in ["pricing", "plans", "packages", "subscription", "billing", "quote", "calculator", "cost", "tier"])
-    pricing_meta_kw = any(kw in combined_meta for kw in ["pricing", "plans", "per month", "per user", "free tier", "enterprise pricing", "subscription", "quote"])
-    pricing_text_kw = any(kw in clean_text for kw in ["$/mo", "per month", "per user", "free plan", "pricing", "billed annually", "billed monthly", "custom pricing"])
+    pricing_url_kw = any(kw in url for kw in ["pricing", "plans", "packages", "subscription", "billing", "quote", "calculator", "cost", "tier", "price", "prices", "rates", "buy", "fees", "upgrade"])
+    pricing_meta_kw = any(kw in combined_meta for kw in ["pricing", "plans", "per month", "per user", "free tier", "enterprise pricing", "subscription", "quote", "rates", "buy"])
+    pricing_text_kw = any(kw in clean_text for kw in ["$/mo", "per month", "per user", "free plan", "pricing", "billed annually", "billed monthly", "custom pricing", "/mo", "/month", "/year", "per seat", "starting at"])
     if pricing_url_kw or (pricing_meta_kw and pricing_text_kw):
         return SourceType.PRICING
 
@@ -374,8 +374,11 @@ def change_detector_node(state: AgentState) -> AgentState:
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
         # Filter to ONLY company/pricing pages on the competitor's own domain for change detection.
-        # External review/search pages (Trustpilot, G2, Google Search) are used for Sentiment Analysis, NOT change detection.
-        _EXTERNAL_SEARCH_DOMAINS = {"trustpilot.com", "g2.com", "google.com", "capterra.com", "news.google.com"}
+        # External review/search pages are used for Sentiment Analysis, NOT change detection.
+        _EXTERNAL_SEARCH_DOMAINS = {
+            "trustpilot.com", "g2.com", "google.com", "capterra.com", "news.google.com",
+            "trustradius.com", "producthunt.com", "gartner.com", "softwareadvice.com",
+        }
         company_pages = [
             p for p in valid_pages
             if not any(ext in p.get("url", "").lower() for ext in _EXTERNAL_SEARCH_DOMAINS)
@@ -529,8 +532,8 @@ def change_detector_node(state: AgentState) -> AgentState:
                 user_comp_url = competitor.user.company_url
 
             # Pricing page detection keywords
-            _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "cost", "tier")
-            _pricing_text_kw = ("$/mo", "per month", "per user", "free plan", "billed annually", "billed monthly", "per million")
+            _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "cost", "tier", "price", "prices", "rates", "buy", "fees", "upgrade")
+            _pricing_text_kw = ("$/mo", "per month", "per user", "free plan", "billed annually", "billed monthly", "per million", "/mo", "/month", "/year", "per seat", "starting at", "contact sales", "get quote", "custom pricing")
 
             for p in valid_pages:
                 page_url = p.get("url", "").lower()

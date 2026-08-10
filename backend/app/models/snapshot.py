@@ -33,6 +33,7 @@ class Snapshot(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     is_stale: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Relationships

@@ -449,7 +449,7 @@ def _normalize_feature(f: str) -> str:
     return re.sub(r"[^\w\s]", "", f.lower()).strip()
 
 
-def _text_similarity_ratio(a: str, b: str, sample_size: int = 4000) -> float:
+def _text_similarity_ratio(a: str, b: str, sample_size: int = 8000) -> float:
     """Fast text similarity ratio using SequenceMatcher on a trimmed sample."""
     import difflib
     sa = a[:sample_size].strip().lower()
@@ -474,9 +474,11 @@ def diff_features(old_text: str, new_text: str) -> List[Dict[str, Any]]:
         # These are baseline features, NOT changes.
         return []
 
-    # Overall text similarity gate: if texts are >=85% similar, the page
+    # Overall text similarity gate: if texts are >=92% similar, the page
     # has not materially changed — skip feature diffing entirely.
-    if _text_similarity_ratio(old_text, new_text) >= 0.85:
+    # Threshold raised from 0.85 to 0.92 to avoid false positives from
+    # minor scraper engine variations (HTTPX vs Jina vs Playwright).
+    if _text_similarity_ratio(old_text, new_text) >= 0.92:
         return []
 
     new_features = extract_features(new_text)

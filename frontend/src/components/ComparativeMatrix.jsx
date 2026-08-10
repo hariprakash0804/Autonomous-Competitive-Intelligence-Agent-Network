@@ -468,6 +468,22 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
   );
 }
 
+function parseInlineFormatting(text) {
+  if (!text) return '';
+  const regex = /(\*\*.*?\*\*|\*.*?\*|`.*?`)/g;
+  const parts = text.split(regex);
+  return parts.map((part, idx) => {
+    if (typeof part === 'string' && part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={idx} className="font-bold text-white">{part.slice(2, -2)}</strong>;
+    } else if (typeof part === 'string' && part.startsWith('*') && part.endsWith('*')) {
+      return <em key={idx} className="italic text-slate-300">{part.slice(1, -1)}</em>;
+    } else if (typeof part === 'string' && part.startsWith('`') && part.endsWith('`')) {
+      return <code key={idx} className="px-1.5 py-0.5 rounded bg-white/[0.06] text-indigo-300 font-mono text-[11px]">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
 function renderMarkdownFormatted(mdText) {
   if (!mdText) return null;
   const lines = mdText.split('\n');
@@ -535,30 +551,46 @@ function renderMarkdownFormatted(mdText) {
             </div>
           </div>
         );
-      } else if (trimmed.startsWith('## ')) {
-        elements.push(
-          <h3 key={idx} className="text-sm font-bold text-indigo-400 mt-5 mb-2 font-display border-b border-white/[0.04] pb-1.5 flex items-center gap-2">
-            {trimmed.replace('## ', '')}
-          </h3>
-        );
-      } else if (trimmed.startsWith('# ')) {
-        elements.push(
-          <h2 key={idx} className="text-base font-extrabold text-white mt-2 mb-3 font-display">
-            {trimmed.replace('# ', '')}
-          </h2>
-        );
+      } else if (/^#{1,6}\s+/.test(trimmed)) {
+        const level = (trimmed.match(/^#{1,6}/) || ['#'])[0].length;
+        const headerText = trimmed.replace(/^#{1,6}\s+/, '');
+        if (level === 1) {
+          elements.push(
+            <h1 key={idx} className="text-base font-black text-white mt-4 mb-3 font-display border-b border-white/[0.08] pb-2">
+              {parseInlineFormatting(headerText)}
+            </h1>
+          );
+        } else if (level === 2) {
+          elements.push(
+            <h2 key={idx} className="text-sm font-bold text-indigo-400 mt-5 mb-2 font-display border-b border-white/[0.04] pb-1.5">
+              {parseInlineFormatting(headerText)}
+            </h2>
+          );
+        } else if (level === 3) {
+          elements.push(
+            <h3 key={idx} className="text-xs font-bold text-cyan-300 mt-4 mb-1.5 font-display">
+              {parseInlineFormatting(headerText)}
+            </h3>
+          );
+        } else {
+          elements.push(
+            <h4 key={idx} className="text-xs font-semibold text-purple-300 mt-3 mb-1 font-display">
+              {parseInlineFormatting(headerText)}
+            </h4>
+          );
+        }
       } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
         const text = trimmed.replace(/^[-*]\s+/, '');
         elements.push(
           <div key={idx} className="text-xs text-slate-300 my-1.5 flex items-start gap-2.5">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-            <span>{text.replace(/\*\*(.*?)\*\*/g, '$1')}</span>
+            <span>{parseInlineFormatting(text)}</span>
           </div>
         );
       } else if (trimmed && trimmed !== '---') {
         elements.push(
           <p key={idx} className="text-xs text-slate-300 my-2 leading-relaxed">
-            {trimmed.replace(/\*\*(.*?)\*\*/g, '$1')}
+            {parseInlineFormatting(trimmed)}
           </p>
         );
       }

@@ -25,7 +25,7 @@ OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
 # Fallback: HuggingFace Inference API
 HF_MODEL_NAME = "all-MiniLM-L6-v2"
 HF_EMBEDDING_DIM = 384
-HF_API_URL = f"https://router.huggingface.co/hf-inference/models/sentence-transformers/{HF_MODEL_NAME}/pipeline/feature-extraction"
+HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{HF_MODEL_NAME}"
 
 # Unified FAISS Vector Store Dimension (matches SentenceTransformers & HF API natively)
 UNIFIED_EMBED_DIM = 384
@@ -272,6 +272,11 @@ class VectorStoreService:
                         json={"inputs": batch_truncated, "options": {"wait_for_model": True}},
                         timeout=15.0,
                     )
+
+                    if response.status_code in (500, 502, 504):
+                        print(f"[Vector Store] HF API server error (HTTP {response.status_code}). Switching to fast local hash fallback.", flush=True)
+                        use_hash_fallback = True
+                        break
 
                     if response.status_code == 503:
                         wait = min(float(response.json().get("estimated_time", 5)), 10)

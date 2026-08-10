@@ -120,18 +120,31 @@ class VectorStoreService:
         return self.model
 
     def _check_openrouter_embed_connectivity(self, api_key: str) -> bool:
-        """Quick connectivity check to OpenRouter Embedding API."""
-        try:
-            response = httpx.post(
-                OPENROUTER_EMBED_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": OPENROUTER_EMBED_MODEL, "input": ["connectivity test"]},
-                timeout=3.0,
-            )
-            return response.status_code == 200 and "data" in response.json()
-        except Exception as e:
-            print(f"[Vector Store] OpenRouter embed connectivity check failed: {e}", flush=True)
+        """Quick connectivity check to OpenRouter Embedding API with retries and realistic timeout."""
+        if not api_key or not api_key.strip():
             return False
+
+        headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
+        payload = {"model": OPENROUTER_EMBED_MODEL, "input": ["connectivity test"]}
+
+        for attempt in range(2):
+            try:
+                response = httpx.post(
+                    OPENROUTER_EMBED_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=6.0,
+                )
+                if response.status_code == 200 and "data" in response.json():
+                    return True
+                else:
+                    print(f"[Vector Store] OpenRouter embed check HTTP {response.status_code}: {response.text[:120]}", flush=True)
+            except Exception as e:
+                print(f"[Vector Store] OpenRouter embed connectivity attempt {attempt + 1} note: {e}", flush=True)
+                if attempt == 0:
+                    time.sleep(0.5)
+
+        return False
 
     def _check_hf_api_connectivity(self, hf_token: str) -> bool:
         """Quick connectivity check to HuggingFace API."""
@@ -142,14 +155,17 @@ class VectorStoreService:
                 HF_API_URL,
                 headers={"Authorization": f"Bearer {hf_token.strip()}"},
                 json={"inputs": "test", "options": {"wait_for_model": False}},
-                timeout=3.0,
+                timeout=5.0,
             )
             is_ok = response.status_code in (200, 503)
             if not is_ok:
                 print(f"[Vector Store] HF API connectivity check returned HTTP {response.status_code}: {response.text[:100]}", flush=True)
             return is_ok
         except Exception as e:
-            print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
+            if self._is_unrecoverable_error(e):
+                print(f"[Vector Store] HF API network/DNS unreachable: {e}", flush=True)
+            else:
+                print(f"[Vector Store] HF API connectivity check failed: {e}", flush=True)
             return False
 
     @staticmethod
@@ -199,7 +215,7 @@ class VectorStoreService:
                         OPENROUTER_EMBED_URL,
                         headers=headers,
                         json={"model": OPENROUTER_EMBED_MODEL, "input": batch_truncated},
-                        timeout=4.0,
+                        timeout=8.0,
                     )
 
                     if response.status_code == 429:

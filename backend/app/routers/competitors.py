@@ -80,7 +80,7 @@ def list_competitors(
         results.append({
             "id": str(c.id),
             "name": c.name,
-            "company_url": c.company_url or current_user.company_url,
+            "company_url": c.company_url,
             "pricing_url": c.pricing_url,
             "domain": c.domain,
             "review_urls": c.review_urls or [],
@@ -118,7 +118,18 @@ def create_competitor(
                 detail=f"Competitor with domain/URL '{target_domain}' already exists in your account.",
             )
 
-    raw_company = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else current_user.company_url
+    raw_company = payload.company_url.strip() if payload.company_url and payload.company_url.strip() else None
+    if not raw_company and payload.pricing_url and payload.pricing_url.strip():
+        # Derive company homepage from pricing_url if company_url not given
+        try:
+            p_parsed = urllib.parse.urlparse(payload.pricing_url.strip() if payload.pricing_url.strip().startswith(("http://", "https://")) else "https://" + payload.pricing_url.strip())
+            if p_parsed.netloc:
+                raw_company = f"{p_parsed.scheme or 'https'}://{p_parsed.netloc}"
+        except Exception:
+            pass
+    if not raw_company and target_domain:
+        raw_company = f"https://www.{target_domain}" if "." in target_domain else f"https://{target_domain}.com"
+
     if raw_company and not raw_company.startswith(("http://", "https://")):
         raw_company = "https://" + raw_company
     company_url = raw_company if raw_company else None

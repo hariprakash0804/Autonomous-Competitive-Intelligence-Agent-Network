@@ -761,11 +761,37 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
                 )
                 db.add(ss)
 
+        # Separately calculate User Company sentiment for dual-company comparative analysis
+        user_company_pages = [p for p in valid_pages if user_company_domain and user_company_domain in p.get("url", "").lower()]
+        user_sentiment_results = []
+        for page in user_company_pages:
+            url = page.get("url", "")
+            metadata = page.get("metadata", {})
+            meta_prefix = ""
+            meta_title = metadata.get("title") or metadata.get("og_title") or ""
+            meta_desc = metadata.get("description") or metadata.get("og_description") or ""
+            if meta_title:
+                meta_prefix += f"{meta_title}. "
+            if meta_desc:
+                meta_prefix += f"{meta_desc}. "
+            source_type = _detect_source_type(page).value
+            enriched_text = meta_prefix + page["clean_text"][:8000]
+            sent_res = sentiment_score(enriched_text)
+            user_sentiment_results.append({
+                "url": url,
+                "source_type": source_type,
+                "score": sent_res["score"],
+                "topics": sent_res["topics"],
+                "sentiment_category": sent_res["sentiment_category"],
+                "is_user_company": True,
+            })
+
         db.commit()
     finally:
         db.close()
 
     state["sentiment_results"] = sentiment_results
+    state["user_sentiment_results"] = user_sentiment_results
     _append_agent_run_log(
         state.get("agent_run_id"),
         "Sentiment Analyst Workflow Step",

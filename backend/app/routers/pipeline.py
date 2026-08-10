@@ -319,61 +319,110 @@ def start_pipeline_run(
             seen_urls.add(normalized)
             urls.append(normalized)
 
-    # 1. User's own company URL (for side-by-side comparison analysis)
-    # Pricing discovery is handled automatically by Pass 2 pricing probes in the researcher node
-    user_url = getattr(current_user, "company_url", None)
-    if user_url and user_url.strip():
-        _add_url(user_url.strip())
-
-    # 2. Competitor's company URL & Auto-derived Pricing Probe URLs
-    if competitor.company_url:
-        comp_url_clean = competitor.company_url.strip()
-        _add_url(comp_url_clean)
-
+    def _extract_domain(url_str: str) -> str:
+        if not url_str:
+            return ""
+        u = url_str.strip()
+        if not u.startswith(("http://", "https://")):
+            u = "https://" + u
         from urllib.parse import urlparse
-        parsed = urlparse(_normalize_url(comp_url_clean))
-        if parsed.netloc:
-            base_site = f"{parsed.scheme or 'https'}://{parsed.netloc}"
-            # Automatically register common pricing subpaths if no specific pricing_url is set
-            if not competitor.pricing_url:
-                for probe_path in ["/pricing", "/plans", "/rates", "/prices"]:
-                    _add_url(f"{base_site}{probe_path}")
+        try:
+            d = (urlparse(u).netloc or "").lower().split(":")[0]
+            return d[4:] if d.startswith("www.") else d
+        except Exception:
+            return ""
 
-    # 3. Competitor's explicit pricing URL & root homepage
+    # Common pricing subpath probe endpoints (probed symmetrically for both companies)
+    PRICING_PROBE_PATHS = [
+        "/pricing",
+        "/plans",
+        "/business/pricing",
+        "/enterprise/pricing",
+        "/api/pricing",
+        "/product/pricing",
+        "/pricing/plans",
+        "/rates",
+        "/prices",
+    ]
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # 1. USER COMPANY DATA COLLECTION (Symmetrical to Competitor)
+    # ═════════════════════════════════════════════════════════════════════════
+    user_company_name = getattr(current_user, "company_name", None) or "Our Company"
+    user_url = getattr(current_user, "company_url", None)
+    user_domain = _extract_domain(user_url)
+
+    if user_url and user_url.strip():
+        # A. User Homepage
+        _add_url(user_url.strip())
+        from urllib.parse import urlparse, quote, quote_plus
+        u_parsed = urlparse(_normalize_url(user_url.strip()))
+        if u_parsed.netloc:
+            u_base = f"{u_parsed.scheme or 'https'}://{u_parsed.netloc}"
+            # B. User Pricing & Plan Probes
+            for probe_path in PRICING_PROBE_PATHS[:5]:  # Probe top 5 pricing paths for user
+                _add_url(f"{u_base}{probe_path}")
+
+        if user_domain:
+            # C. User Customer Review Sources (Trustpilot, G2, Google Review Search)
+            _add_url(f"https://www.trustpilot.com/review/{quote(user_domain)}")
+            g2_user_q = quote_plus(f"site:g2.com {user_company_name} reviews")
+            _add_url(f"https://www.google.com/search?q={g2_user_q}")
+            g_user_q = quote_plus(f"{user_company_name} customer reviews and ratings")
+            _add_url(f"https://www.google.com/search?q={g_user_q}")
+
+            # D. User Company Market News Search
+            news_user_q = quote_plus(user_company_name)
+            _add_url(f"https://news.google.com/search?q={news_user_q}&hl=en-US")
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # 2. COMPETITOR TARGET DATA COLLECTION (Symmetrical to User Company)
+    # ═════════════════════════════════════════════════════════════════════════
+    comp_company_url = ""
+    comp_domain = ""
+
+    if competitor.company_url:
+        c_dom = _extract_domain(competitor.company_url)
+        if c_dom and c_dom != user_domain:
+            comp_company_url = competitor.company_url.strip()
+            comp_domain = c_dom
+
+    if not comp_company_url and competitor.pricing_url:
+        p_dom = _extract_domain(competitor.pricing_url)
+        if p_dom and p_dom != user_domain:
+            comp_domain = p_dom
+            from urllib.parse import urlparse
+            p_parsed = urlparse(_normalize_url(competitor.pricing_url.strip()))
+            comp_company_url = f"{p_parsed.scheme or 'https'}://{p_parsed.netloc}/"
+
+    if not comp_domain and competitor.domain:
+        c_dom = _extract_domain(competitor.domain)
+        if c_dom and c_dom != user_domain:
+            comp_domain = c_dom
+            if not comp_company_url:
+                comp_company_url = f"https://www.{comp_domain}" if "." in comp_domain else f"https://{comp_domain}.com"
+
+    # A. Competitor Homepage & Pricing Subpath Probes
+    if comp_company_url:
+        _add_url(comp_company_url)
+        from urllib.parse import urlparse
+        parsed = urlparse(_normalize_url(comp_company_url))
+        if parsed.netloc and not competitor.pricing_url:
+            base_site = f"{parsed.scheme or 'https'}://{parsed.netloc}"
+            for probe_path in PRICING_PROBE_PATHS:
+                _add_url(f"{base_site}{probe_path}")
+
+    # B. Competitor Explicit Pricing URL
     if competitor.pricing_url:
         _add_url(competitor.pricing_url.strip())
-        from urllib.parse import urlparse
-        pricing_normalized = _normalize_url(competitor.pricing_url.strip())
-        parsed = urlparse(pricing_normalized)
-        if parsed.netloc:
-            competitor_homepage = f"{parsed.scheme or 'https'}://{parsed.netloc}/"
-            _add_url(competitor_homepage)
 
+    # C. Competitor Customer Review Sources (Trustpilot, G2, Google Review Search)
     review_sources = list(competitor.review_urls) if competitor.review_urls else []
     if not review_sources:
-        from urllib.parse import quote, quote_plus, urlparse as _urlparse
-        import re as _re
+        from urllib.parse import quote, quote_plus
 
-        # Derive the real website domain ONLY from company_url (not pricing_url).
-        # pricing_url may point to a different company (e.g., user's own company page),
-        # which would produce wrong Trustpilot/review URLs for this competitor.
-        _trustpilot_domain = ""
-        if competitor.company_url and competitor.company_url.strip():
-            _raw = competitor.company_url.strip()
-            if not _raw.startswith(("http://", "https://")):
-                _raw = "https://" + _raw
-            _parsed = _urlparse(_raw)
-            _host = (_parsed.netloc or "").lower().split(":")[0]
-            if _host.startswith("www."):
-                _host = _host[4:]
-            # Only use if it looks like a real domain (contains a dot)
-            if "." in _host:
-                _trustpilot_domain = _host
-
-        c_slug = quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
-        if _trustpilot_domain:
-            review_sources.append(f"https://www.trustpilot.com/review/{quote(_trustpilot_domain)}")
-        # G2 direct URLs are often blocked by anti-scraping — use Google search as fallback
+        if comp_domain:
+            review_sources.append(f"https://www.trustpilot.com/review/{quote(comp_domain)}")
         g2_query = quote_plus(f"site:g2.com {competitor.name} reviews")
         review_sources.append(f"https://www.google.com/search?q={g2_query}")
         g_query = quote_plus(f"{competitor.name} customer reviews and ratings")
@@ -383,6 +432,7 @@ def start_pipeline_run(
         if ru:
             _add_url(ru)
 
+    # D. Competitor Market News Search
     if competitor.news_keywords:
         from urllib.parse import quote_plus
         for kw in competitor.news_keywords:
@@ -393,6 +443,10 @@ def start_pipeline_run(
                 _add_url(kw_clean)
             else:
                 _add_url(f"https://news.google.com/search?q={quote_plus(kw_clean)}&hl=en-US")
+    else:
+        from urllib.parse import quote_plus
+        comp_news_q = quote_plus(competitor.name)
+        _add_url(f"https://news.google.com/search?q={comp_news_q}&hl=en-US")
 
     if not urls:
         raise HTTPException(

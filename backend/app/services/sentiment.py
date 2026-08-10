@@ -136,6 +136,14 @@ NEGATIVE_SENTIMENT_WORDS = {
     "corrupted", "stale", "slow", "unreadable", "expensive", "overhead", "flake",
     "limit", "rate-limit", "restricted", "error", "blocked", "failing", "lag",
     "bottleneck", "vulnerability", "risk", "down", "outage", "flawed", "deprecated",
+    # Customer review negative sentiment terms (Trustpilot, G2, user reviews)
+    "terrible", "worst", "scam", "frustrating", "unusable", "broken", "ripoff",
+    "overpriced", "unreliable", "disappointed", "misleading", "downgrade", "waste",
+    "horrible", "awful", "unresponsive", "poor", "buggy", "crash", "freezing",
+    "useless", "refund", "cancellation", "complaint", "regret", "nightmare",
+    "incompetent", "dishonest", "deceptive", "predatory", "unethical", "fraud",
+    "charging", "bait", "switch", "worthless", "unusable", "trash", "garbage",
+    "annoying", "pathetic", "disastrous", "abysmal", "dreadful", "atrocious",
 }
 
 
@@ -184,7 +192,7 @@ def _vader_sentiment(text: str) -> Dict[str, Any]:
             "raw_scores": {"neg": 0.0, "neu": 1.0, "pos": 0.0, "compound": 0.0},
         }
 
-    sample_text = text[:5000]
+    sample_text = text[:8000]
     scores = analyzer.polarity_scores(sample_text)
     compound = round(scores["compound"], 4)
 

@@ -138,6 +138,19 @@ def researcher_node(state: AgentState) -> AgentState:
         if competitor:
             state["competitor_name"] = competitor.name
 
+        # Resolve user's own company domain so we can exclude it from competitor snapshots.
+        # User company pages are still scraped for side-by-side LLM report context but should
+        # NOT be stored as competitor snapshots (which would pollute change detection & sentiment).
+        _user_company_domain = ""
+        if competitor and competitor.user and competitor.user.company_url:
+            _u_url = competitor.user.company_url.strip()
+            if not _u_url.startswith(("http://", "https://")):
+                _u_url = "https://" + _u_url
+            _u_parsed = urlparse(_u_url)
+            _user_company_domain = (_u_parsed.netloc or "").lower().split(":")[0]
+            if _user_company_domain.startswith("www."):
+                _user_company_domain = _user_company_domain[4:]
+
         # Pass 1: Parallel seed URL scraping
         scrape_start = time.time()
         scraped_urls = set()
@@ -239,6 +252,12 @@ def researcher_node(state: AgentState) -> AgentState:
         for scrape_res in raw_pages:
             url = scrape_res.get("url", "")
             if competitor and not scrape_res["is_stale"] and scrape_res["clean_text"]:
+                # Skip saving user's own company pages as competitor snapshots.
+                # They are still available in raw_pages for the LLM report context.
+                if _user_company_domain and _user_company_domain in url.lower():
+                    print(f"[Researcher Node] Skipping snapshot for user company page: {url}", flush=True)
+                    continue
+
                 source_type = _detect_source_type(scrape_res)
 
                 snapshot = Snapshot(
@@ -373,16 +392,40 @@ def change_detector_node(state: AgentState) -> AgentState:
 
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
-        # Filter to ONLY company/pricing pages on the competitor's own domain for change detection.
-        # External review/search pages are used for Sentiment Analysis, NOT change detection.
+        # Filter to ONLY competitor's own domain pages for change detection.
+        # Exclude: external review/search sites AND the user's own company pages.
         _EXTERNAL_SEARCH_DOMAINS = {
             "trustpilot.com", "g2.com", "google.com", "capterra.com", "news.google.com",
             "trustradius.com", "producthunt.com", "gartner.com", "softwareadvice.com",
         }
-        company_pages = [
-            p for p in valid_pages
-            if not any(ext in p.get("url", "").lower() for ext in _EXTERNAL_SEARCH_DOMAINS)
-        ]
+
+        # Resolve user company domain to exclude from change detection
+        _user_domain_for_cd = ""
+        if competitor and competitor.user and competitor.user.company_url:
+            _cd_url = competitor.user.company_url.strip()
+            if not _cd_url.startswith(("http://", "https://")):
+                _cd_url = "https://" + _cd_url
+            _cd_parsed = urlparse(_cd_url)
+            _user_domain_for_cd = (_cd_parsed.netloc or "").lower().split(":")[0]
+            if _user_domain_for_cd.startswith("www."):
+                _user_domain_for_cd = _user_domain_for_cd[4:]
+
+        def _is_competitor_page(p):
+            """Returns True if the page belongs to the competitor (not external review or user's company)."""
+            page_url = p.get("url", "").lower()
+            # Exclude external review/search domains
+            if any(ext in page_url for ext in _EXTERNAL_SEARCH_DOMAINS):
+                return False
+            # Exclude user's own company domain
+            if _user_domain_for_cd and _user_domain_for_cd in page_url:
+                return False
+            return True
+
+        company_pages = [p for p in valid_pages if _is_competitor_page(p)]
+        if _user_domain_for_cd:
+            excluded_user_pages = len(valid_pages) - len([p for p in valid_pages if any(ext in p.get('url', '').lower() for ext in _EXTERNAL_SEARCH_DOMAINS)]) - len(company_pages)
+            if excluded_user_pages > 0:
+                print(f"[Change-Detector] Excluded {excluded_user_pages} user company page(s) ({_user_domain_for_cd}) from change detection.", flush=True)
 
         from app.services.diff_pricing import _text_similarity_ratio
 
@@ -527,9 +570,16 @@ def change_detector_node(state: AgentState) -> AgentState:
             extracted_plans = []
             seen_tiers = set()
 
-            user_comp_url = (competitor.company_url or "") if competitor else ""
+            # Resolve user's company domain for accurate user-page identification
+            _user_domain_for_pricing = ""
             if competitor and competitor.user and competitor.user.company_url:
-                user_comp_url = competitor.user.company_url
+                _pr_url = competitor.user.company_url.strip()
+                if not _pr_url.startswith(("http://", "https://")):
+                    _pr_url = "https://" + _pr_url
+                _pr_parsed = urlparse(_pr_url)
+                _user_domain_for_pricing = (_pr_parsed.netloc or "").lower().split(":")[0]
+                if _user_domain_for_pricing.startswith("www."):
+                    _user_domain_for_pricing = _user_domain_for_pricing[4:]
 
             # Pricing page detection keywords
             _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "cost", "tier", "price", "prices", "rates", "buy", "fees", "upgrade")
@@ -539,7 +589,8 @@ def change_detector_node(state: AgentState) -> AgentState:
                 page_url = p.get("url", "").lower()
                 clean_text = p.get("clean_text", "")
                 clean_lower = clean_text[:3000].lower()
-                is_user_page = bool(user_comp_url and (user_comp_url in page_url or page_url in user_comp_url))
+                # Domain-based detection: check if the page's domain matches the user's company domain
+                is_user_page = bool(_user_domain_for_pricing and _user_domain_for_pricing in page_url)
 
                 # Only extract pricing from pages that are actually pricing pages
                 is_pricing_page = (
@@ -634,9 +685,37 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
             .order_by(Snapshot.fetched_at.desc())
         ).first()
 
+        # Resolve the user's own company domain to exclude from competitor sentiment analysis.
+        # The user's own company pages (e.g., openai.com/pricing) are scraped for side-by-side
+        # comparison but should NOT bias the competitor's sentiment score.
+        user_company_domain = ""
+        competitor_obj = db.get(Competitor, competitor_id)
+        if competitor_obj and competitor_obj.user:
+            user_url = (competitor_obj.user.company_url or "").strip()
+            if user_url:
+                if not user_url.startswith(("http://", "https://")):
+                    user_url = "https://" + user_url
+                parsed_user = urlparse(user_url)
+                user_company_domain = (parsed_user.netloc or "").lower().split(":")[0]
+                if user_company_domain.startswith("www."):
+                    user_company_domain = user_company_domain[4:]
+
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
-        for page in valid_pages:
+        # Filter out the user's own company pages from sentiment analysis to avoid bias.
+        # The user's marketing content is naturally positive and dilutes competitor sentiment.
+        if user_company_domain:
+            competitor_pages = [
+                p for p in valid_pages
+                if user_company_domain not in (p.get("url", "").lower())
+            ]
+            skipped_count = len(valid_pages) - len(competitor_pages)
+            if skipped_count > 0:
+                print(f"[Sentiment-Analyst] Excluded {skipped_count} user company page(s) ({user_company_domain}) from competitor sentiment analysis.", flush=True)
+        else:
+            competitor_pages = valid_pages
+
+        for page in competitor_pages:
             url = page.get("url", "")
 
             # Build enriched text: prepend metadata context for better topic extraction
@@ -649,12 +728,19 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
             if meta_desc:
                 meta_prefix += f"{meta_desc}. "
 
-            enriched_text = meta_prefix + page["clean_text"]
-            sent_res = sentiment_score(enriched_text)
-
             # Use the shared source type detector for consistency
             source_type = _detect_source_type(page).value
-            
+
+            # For review pages (Trustpilot, G2, Google search reviews), use larger text
+            # sample to capture more review content and reduce marketing boilerplate dilution
+            page_text = page["clean_text"]
+            if source_type == "review":
+                enriched_text = meta_prefix + page_text[:8000]
+            else:
+                enriched_text = meta_prefix + page_text
+
+            sent_res = sentiment_score(enriched_text)
+
             result_item = {
                 "url": url,
                 "source_type": source_type,
@@ -684,7 +770,7 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
         state.get("agent_run_id"),
         "Sentiment Analyst Workflow Step",
         "COMPLETED",
-        f"Analyzed customer sentiment across {len(sentiment_results)} pages.",
+        f"Analyzed customer sentiment across {len(sentiment_results)} competitor pages.",
     )
     print(f"[Sentiment-Analyst] TOTAL: {time.time() - node_start:.2f}s", flush=True)
     return state
@@ -732,6 +818,9 @@ def report_writer_node(state: AgentState) -> AgentState:
 
     db: Session = SessionLocal()
     has_prior_real_report = False
+    prior_report_summary = ""
+    prior_report_date = ""
+    prior_report_model = ""
     try:
         competitor_id = uuid.UUID(state["competitor_id"])
         existing_real_report = db.scalars(
@@ -739,30 +828,36 @@ def report_writer_node(state: AgentState) -> AgentState:
             .where(
                 Report.competitor_id == competitor_id,
                 Report.model_used != "skipped (no changes)",
+                Report.model_used != "reused (no changes)",
             )
+            .order_by(Report.generated_at.desc())
         ).first()
-        has_prior_real_report = (existing_real_report is not None)
+        if existing_real_report:
+            has_prior_real_report = True
+            prior_report_summary = existing_real_report.summary or ""
+            prior_report_date = existing_real_report.generated_at.strftime("%b %d, %Y %H:%M UTC") if existing_real_report.generated_at else "Unknown"
+            prior_report_model = existing_real_report.model_used or "unknown"
     finally:
         db.close()
 
-    # ── Skip report generation ONLY if a prior real report exists AND no new pricing/feature changes were detected ──
+    # ── Reuse previous report if a prior real report exists AND no new pricing/feature changes were detected ──
     if has_prior_real_report and not has_any_changes:
-        print(f"[Report-Writer] Prior report exists and no new changes detected. Skipping LLM report generation.", flush=True)
+        print(f"[Report-Writer] Prior report exists and no new changes detected. Reusing previous detailed report.", flush=True)
 
-        no_change_summary = (
-            f"# No Changes Detected\n\n"
-            f"**Competitor:** {state.get('competitor_name', 'Competitor')}\n\n"
-            f"The automated pipeline scanned all monitored URLs and found **no changes** "
-            f"in pricing or features since the last analysis run.\n\n"
-            f"- **Pricing:** No tier price movements detected\n"
-            f"- **Features:** No new features or removals detected\n\n"
-            f"*Next scheduled scan will check for updates automatically.*"
+        # Build the banner + previous report content
+        no_change_banner = (
+            f"> ⚠️ **Previous Pipeline Data**: No new pricing or feature changes were detected in this scan. "
+            f"The report below is from the most recent analysis run ({prior_report_date}).\n\n"
+            f"---\n\n"
         )
 
-        state["report_draft"] = no_change_summary
-        state["model_used"] = "skipped (no changes)"
+        # Use the full previous report content with the banner prepended
+        reused_summary = no_change_banner + prior_report_summary
 
-        # Save a lightweight record so the user has a history of pipeline runs
+        state["report_draft"] = reused_summary
+        state["model_used"] = "reused (no changes)"
+
+        # Save a record so the user has a history of pipeline runs with the full report
         db: Session = SessionLocal()
         try:
             competitor_id = uuid.UUID(state["competitor_id"])
@@ -774,8 +869,8 @@ def report_writer_node(state: AgentState) -> AgentState:
                     user_id=user_id,
                     competitor_id=competitor_id,
                     pdf_url=None,
-                    summary=no_change_summary,
-                    model_used="skipped (no changes)",
+                    summary=reused_summary,
+                    model_used="reused (no changes)",
                     generated_at=datetime.now(timezone.utc),
                     delivered_channels=["dashboard"],
                 )
@@ -784,6 +879,22 @@ def report_writer_node(state: AgentState) -> AgentState:
                 db.refresh(report_row)
                 report_row.html_url = f"/reports/{report_row.id}/html"
                 db.commit()
+
+                # Also render HTML/PDF so the report is viewable immediately
+                try:
+                    from app.services.reports_service import render_html_report, render_pdf_report
+                    comp_name = competitor.name if competitor else "Competitor"
+                    r_id_str = str(report_row.id)
+                    with ThreadPoolExecutor(max_workers=2) as render_pool:
+                        h_fut = render_pool.submit(render_html_report, r_id_str, comp_name, reused_summary)
+                        p_fut = render_pool.submit(render_pdf_report, r_id_str, comp_name, reused_summary)
+                        h_fut.result()
+                        p_fut.result()
+                    report_row.pdf_url = f"/reports/{report_row.id}/pdf"
+                    db.commit()
+                    print(f"[Report-Writer] HTML & PDF rendered for reused report {report_row.id}", flush=True)
+                except Exception as render_exc:
+                    print(f"[Report-Writer] Reused report render warning: {render_exc}", flush=True)
         finally:
             db.close()
 
@@ -791,9 +902,9 @@ def report_writer_node(state: AgentState) -> AgentState:
             state.get("agent_run_id"),
             "Report Writer Workflow Step",
             "COMPLETED",
-            "No changes in pricing or features detected — report generation skipped.",
+            f"No new changes detected — showing previous detailed report from {prior_report_date}.",
         )
-        print(f"[Report-Writer] TOTAL: {time.time() - node_start:.2f}s (skipped — no changes)", flush=True)
+        print(f"[Report-Writer] TOTAL: {time.time() - node_start:.2f}s (reused previous report)", flush=True)
         return state
 
     # ── Full report generation when changes ARE detected ──

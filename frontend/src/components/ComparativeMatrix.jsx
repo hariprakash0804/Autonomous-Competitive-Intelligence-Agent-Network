@@ -516,9 +516,25 @@ function renderMarkdownFormatted(mdText) {
                 }
                 return (
                   <tr key={rIdx} className="hover:bg-white/[0.02] transition">
-                    {paddedRow.slice(0, Math.max(headerCount, paddedRow.length)).map((cell, cIdx) => (
-                      <td key={cIdx} className="p-3 text-slate-300">{(cell || '—').replace(/\*\*/g, '').trim()}</td>
-                    ))}
+                    {paddedRow.slice(0, Math.max(headerCount, paddedRow.length)).map((cell, cIdx) => {
+                      const val = (cell || '—').replace(/\*\*/g, '').trim();
+                      let content = val;
+                      if (val.toLowerCase() === 'negative') {
+                        content = <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-400 font-semibold border border-rose-500/20 text-[11px]">Negative</span>;
+                      } else if (val.toLowerCase() === 'positive') {
+                        content = <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20 text-[11px]">Positive</span>;
+                      } else if (val.toLowerCase() === 'neutral') {
+                        content = <span className="px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-400 font-semibold border border-slate-500/20 text-[11px]">Neutral</span>;
+                      } else if (/^-?\d+\.\d+$/.test(val)) {
+                        const num = parseFloat(val);
+                        content = num < 0 ? (
+                          <span className="font-mono text-rose-400 font-bold">{val}</span>
+                        ) : (
+                          <span className="font-mono text-emerald-400 font-bold">+{val}</span>
+                        );
+                      }
+                      return <td key={cIdx} className="p-3 text-slate-300">{content}</td>;
+                    })}
                   </tr>
                 );
               })}
@@ -533,11 +549,21 @@ function renderMarkdownFormatted(mdText) {
 
   lines.forEach((line, idx) => {
     const trimmed = line.trim();
-    if (trimmed.startsWith('|')) {
+    const isPipeTable = trimmed.startsWith('|');
+    const isTabTable = trimmed.includes('\t') && trimmed.split('\t').length >= 2;
+
+    if (isPipeTable || isTabTable) {
       inTable = true;
-      const rawClean = trimmed.replace(/^\|/, '').replace(/\|$/, '');
-      const cells = rawClean.split('|').map((c) => c.trim());
-      tableRows.push(cells);
+      let cells = [];
+      if (isPipeTable) {
+        const rawClean = trimmed.replace(/^\|/, '').replace(/\|$/, '');
+        cells = rawClean.split('|').map((c) => c.trim());
+      } else {
+        cells = trimmed.split('\t').map((c) => c.trim());
+      }
+      if (cells.length > 0 && !cells.every((c) => (c || '').startsWith('-'))) {
+        tableRows.push(cells);
+      }
     } else {
       if (inTable) flushTable(`table-${idx}`);
       if (trimmed.startsWith('>')) {

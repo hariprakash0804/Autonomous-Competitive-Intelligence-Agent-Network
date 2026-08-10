@@ -25,7 +25,7 @@ OPENROUTER_EMBED_URL = "https://openrouter.ai/api/v1/embeddings"
 # Fallback: HuggingFace Inference API
 HF_MODEL_NAME = "all-MiniLM-L6-v2"
 HF_EMBEDDING_DIM = 384
-HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/{HF_MODEL_NAME}"
+HF_API_URL = f"https://router.huggingface.co/hf-inference/models/sentence-transformers/{HF_MODEL_NAME}/pipeline/feature-extraction"
 
 # Unified FAISS Vector Store Dimension (matches SentenceTransformers & HF API natively)
 UNIFIED_EMBED_DIM = 384

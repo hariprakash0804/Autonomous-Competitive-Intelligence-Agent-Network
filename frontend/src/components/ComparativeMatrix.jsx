@@ -8,12 +8,16 @@ import CompetitorNotes from './CompetitorNotes';
 function extractBulletPointsFromSection(markdown, sectionKeywords) {
   if (!markdown || typeof markdown !== 'string') return [];
 
-  const sections = markdown.split(/\n(?=##\s+)/);
+  // Split on both ## and ### headers to catch all section formats
+  const sections = markdown.split(/\n(?=#{2,3}\s+)/);
   for (const sec of sections) {
     const lines = sec.trim().split('\n');
     const headerLine = lines[0] || '';
     
-    const isMatch = sectionKeywords.some(kw => headerLine.toLowerCase().includes(kw.toLowerCase()));
+    // Strip markdown header markers and numbering (e.g. "## 3. Key Advantages" -> "Key Advantages")
+    const cleanHeader = headerLine.replace(/^#{2,3}\s+/, '').replace(/^\d+\.\s*/, '').trim();
+    
+    const isMatch = sectionKeywords.some(kw => cleanHeader.toLowerCase().includes(kw.toLowerCase()));
     if (isMatch) {
       const bullets = [];
       for (let i = 1; i < lines.length; i++) {

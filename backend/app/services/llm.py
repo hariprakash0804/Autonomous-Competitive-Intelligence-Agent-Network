@@ -95,13 +95,13 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}' with 25s HTTP timeout guard (max_tokens={max_tokens})...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 45s HTTP timeout guard (max_tokens={max_tokens})...")
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=max_tokens,
-                timeout=25.0,
+                timeout=45.0,
             )
             model_served = getattr(response, "model", model)
             finish_reason = getattr(response.choices[0], "finish_reason", "")
@@ -312,7 +312,7 @@ CRITICAL: Output ALL 6 sections completely. Do NOT stop mid-section or truncate.
     # 1. OpenRouter Provider Execution
     if provider == "openrouter" and api_key:
         try:
-            report_text, model_used = call_openrouter(prompt, api_key, max_tokens=6000)
+            report_text, model_used = call_openrouter(prompt, api_key, max_tokens=10000)
             return report_text, f"openrouter/{model_used}"
         except Exception as exc:
             print(f"[OpenRouter API Failure] {exc}. Falling back to instant structured comparative generator.")

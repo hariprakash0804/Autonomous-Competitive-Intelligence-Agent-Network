@@ -39,7 +39,7 @@ class FeedbackRequest(BaseModel):
     comments: Optional[str] = None
 
 
-def _format_gmt_datetime(dt: Optional[datetime], fmt: str = "%b %d, %Y %H:%M GMT") -> str:
+def _format_gmt_datetime(dt: Optional[datetime], fmt: str = "%b %d, %Y %I:%M %p GMT") -> str:
     if not dt:
         return "Unknown"
     if dt.tzinfo is None:

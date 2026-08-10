@@ -869,7 +869,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         if existing_real_report:
             has_prior_real_report = True
             prior_report_summary = existing_real_report.summary or ""
-            prior_report_date = existing_real_report.generated_at.strftime("%b %d, %Y %H:%M UTC") if existing_real_report.generated_at else "Unknown"
+            prior_report_date = existing_real_report.generated_at.strftime("%b %d, %Y %H:%M GMT") if existing_real_report.generated_at else "Unknown"
             prior_report_model = existing_real_report.model_used or "unknown"
     finally:
         db.close()

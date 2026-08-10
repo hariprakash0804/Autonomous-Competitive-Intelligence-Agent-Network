@@ -359,27 +359,6 @@ def get_price_history(
         seen_tiers[tier] = item
         clean_records.append(item)
 
-    # Baseline fallback for newly added competitors prior to first pipeline run
-    if not clean_records:
-        now = datetime.now(timezone.utc)
-        default_tiers = [
-            ("Free", 0.0),
-            ("Plus", 20.0),
-            ("Pro", 30.0),
-            ("Business", 50.0),
-            ("Enterprise", 100.0),
-        ]
-        for idx, (t_name, val) in enumerate(default_tiers):
-            clean_records.append({
-                "id": f"baseline-price-{idx}",
-                "tier_name": t_name,
-                "old_price": None,
-                "new_price": val,
-                "is_baseline": True,
-                "detected_at": now.isoformat(),
-                "formatted_date": now.strftime("%b %d, %H:%M"),
-            })
-
     return clean_records
 
 
@@ -472,28 +451,5 @@ def get_sentiment_history(
             "scored_at": ss.scored_at.isoformat(),
             "formatted_date": ss.scored_at.strftime("%b %d, %H:%M"),
         })
-
-    # If no historical sentiment runs exist yet for this competitor, supply clean baseline trend points
-    if not results:
-        from datetime import timedelta
-        now = datetime.now(timezone.utc)
-        baseline_dates = [now - timedelta(days=2), now - timedelta(days=1), now]
-        baseline_sources = ["REVIEW", "PRICING", "NEWS"]
-        for idx, dt in enumerate(baseline_dates):
-            comp_s = round(0.32 + (idx * 0.08), 2)
-            our_s = round(0.52 + (idx * 0.05), 2)
-            results.append({
-                "id": f"baseline-{idx}",
-                "score": comp_s,
-                "our_company_score": our_s,
-                "competitor_name": competitor.name,
-                "our_company_name": our_company_name,
-                "source_type": baseline_sources[idx % len(baseline_sources)],
-                "topics": ["pricing", "features", "customer-feedback", "api"],
-                "positive_words": ["fast", "seamless", "reliable", "scalable"],
-                "negative_words": ["overhead"],
-                "scored_at": dt.isoformat(),
-                "formatted_date": dt.strftime("%b %d, %H:%M"),
-            })
 
     return results

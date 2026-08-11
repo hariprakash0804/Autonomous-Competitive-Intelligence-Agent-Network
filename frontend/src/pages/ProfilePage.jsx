@@ -59,13 +59,13 @@ export default function ProfilePage() {
   const [addingComp, setAddingComp] = useState(false);
   const [addError, setAddError] = useState('');
 
-  const savedCompanyUrl = user?.company_url || '';
+  const savedCompanyUrl = (typeof user?.company_url === 'string' && user.company_url.trim()) ? user.company_url.trim() : '';
 
   const handleOpenAddModal = () => {
     setAddError('');
     setAddName('');
     setAddPricingUrl('');
-    const currentSaved = user?.company_url || '';
+    const currentSaved = savedCompanyUrl;
     setAddCompanyUrl(currentSaved);
     setUseSavedAddUrl(Boolean(currentSaved));
     setShowAddModal(true);

@@ -79,7 +79,18 @@ export default function DashboardPage() {
   const [editError, setEditError] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  const savedCompanyUrl = user?.company_url || '';
+  const savedCompanyUrl = (typeof user?.company_url === 'string' && user.company_url.trim()) ? user.company_url.trim() : '';
+
+  const handleOpenAddModal = (overrideUrl) => {
+    setAddError('');
+    setNewCompName('');
+    setNewPricingUrl('');
+    const validOverride = (typeof overrideUrl === 'string' && overrideUrl.trim()) ? overrideUrl.trim() : null;
+    const currentSaved = validOverride || savedCompanyUrl;
+    setNewCompanyUrl(currentSaved);
+    setUseSavedUrl(Boolean(currentSaved));
+    setShowAddModal(true);
+  };
 
   const fetchCompetitors = useCallback(async () => {
     try {
@@ -196,19 +207,10 @@ export default function DashboardPage() {
     }
   };
 
-  const handleOpenAddModal = (overrideUrl) => {
-    setAddError('');
-    setNewCompName('');
-    setNewPricingUrl('');
-    const currentSaved = overrideUrl || user?.company_url || '';
-    setNewCompanyUrl(currentSaved);
-    setUseSavedUrl(Boolean(currentSaved));
-    setShowAddModal(true);
-  };
-
   const handleOnboardingComplete = async (updatedUserData) => {
     await fetchCompetitors();
-    const effectiveCompanyUrl = updatedUserData?.company_url || user?.company_url || '';
+    const rawUrl = updatedUserData?.company_url || user?.company_url;
+    const effectiveCompanyUrl = (typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : '';
     if (effectiveCompanyUrl) {
       setNewCompanyUrl(effectiveCompanyUrl);
       setUseSavedUrl(true);

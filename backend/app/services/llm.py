@@ -136,12 +136,29 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
     raise last_exception if last_exception else RuntimeError("All OpenRouter candidate models failed.")
 
 
-def _build_rich_context(pages_summary: list[dict], user_company_name: str, user_company_url: Optional[str]) -> str:
+def _build_rich_context(
+    pages_summary: list[dict],
+    user_company_name: str,
+    user_company_url: Optional[str],
+    user_company_description: Optional[str] = None,
+) -> str:
     """
-    Builds a rich structured context string from scraped pages for the LLM prompt.
-    Extracts and formats: metadata, headings, content snippets, social links, CTA signals.
+    Builds a rich structured context string from scraped pages and onboarded company profile for the LLM prompt.
+    Extracts and formats: metadata, headings, content snippets, social links, CTA signals, and user document/text profile.
     """
     sections = []
+
+    # Prepend User Company Onboarded Profile (Document/Text/URL intelligence) if available
+    if user_company_description and user_company_description.strip():
+        user_profile_ctx = (
+            f"--- [YOUR COMPANY PROFILE & ONBOARDED INTELLIGENCE] ---\n"
+            f"Company Name: {user_company_name}\n"
+        )
+        if user_company_url:
+            user_profile_ctx += f"Company Website: {user_company_url}\n"
+        user_profile_ctx += f"Product & Business Synthesis (from Onboarded Document/Text):\n{user_company_description.strip()}\n"
+        sections.append(user_profile_ctx)
+
     for idx, p in enumerate(pages_summary, 1):
         if p.get("is_stale"):
             continue
@@ -235,6 +252,7 @@ def generate_executive_report(
     is_incomplete: bool = False,
     user_company_name: str = "Our Company",
     user_company_url: Optional[str] = None,
+    user_company_description: Optional[str] = None,
     user_feedback_exemplars: Optional[List[str]] = None,
 ) -> Tuple[str, str]:
     """
@@ -247,8 +265,8 @@ def generate_executive_report(
     provider = (settings.LLM_PROVIDER or "").lower().strip()
     api_key = settings.LLM_API_KEY or ""
 
-    # Build rich context from all scraped pages
-    rich_context = _build_rich_context(pages_summary, user_company_name, user_company_url)
+    # Build rich context from all scraped pages + user company profile (document/text)
+    rich_context = _build_rich_context(pages_summary, user_company_name, user_company_url, user_company_description)
 
     feedback_context = ""
     if user_feedback_exemplars:

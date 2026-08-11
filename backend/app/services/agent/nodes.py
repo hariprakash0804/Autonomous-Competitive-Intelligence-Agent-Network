@@ -816,6 +816,19 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
                 "is_user_company": True,
             })
 
+        # Fallback: if user didn't provide a company URL, analyze user's onboarded document/text synthesis
+        if not user_sentiment_results and competitor_obj and competitor_obj.user and competitor_obj.user.company_description:
+            user_desc = competitor_obj.user.company_description
+            sent_res = sentiment_score(user_desc)
+            user_sentiment_results.append({
+                "url": "Onboarded Document/Text Profile",
+                "source_type": "NEWS",
+                "score": sent_res["score"],
+                "topics": sent_res["topics"],
+                "sentiment_category": sent_res["sentiment_category"],
+                "is_user_company": True,
+            })
+
         db.commit()
     finally:
         db.close()
@@ -1004,16 +1017,17 @@ def report_writer_node(state: AgentState) -> AgentState:
 
     user_company_name = "Our Company"
     user_company_url = None
+    user_company_description = None
 
     db: Session = SessionLocal()
     try:
         competitor_id = uuid.UUID(state["competitor_id"])
         competitor = db.get(Competitor, competitor_id)
-        if competitor:
+        if competitor and competitor.user:
             user = competitor.user
-            if user:
-                user_company_name = user.company_name or "Our Company"
-                user_company_url = user.company_url or competitor.company_url
+            user_company_name = user.company_name or "Our Company"
+            user_company_url = user.company_url
+            user_company_description = user.company_description
     finally:
         db.close()
 
@@ -1051,6 +1065,7 @@ def report_writer_node(state: AgentState) -> AgentState:
         is_incomplete=state.get("is_incomplete", False),
         user_company_name=user_company_name,
         user_company_url=user_company_url,
+        user_company_description=user_company_description,
         user_feedback_exemplars=feedback_exemplars if feedback_exemplars else None,
     )
     print(f"[Report-Writer] LLM report generation: {time.time() - llm_start:.2f}s (model: {model_used})", flush=True)

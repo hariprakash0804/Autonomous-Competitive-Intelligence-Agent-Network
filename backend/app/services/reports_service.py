@@ -19,9 +19,24 @@ def _convert_markdown_to_slack_mrkdwn(text: str) -> str:
     if not text:
         return ""
     cleaned = text.strip()
-    cleaned = re.sub(r"^#{1,6}\s*", "*", cleaned, flags=re.MULTILINE)
+
+    # 1. Convert markdown headers (# Header) to bold lines (*Header*) in Slack mrkdwn
+    def _fix_header(match):
+        header_text = match.group(1).strip()
+        return f"*{header_text}*"
+
+    cleaned = re.sub(r"^#{1,6}\s*(.+)$", _fix_header, cleaned, flags=re.MULTILINE)
+
+    # 2. Clean blockquote markers (> Quote) and leading whitespace
+    cleaned = re.sub(r"^\s*>\s*", "> ", cleaned, flags=re.MULTILINE)
+
+    # 3. Remove horizontal dividers (---, ***)
     cleaned = re.sub(r"^\s*[-*_]{3,}\s*$", "", cleaned, flags=re.MULTILINE)
+
+    # 4. Convert **bold** to *bold* (Slack syntax)
     cleaned = re.sub(r"\*\*(.*?)\*\*", r"*\1*", cleaned)
+
+    # 5. Clean up multiple empty lines
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
 
@@ -966,6 +981,7 @@ def send_slack_notification(webhook_url: str, competitor_name: str, report_summa
     formatted_summary = _convert_markdown_to_slack_mrkdwn(summary_text)
 
     payload = {
+        "text": f"🚨 Competitive Intelligence Alert: {competitor_name} - Executive Summary",
         "blocks": [
             {
                 "type": "header",
@@ -973,7 +989,7 @@ def send_slack_notification(webhook_url: str, competitor_name: str, report_summa
             },
             {
                 "type": "section",
-                "text": {"type": "mrkdwn", "text": f"*Automated Weekly Agent Pipeline Executive Summary*\n\n{formatted_summary}"},
+                "text": {"type": "mrkdwn", "text": f"*Automated Agent Pipeline Executive Summary*\n\n{formatted_summary}"},
             },
             {"type": "divider"},
             {

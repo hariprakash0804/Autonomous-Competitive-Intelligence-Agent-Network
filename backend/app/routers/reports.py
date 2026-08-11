@@ -45,7 +45,9 @@ def _format_gmt_datetime(dt: Optional[datetime], fmt: str = "%b %d, %Y %I:%M %p 
         return "Unknown"
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone().strftime(fmt)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.strftime(fmt)
 
 
 @router.get("/")

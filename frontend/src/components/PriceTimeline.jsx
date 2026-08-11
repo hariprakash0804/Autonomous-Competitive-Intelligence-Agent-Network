@@ -108,7 +108,7 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
     if (selectedCategory === 'core') {
       const isCore = CORE_PLAN_KEYWORDS.some((kw) => tierLower.includes(kw));
       if (!isCore) return false;
-    } else if (selectedCategory === 'models') {
+    } else if (selectedCategory === 'addons' || selectedCategory === 'models') {
       const isCore = CORE_PLAN_KEYWORDS.some((kw) => tierLower === kw);
       if (isCore) return false;
     }
@@ -298,14 +298,14 @@ export default function PriceTimeline({ priceHistory, competitorName }) {
             Core Plans
           </button>
           <button
-            onClick={() => setSelectedCategory('models')}
+            onClick={() => setSelectedCategory('addons')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              selectedCategory === 'models'
+              selectedCategory === 'addons' || selectedCategory === 'models'
                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm'
                 : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
             }`}
           >
-            API & Models
+            Add-ons & Usage
           </button>
         </div>
 

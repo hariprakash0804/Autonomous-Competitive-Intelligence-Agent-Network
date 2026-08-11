@@ -304,16 +304,16 @@ Your report MUST include ALL 6 sections completely without stopping mid-section:
 Detailed comparative summary comparing positioning, target audience, key technology, and strategic focus based on the scraped content.
 
 ## 1. Feature & Capability Comparison Matrix
-Compare product capabilities, developer tools, model offerings, security, and integrations. Use a complete Markdown table with dimensions: Core Product, Key Features, Target Audience, Technology, and Integrations.
+Compare product/service capabilities, core offerings, specifications, quality, and integrations. Use a complete Markdown table with dimensions: Core Product/Service, Key Features, Target Audience, Specifications & Quality, and Integrations/Delivery.
 
 ## 2. Pricing & Tier Structure Comparison
-Provide a thorough breakdown of ALL pricing plans, subscription tiers, per-token rates, and enterprise pricing from the scraped data. Quote exact prices (e.g. Free, $20/user/mo, $25/user/mo, per-token rates like $0.075/M input tokens, $0.30/M output tokens, $0.59/M input, $0.79/M output). Detail what each tier includes.
+Provide a thorough breakdown of ALL pricing plans, subscription tiers, unit rates, volume discounts, and custom/enterprise pricing from the scraped data. Quote exact rates, plans, or prices found in the data. Detail what each tier or offering includes.
 
 ## 3. Key Advantages of {user_company_name} over {competitor_name}
-Detailed bulleted list of strengths, capabilities, and features where {user_company_name} leads based on the scraped data.
+Detailed bulleted list of strengths, capabilities, quality, and features where {user_company_name} leads based on the scraped data.
 
 ## 4. Key Disadvantages & Gaps of {user_company_name} vs {competitor_name}
-Detailed bulleted list of areas where {competitor_name} holds an advantage (e.g., lower token cost, faster speed, open models, specialized custom silicon, unique integrations).
+Detailed bulleted list of areas where {competitor_name} holds an advantage (e.g., lower unit cost, broader catalog, specialized capabilities, faster delivery, unique guarantees).
 
 ## 5. Sentiment & Market Perception Analysis
 Summarize sentiment scores, market perception, and top topics extracted from the ingested content.

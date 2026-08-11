@@ -303,18 +303,18 @@ def researcher_node(state: AgentState) -> AgentState:
         print(f"[Researcher Node] FAISS indexing + flush in {time.time() - faiss_start:.2f}s", flush=True)
 
         # If competitor has custom text description or uploaded document details, inject into raw_pages
-        if competitor_obj and competitor_obj.description_text and competitor_obj.description_text.strip():
+        if competitor and competitor.description_text and competitor.description_text.strip():
             doc_page = {
-                "url": f"Uploaded Document / Notes ({competitor_obj.name})",
-                "raw_content": competitor_obj.description_text,
-                "clean_text": competitor_obj.description_text,
+                "url": f"Uploaded Document / Notes ({competitor.name})",
+                "raw_content": competitor.description_text,
+                "clean_text": competitor.description_text,
                 "content_hash": "competitor_doc_hash",
                 "is_stale": False,
                 "stale_reason": None,
                 "status_code": 200,
                 "content_type": "text",
                 "scraped_by": "user_upload",
-                "metadata": {"title": f"Competitor Document / Notes: {competitor_obj.name}"},
+                "metadata": {"title": f"Competitor Document / Notes: {competitor.name}"},
                 "headings": [],
                 "social_links": {},
                 "cta_signals": [],
@@ -323,15 +323,15 @@ def researcher_node(state: AgentState) -> AgentState:
                 "tech_stack": [],
             }
             raw_pages.append(doc_page)
-            print(f"[Researcher Node] Added competitor document/text intelligence block ({len(competitor_obj.description_text)} chars).", flush=True)
+            print(f"[Researcher Node] Added competitor document/text intelligence block ({len(competitor.description_text)} chars).", flush=True)
 
         # Flexible Data Sourcing for User's Own Company: inject user company document/text intelligence
-        if competitor_obj and competitor_obj.user and competitor_obj.user.company_description and competitor_obj.user.company_description.strip():
-            user_comp_name = competitor_obj.user.company_name or "Our Company"
+        if competitor and competitor.user and competitor.user.company_description and competitor.user.company_description.strip():
+            user_comp_name = competitor.user.company_name or "Our Company"
             user_doc_page = {
-                "url": competitor_obj.user.company_url or f"Onboarded Document / Profile ({user_comp_name})",
-                "raw_content": competitor_obj.user.company_description,
-                "clean_text": competitor_obj.user.company_description,
+                "url": competitor.user.company_url or f"Onboarded Document / Profile ({user_comp_name})",
+                "raw_content": competitor.user.company_description,
+                "clean_text": competitor.user.company_description,
                 "content_hash": "user_doc_hash",
                 "is_stale": False,
                 "stale_reason": None,
@@ -347,7 +347,7 @@ def researcher_node(state: AgentState) -> AgentState:
                 "tech_stack": [],
             }
             raw_pages.append(user_doc_page)
-            print(f"[Researcher Node] Added user company document/text intelligence block ({len(competitor_obj.user.company_description)} chars).", flush=True)
+            print(f"[Researcher Node] Added user company document/text intelligence block ({len(competitor.user.company_description)} chars).", flush=True)
 
     finally:
         db.close()

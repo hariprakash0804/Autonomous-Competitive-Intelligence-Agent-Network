@@ -710,18 +710,34 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
 
         valid_pages = [p for p in state.get("raw_pages", []) if not p.get("is_stale") and p.get("clean_text")]
 
+        # Google Search/News pages return boilerplate UI text (cookie dialogs, "About X results",
+        # bot-detection messages, navigation noise) that VADER interprets as negative sentiment.
+        # These pages are excluded from sentiment scoring but remain in raw_pages for the
+        # LLM Report Writer to use as context (e.g., discovering trending news headlines).
+        _SENTIMENT_EXCLUDE_DOMAINS = {"google.com/search", "news.google.com"}
+
+        def _is_google_boilerplate(page_url: str) -> bool:
+            """Returns True if the URL is a Google search/news result page with boilerplate text."""
+            url_lower = page_url.lower()
+            return any(domain in url_lower for domain in _SENTIMENT_EXCLUDE_DOMAINS)
+
+        google_excluded = [p for p in valid_pages if _is_google_boilerplate(p.get("url", ""))]
+        if google_excluded:
+            print(f"[Sentiment-Analyst] Excluded {len(google_excluded)} Google search/news boilerplate page(s) from sentiment analysis: {[p.get('url', '') for p in google_excluded]}", flush=True)
+        valid_pages_filtered = [p for p in valid_pages if not _is_google_boilerplate(p.get("url", ""))]
+
         # Filter out the user's own company pages from sentiment analysis to avoid bias.
         # The user's marketing content is naturally positive and dilutes competitor sentiment.
         if user_company_domain:
             competitor_pages = [
-                p for p in valid_pages
+                p for p in valid_pages_filtered
                 if user_company_domain not in (p.get("url", "").lower())
             ]
-            skipped_count = len(valid_pages) - len(competitor_pages)
+            skipped_count = len(valid_pages_filtered) - len(competitor_pages)
             if skipped_count > 0:
                 print(f"[Sentiment-Analyst] Excluded {skipped_count} user company page(s) ({user_company_domain}) from competitor sentiment analysis.", flush=True)
         else:
-            competitor_pages = valid_pages
+            competitor_pages = valid_pages_filtered
 
         for page in competitor_pages:
             url = page.get("url", "")
@@ -770,7 +786,13 @@ def sentiment_analyst_node(state: AgentState) -> AgentState:
                 db.add(ss)
 
         # Separately calculate User Company sentiment for dual-company comparative analysis
-        user_company_pages = [p for p in valid_pages if user_company_domain and user_company_domain in p.get("url", "").lower()]
+        # Also exclude Google boilerplate pages from user company sentiment to prevent the same bias
+        user_company_pages = [
+            p for p in valid_pages
+            if user_company_domain
+            and user_company_domain in p.get("url", "").lower()
+            and not _is_google_boilerplate(p.get("url", ""))
+        ]
         user_sentiment_results = []
         for page in user_company_pages:
             url = page.get("url", "")

@@ -82,6 +82,60 @@ def update_profile(
     return current_user
 
 
+@router.post("/profile/document", response_model=UserResponse)
+async def upload_profile_document(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    """
+    Upload and parse a new company document (PDF, TXT, MD, etc.), extract business & product intelligence, and update company_description.
+    """
+    content = await file.read()
+    filename = file.filename.lower()
+    extracted_text = ""
+
+    if filename.endswith(".pdf"):
+        try:
+            import pypdf
+            import io
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages])
+        except Exception as e:
+            print(f"[Profile Document] PDF parse error: {e}")
+            extracted_text = content.decode("utf-8", errors="ignore")
+    else:
+        extracted_text = content.decode("utf-8", errors="ignore")
+
+    if not extracted_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not extract readable text from the uploaded document."
+        )
+
+    # Summarize via LLM
+    try:
+        from app.services.llm import call_openrouter
+        from app.config import settings
+        if settings.LLM_API_KEY:
+            prompt = (
+                f"Summarize the following company information for company '{current_user.company_name or 'User Company'}'. "
+                "Provide a clean, executive synthesis of their product, value proposition, pricing model, and target customers:\n\n"
+                f"{extracted_text.strip()[:4000]}"
+            )
+            summary, _ = call_openrouter(prompt, settings.LLM_API_KEY)
+            current_user.company_description = summary.strip()
+        else:
+            current_user.company_description = extracted_text.strip()[:2000]
+    except Exception as e:
+        print(f"[Profile Document] LLM summary warning: {e}")
+        current_user.company_description = extracted_text.strip()[:2000]
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.post("/onboard", response_model=UserResponse)
 async def complete_onboarding(
     db: Annotated[Session, Depends(get_db)],

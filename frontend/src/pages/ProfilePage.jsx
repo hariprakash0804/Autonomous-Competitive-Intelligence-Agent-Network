@@ -20,10 +20,14 @@ import {
   Search,
   Bell,
   Menu,
+  FileText,
+  Upload,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -33,9 +37,15 @@ export default function ProfilePage() {
   const [name, setName] = useState(user?.name || '');
   const [companyName, setCompanyName] = useState(user?.company_name || '');
   const [companyUrl, setCompanyUrl] = useState(user?.company_url || '');
+  const [companyDescription, setCompanyDescription] = useState(user?.company_description || '');
   const [slackWebhookUrl, setSlackWebhookUrl] = useState(user?.slack_webhook_url || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState({ type: '', text: '' });
+
+  // Document Upload state
+  const [selectedDocFile, setSelectedDocFile] = useState(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docMsg, setDocMsg] = useState({ type: '', text: '' });
 
   // Competitors list state
   const [competitors, setCompetitors] = useState([]);
@@ -77,6 +87,7 @@ export default function ProfilePage() {
       setName(res.data.name || '');
       setCompanyName(res.data.company_name || '');
       setCompanyUrl(res.data.company_url || '');
+      setCompanyDescription(res.data.company_description || '');
       setSlackWebhookUrl(res.data.slack_webhook_url || '');
     } catch (err) {
       console.error('Failed to fetch profile:', err);
@@ -105,18 +116,45 @@ export default function ProfilePage() {
     setSavingProfile(true);
     setProfileMsg({ type: '', text: '' });
     try {
-      await api.put('/auth/profile', {
+      const res = await api.put('/auth/profile', {
         name,
         company_name: companyName,
         company_url: companyUrl,
+        company_description: companyDescription,
         slack_webhook_url: slackWebhookUrl,
       });
-      setProfileMsg({ type: 'success', text: 'Profile & Webhook settings updated successfully!' });
+      if (updateUser) updateUser(res.data);
+      setProfileMsg({ type: 'success', text: 'Profile & company details updated successfully!' });
     } catch (err) {
       console.error('Failed to update profile:', err);
       setProfileMsg({ type: 'error', text: err.response?.data?.detail || 'Failed to update profile.' });
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleDocumentUpload = async (e) => {
+    e.preventDefault();
+    if (!selectedDocFile) return;
+    setUploadingDoc(true);
+    setDocMsg({ type: '', text: '' });
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedDocFile);
+      const res = await api.post('/auth/profile/document', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setCompanyDescription(res.data.company_description || '');
+      if (updateUser) updateUser(res.data);
+      setSelectedDocFile(null);
+      setDocMsg({ type: 'success', text: 'Company document uploaded & intelligence extracted successfully!' });
+      toast.success('Document intelligence extracted and saved to profile!', 'Document Updated');
+    } catch (err) {
+      console.error('Failed to upload document:', err);
+      setDocMsg({ type: 'error', text: err.response?.data?.detail || 'Failed to upload and parse company document.' });
+      toast.error('Failed to process company document.');
+    } finally {
+      setUploadingDoc(false);
     }
   };
 
@@ -432,6 +470,20 @@ export default function ProfilePage() {
 
                     <div>
                       <label className="block text-slate-400 font-semibold mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider">
+                        <FileText className="w-3 h-3 text-indigo-400" /> Company Description & Product Synthesis
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={companyDescription}
+                        onChange={(e) => setCompanyDescription(e.target.value)}
+                        placeholder="Describe your company's core product, pricing model, target audience, and key value propositions..."
+                        className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300 text-xs leading-relaxed"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">This context is used by the Autonomous Agent Network for competitor benchmark comparison.</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wider">
                         <Bell className="w-3 h-3 text-violet-400" /> Slack / Notification Webhook URL
                       </label>
                       <input
@@ -450,6 +502,79 @@ export default function ProfilePage() {
                       className="w-full py-3 btn-gradient rounded-xl transition-all duration-300 font-semibold disabled:opacity-50 text-xs shadow-lg shadow-indigo-600/15"
                     >
                       {savingProfile ? 'Saving...' : 'Save Profile Changes'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Company Document Intelligence Upload Card */}
+                <div className="glass-card rounded-2xl p-6 space-y-4 neon-border">
+                  <div className="flex items-center gap-2 border-b border-white/[0.04] pb-3">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                      <FileText className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white font-display">Company Document Intelligence</h3>
+                      <p className="text-[10px] text-slate-500">Upload or update your company document (.pdf, .txt, .md)</p>
+                    </div>
+                  </div>
+
+                  {docMsg.text && (
+                    <div
+                      className={`p-3 rounded-xl text-xs flex items-center gap-2 animate-scale-in ${
+                        docMsg.type === 'success'
+                          ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {docMsg.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                      )}
+                      <span>{docMsg.text}</span>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleDocumentUpload} className="space-y-3 text-xs">
+                    <div>
+                      <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">
+                        Upload Document (.pdf, .txt, .md)
+                      </label>
+                      <div className="relative border-2 border-dashed border-white/[0.08] hover:border-indigo-500/40 rounded-xl p-4 text-center transition-all bg-white/[0.01] hover:bg-white/[0.03]">
+                        <input
+                          type="file"
+                          accept=".pdf,.txt,.md,.doc,.docx"
+                          onChange={(e) => setSelectedDocFile(e.target.files?.[0] || null)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <Upload className="w-6 h-6 text-indigo-400 mx-auto mb-1.5" />
+                        {selectedDocFile ? (
+                          <p className="text-xs font-semibold text-emerald-300 truncate px-2">{selectedDocFile.name}</p>
+                        ) : (
+                          <div>
+                            <p className="text-xs font-semibold text-slate-300">Click or drag file to upload</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF, TXT, Markdown documents</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!selectedDocFile || uploadingDoc}
+                      className="w-full py-2.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl transition-all duration-300 font-semibold disabled:opacity-40 text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
+                    >
+                      {uploadingDoc ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <span>Extracting Intelligence...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                          <span>Upload & Extract Intelligence</span>
+                        </>
+                      )}
                     </button>
                   </form>
                 </div>

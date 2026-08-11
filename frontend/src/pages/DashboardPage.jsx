@@ -728,11 +728,11 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
-                  Upload Competitor Document (.pdf, .txt, .md) (Optional)
+                  Upload Competitor Document (Any File Type) (Optional)
                 </label>
                 <input
                   type="file"
-                  accept=".pdf,.txt,.md,.doc,.docx"
+                  accept="*"
                   onChange={(e) => setNewCompDocFile(e.target.files?.[0] || null)}
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20"
                 />

@@ -580,7 +580,7 @@ export default function ProfilePage() {
                       <div className="relative border-2 border-dashed border-white/[0.08] hover:border-indigo-500/40 rounded-xl p-4 text-center transition-all bg-white/[0.01] hover:bg-white/[0.03]">
                         <input
                           type="file"
-                          accept=".pdf,.txt,.md,.doc,.docx"
+                          accept="*"
                           onChange={(e) => setSelectedDocFile(e.target.files?.[0] || null)}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                         />
@@ -774,8 +774,8 @@ export default function ProfilePage() {
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2 text-slate-100 input-glow transition-all duration-300 text-xs" />
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload / Update Document (.pdf, .txt, .md)</label>
-                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={(e) => setEditDocFile(e.target.files?.[0] || null)}
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload / Update Document (Any File Type)</label>
+                <input type="file" accept="*" onChange={(e) => setEditDocFile(e.target.files?.[0] || null)}
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20" />
               </div>
               <div className="pt-3 flex justify-end gap-2">
@@ -875,8 +875,8 @@ export default function ProfilePage() {
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300 text-xs" />
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload Competitor Document (.pdf, .txt, .md)</label>
-                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={(e) => setAddDocFile(e.target.files?.[0] || null)}
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload Competitor Document (Any File Type)</label>
+                <input type="file" accept="*" onChange={(e) => setAddDocFile(e.target.files?.[0] || null)}
                   className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20" />
               </div>
               <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">

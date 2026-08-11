@@ -225,10 +225,10 @@ export default function OnboardingModal({ onComplete }) {
                   <span className="text-xs font-semibold text-slate-300">
                     {selectedFile ? selectedFile.name : 'Click to choose or drag & drop file'}
                   </span>
-                  <span className="text-[10px] text-slate-500 mt-1">Supports PDF, TXT, MD files up to 10MB</span>
+                  <span className="text-[10px] text-slate-500 mt-1">Supports PDF, Word, Excel, PPT, TXT, CSV & Any Document File</span>
                   <input
                     type="file"
-                    accept=".pdf,.txt,.md,.doc,.docx"
+                    accept="*"
                     onChange={handleFileChange}
                     className="hidden"
                   />

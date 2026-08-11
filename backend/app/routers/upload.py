@@ -163,16 +163,7 @@ async def upload_document(
     If competitor_id is provided, ingests the content as a snapshot for that competitor.
     Otherwise, returns the extracted text for the user to review.
     """
-    # Validate file extension
     filename = file.filename or "upload.txt"
-    ext = ""
-    if "." in filename:
-        ext = "." + filename.rsplit(".", 1)[-1].lower()
-    if ext and ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
-        )
 
     # Read file content with size limit
     file_bytes = await file.read()
@@ -188,13 +179,14 @@ async def upload_document(
             detail="Uploaded file is empty.",
         )
 
-    # Extract text
+    # Universal Document Text Extraction
     try:
-        extracted_text = _extract_text_from_upload(file_bytes, filename, file.content_type or "")
-    except ValueError as e:
+        from app.services.document_parser import extract_text_from_any_document
+        extracted_text = extract_text_from_any_document(filename, file_bytes, file.content_type)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e),
+            detail=f"Failed to extract document text: {e}",
         )
 
     if not extracted_text or len(extracted_text.strip()) < 50:

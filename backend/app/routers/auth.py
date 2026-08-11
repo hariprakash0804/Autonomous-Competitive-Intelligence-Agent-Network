@@ -173,23 +173,12 @@ async def complete_onboarding(
     if description_text and description_text.strip():
         collected_details.append("User Description:\n" + description_text.strip())
 
-    # 3. Document Method: File upload (PDF, TXT, MD, etc.)
+    # 3. Document Method: File upload (Any document format)
     if file:
         try:
             content = await file.read()
-            filename = file.filename.lower()
-            extracted_text = ""
-            if filename.endswith(".pdf"):
-                try:
-                    import pypdf
-                    import io
-                    reader = pypdf.PdfReader(io.BytesIO(content))
-                    extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages])
-                except Exception:
-                    extracted_text = content.decode("utf-8", errors="ignore")
-            else:
-                extracted_text = content.decode("utf-8", errors="ignore")
-
+            from app.services.document_parser import extract_text_from_any_document
+            extracted_text = extract_text_from_any_document(file.filename, content, file.content_type)
             if extracted_text.strip():
                 collected_details.append(f"Uploaded Document ({file.filename}):\n" + extracted_text.strip()[:4000])
         except Exception as e:

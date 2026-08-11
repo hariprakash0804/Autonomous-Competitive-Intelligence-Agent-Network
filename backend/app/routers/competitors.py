@@ -269,20 +269,8 @@ async def upload_competitor_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
 
     content = await file.read()
-    filename = file.filename.lower()
-    extracted_text = ""
-
-    if filename.endswith(".pdf"):
-        try:
-            import pypdf
-            import io
-            reader = pypdf.PdfReader(io.BytesIO(content))
-            extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages])
-        except Exception as e:
-            print(f"[Competitor Document] PDF parse error: {e}")
-            extracted_text = content.decode("utf-8", errors="ignore")
-    else:
-        extracted_text = content.decode("utf-8", errors="ignore")
+    from app.services.document_parser import extract_text_from_any_document
+    extracted_text = extract_text_from_any_document(file.filename, content, file.content_type)
 
     if not extracted_text.strip():
         raise HTTPException(

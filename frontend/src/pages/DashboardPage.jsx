@@ -65,6 +65,8 @@ export default function DashboardPage() {
   const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || '');
   const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url));
   const [newPricingUrl, setNewPricingUrl] = useState('');
+  const [newCompDescriptionText, setNewCompDescriptionText] = useState('');
+  const [newCompDocFile, setNewCompDocFile] = useState(null);
   const [addError, setAddError] = useState('');
   const [submittingAdd, setSubmittingAdd] = useState(false);
 
@@ -85,6 +87,8 @@ export default function DashboardPage() {
     setAddError('');
     setNewCompName('');
     setNewPricingUrl('');
+    setNewCompDescriptionText('');
+    setNewCompDocFile(null);
     const validOverride = (typeof overrideUrl === 'string' && overrideUrl.trim()) ? overrideUrl.trim() : null;
     const currentSaved = validOverride || savedCompanyUrl;
     setNewCompanyUrl(currentSaved);
@@ -234,11 +238,24 @@ export default function DashboardPage() {
       const payload = {
         name: newCompName.trim(),
         company_url: effectiveCompanyUrl || null,
-        pricing_url: newPricingUrl || null,
+        pricing_url: newPricingUrl ? newPricingUrl.trim() : null,
+        description_text: newCompDescriptionText ? newCompDescriptionText.trim() : null,
         review_urls: [],
         news_keywords: [newCompName.trim()],
       };
       const res = await api.post('/competitors/', payload);
+
+      if (newCompDocFile && res.data?.id) {
+        try {
+          const formData = new FormData();
+          formData.append('file', newCompDocFile);
+          await api.post(`/competitors/${res.data.id}/document`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (docErr) {
+          console.error('Failed to upload competitor document:', docErr);
+        }
+      }
 
       // Auto-save new company URL to user profile if user changed/entered a new URL
       if (effectiveCompanyUrl && effectiveCompanyUrl !== user?.company_url) {
@@ -256,6 +273,8 @@ export default function DashboardPage() {
       setShowAddModal(false);
       setNewCompName('');
       setNewPricingUrl('');
+      setNewCompDescriptionText('');
+      setNewCompDocFile(null);
       await fetchCompetitors();
       setSelectedCompId(res.data.id);
     } catch (err) {
@@ -683,20 +702,45 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
-                  Competitor URL *
+                  Competitor URL (Optional if document/text provided)
                 </label>
                 <input
                   type="url"
-                  required
                   value={newPricingUrl}
                   onChange={(e) => setNewPricingUrl(e.target.value)}
                   placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
                 />
-                <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">
-                  <span className="shrink-0 font-bold">✨ Auto-Crawler:</span>
-                  <span>Our Autonomous Agent Network will automatically crawl, navigate, and discover all related pricing, product, feature, and enterprise sub-pages.</span>
-                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Competitor Notes / Text Details (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={newCompDescriptionText}
+                  onChange={(e) => setNewCompDescriptionText(e.target.value)}
+                  placeholder="Type competitor pricing, features, specifications, or details..."
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Upload Competitor Document (.pdf, .txt, .md) (Optional)
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.txt,.md,.doc,.docx"
+                  onChange={(e) => setNewCompDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20"
+                />
+              </div>
+
+              <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">
+                <span className="shrink-0 font-bold">✨ Multi-Source Intelligence:</span>
+                <span>Our Autonomous Agent Network analyzes URLs, uploaded documents, and typed notes interchangeably or combined!</span>
               </div>
 
               <div className="pt-3 flex justify-end gap-2">

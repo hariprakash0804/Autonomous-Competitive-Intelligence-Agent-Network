@@ -57,6 +57,8 @@ export default function ProfilePage() {
   const [editName, setEditName] = useState('');
   const [editCompanyUrl, setEditCompanyUrl] = useState('');
   const [editPricingUrl, setEditPricingUrl] = useState('');
+  const [editDescriptionText, setEditDescriptionText] = useState('');
+  const [editDocFile, setEditDocFile] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
 
@@ -66,6 +68,8 @@ export default function ProfilePage() {
   const [addCompanyUrl, setAddCompanyUrl] = useState(user?.company_url || '');
   const [useSavedAddUrl, setUseSavedAddUrl] = useState(Boolean(user?.company_url));
   const [addPricingUrl, setAddPricingUrl] = useState('');
+  const [addDescriptionText, setAddDescriptionText] = useState('');
+  const [addDocFile, setAddDocFile] = useState(null);
   const [addingComp, setAddingComp] = useState(false);
   const [addError, setAddError] = useState('');
 
@@ -75,6 +79,8 @@ export default function ProfilePage() {
     setAddError('');
     setAddName('');
     setAddPricingUrl('');
+    setAddDescriptionText('');
+    setAddDocFile(null);
     const currentSaved = savedCompanyUrl;
     setAddCompanyUrl(currentSaved);
     setUseSavedAddUrl(Boolean(currentSaved));
@@ -163,6 +169,8 @@ export default function ProfilePage() {
     setEditName(comp.name || '');
     setEditCompanyUrl(comp.company_url || companyUrl || '');
     setEditPricingUrl(comp.pricing_url || '');
+    setEditDescriptionText(comp.description_text || '');
+    setEditDocFile(null);
     setEditError('');
   };
 
@@ -174,9 +182,23 @@ export default function ProfilePage() {
     try {
       await api.put(`/competitors/${editingComp.id}`, {
         name: editName,
-        company_url: editCompanyUrl,
-        pricing_url: editPricingUrl,
+        company_url: editCompanyUrl || null,
+        pricing_url: editPricingUrl || null,
+        description_text: editDescriptionText || null,
       });
+
+      if (editDocFile) {
+        try {
+          const formData = new FormData();
+          formData.append('file', editDocFile);
+          await api.post(`/competitors/${editingComp.id}/document`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (docErr) {
+          console.error('Failed to upload competitor edit document:', docErr);
+        }
+      }
+
       setEditingComp(null);
       await fetchCompetitors();
     } catch (err) {
@@ -200,13 +222,26 @@ export default function ProfilePage() {
     const effectiveCompanyUrl = (useSavedAddUrl && savedCompanyUrl) ? savedCompanyUrl : addCompanyUrl;
 
     try {
-      await api.post('/competitors/', {
+      const res = await api.post('/competitors/', {
         name: addName.trim(),
         company_url: effectiveCompanyUrl || null,
-        pricing_url: addPricingUrl || null,
+        pricing_url: addPricingUrl ? addPricingUrl.trim() : null,
+        description_text: addDescriptionText ? addDescriptionText.trim() : null,
         review_urls: [],
         news_keywords: [addName.trim()],
       });
+
+      if (addDocFile && res.data?.id) {
+        try {
+          const formData = new FormData();
+          formData.append('file', addDocFile);
+          await api.post(`/competitors/${res.data.id}/document`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+        } catch (docErr) {
+          console.error('Failed to upload competitor document:', docErr);
+        }
+      }
 
       if (effectiveCompanyUrl && effectiveCompanyUrl !== user?.company_url) {
         try {
@@ -223,6 +258,8 @@ export default function ProfilePage() {
       setShowAddModal(false);
       setAddName('');
       setAddPricingUrl('');
+      setAddDescriptionText('');
+      setAddDocFile(null);
       await fetchCompetitors();
     } catch (err) {
       console.error('Failed to add competitor:', err);
@@ -727,9 +764,19 @@ export default function ProfilePage() {
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300" />
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Competitor Pricing URL</label>
+                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Competitor URL (Optional if document/text provided)</label>
                 <input type="url" value={editPricingUrl} onChange={(e) => setEditPricingUrl(e.target.value)} placeholder="https://competitor.com/pricing"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300" />
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor Notes / Text Details (Optional)</label>
+                <textarea rows={2} value={editDescriptionText} onChange={(e) => setEditDescriptionText(e.target.value)} placeholder="Type competitor details..."
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2 text-slate-100 input-glow transition-all duration-300 text-xs" />
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload / Update Document (.pdf, .txt, .md)</label>
+                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={(e) => setEditDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20" />
               </div>
               <div className="pt-3 flex justify-end gap-2">
                 <button type="button" onClick={() => setEditingComp(null)}
@@ -818,13 +865,23 @@ export default function ProfilePage() {
                 )}
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor URL *</label>
-                <input type="url" required value={addPricingUrl} onChange={(e) => setAddPricingUrl(e.target.value)} placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor URL (Optional if document/text provided)</label>
+                <input type="url" value={addPricingUrl} onChange={(e) => setAddPricingUrl(e.target.value)} placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300" />
-                <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">
-                  <span className="shrink-0 font-bold">✨ Auto-Crawler:</span>
-                  <span>Our Autonomous Agent Network will automatically crawl, navigate, and discover all related pricing, product, feature, and enterprise sub-pages.</span>
-                </div>
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor Notes / Text Details (Optional)</label>
+                <textarea rows={2} value={addDescriptionText} onChange={(e) => setAddDescriptionText(e.target.value)} placeholder="Type competitor pricing, features, specifications..."
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300 text-xs" />
+              </div>
+              <div>
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Upload Competitor Document (.pdf, .txt, .md)</label>
+                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" onChange={(e) => setAddDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-500/10 file:text-indigo-300 hover:file:bg-indigo-500/20" />
+              </div>
+              <div className="mt-1.5 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/15 text-[10px] text-indigo-300 flex items-center gap-1.5">
+                <span className="shrink-0 font-bold">✨ Multi-Source Intelligence:</span>
+                <span>Our Autonomous Agent Network analyzes URLs, uploaded documents, and typed notes interchangeably or combined!</span>
               </div>
               <div className="pt-3 flex justify-end gap-2">
                 <button type="button" onClick={() => setShowAddModal(false)}

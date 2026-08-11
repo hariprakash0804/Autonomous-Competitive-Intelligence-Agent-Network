@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 
@@ -41,6 +41,7 @@ class CompetitorCreate(BaseModel):
     name: str
     company_url: Optional[str] = None
     pricing_url: Optional[str] = None
+    description_text: Optional[str] = None
     review_urls: Optional[List[str]] = []
     news_keywords: Optional[List[str]] = []
 
@@ -49,6 +50,7 @@ class CompetitorUpdate(BaseModel):
     name: Optional[str] = None
     company_url: Optional[str] = None
     pricing_url: Optional[str] = None
+    description_text: Optional[str] = None
     review_urls: Optional[List[str]] = None
     news_keywords: Optional[List[str]] = None
 
@@ -85,6 +87,7 @@ def list_competitors(
             "domain": c.domain,
             "review_urls": c.review_urls or [],
             "news_keywords": c.news_keywords or [],
+            "description_text": c.description_text or "",
             "snapshot_count": snap_count,
             "price_change_count": price_change_count,
             "avg_sentiment": round(float(avg_sentiment), 3) if avg_sentiment is not None else None,
@@ -145,6 +148,7 @@ def create_competitor(
         company_url=company_url,
         pricing_url=pricing_url,
         domain=target_domain,
+        description_text=payload.description_text.strip() if payload.description_text and payload.description_text.strip() else None,
         review_urls=payload.review_urls,
         news_keywords=payload.news_keywords,
     )
@@ -158,6 +162,7 @@ def create_competitor(
         "company_url": competitor.company_url,
         "pricing_url": competitor.pricing_url,
         "domain": competitor.domain,
+        "description_text": competitor.description_text or "",
         "created_at": competitor.created_at.isoformat(),
     }
 
@@ -205,6 +210,8 @@ def update_competitor(
         competitor.review_urls = payload.review_urls
     if payload.news_keywords is not None:
         competitor.news_keywords = payload.news_keywords
+    if payload.description_text is not None:
+        competitor.description_text = payload.description_text.strip() if payload.description_text.strip() else None
 
     db.commit()
     db.refresh(competitor)
@@ -215,6 +222,7 @@ def update_competitor(
         "company_url": competitor.company_url,
         "pricing_url": competitor.pricing_url,
         "domain": competitor.domain,
+        "description_text": competitor.description_text or "",
         "review_urls": competitor.review_urls or [],
         "news_keywords": competitor.news_keywords or [],
         "created_at": competitor.created_at.isoformat(),
@@ -238,9 +246,80 @@ def get_competitor_details(
         "company_url": competitor.company_url or current_user.company_url,
         "pricing_url": competitor.pricing_url,
         "domain": competitor.domain,
+        "description_text": competitor.description_text or "",
         "review_urls": competitor.review_urls or [],
         "news_keywords": competitor.news_keywords or [],
         "created_at": competitor.created_at.isoformat(),
+    }
+
+
+@router.post("/{competitor_id}/document")
+async def upload_competitor_document(
+    competitor_id: uuid.UUID,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    file: UploadFile = File(...),
+):
+    """
+    Upload and parse a document (PDF, TXT, MD, etc.) specifically for a competitor target.
+    Extracts text, synthesizes intelligence, and updates competitor.description_text.
+    """
+    competitor = db.get(Competitor, competitor_id)
+    if not competitor or competitor.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Competitor not found")
+
+    content = await file.read()
+    filename = file.filename.lower()
+    extracted_text = ""
+
+    if filename.endswith(".pdf"):
+        try:
+            import pypdf
+            import io
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            extracted_text = "\n".join([page.extract_text() or "" for page in reader.pages])
+        except Exception as e:
+            print(f"[Competitor Document] PDF parse error: {e}")
+            extracted_text = content.decode("utf-8", errors="ignore")
+    else:
+        extracted_text = content.decode("utf-8", errors="ignore")
+
+    if not extracted_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not extract readable text from document."
+        )
+
+    # Summarize via LLM
+    try:
+        from app.services.llm import call_openrouter
+        from app.config import settings
+        if settings.LLM_API_KEY:
+            prompt = (
+                f"Summarize the following document for competitor '{competitor.name}'. "
+                "Extract product capabilities, pricing plans, feature specifications, and target market:\n\n"
+                f"{extracted_text.strip()[:4000]}"
+            )
+            summary, _ = call_openrouter(prompt, settings.LLM_API_KEY)
+            doc_block = summary.strip()
+        else:
+            doc_block = extracted_text.strip()[:2000]
+    except Exception as e:
+        print(f"[Competitor Document] LLM summary warning: {e}")
+        doc_block = extracted_text.strip()[:2000]
+
+    existing_desc = competitor.description_text or ""
+    if existing_desc:
+        competitor.description_text = f"{existing_desc}\n\n--- Document ({file.filename}) ---\n{doc_block}"
+    else:
+        competitor.description_text = doc_block
+
+    db.commit()
+    db.refresh(competitor)
+    return {
+        "id": str(competitor.id),
+        "name": competitor.name,
+        "description_text": competitor.description_text,
     }
 
 

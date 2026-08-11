@@ -448,10 +448,10 @@ def start_pipeline_run(
         comp_news_q = quote_plus(competitor.name)
         _add_url(f"https://news.google.com/search?q={comp_news_q}&hl=en-US")
 
-    if not urls:
+    if not urls and not (competitor.description_text and competitor.description_text.strip()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid URLs found for competitor. Please specify a company URL, pricing URL, or review URLs."
+            detail="No valid URLs or document/text details found for competitor. Please specify a company URL, pricing URL, or upload a document."
         )
 
     # Create AgentRun database record

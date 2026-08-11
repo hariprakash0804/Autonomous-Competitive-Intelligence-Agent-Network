@@ -302,6 +302,29 @@ def researcher_node(state: AgentState) -> AgentState:
             vector_store.flush()
         print(f"[Researcher Node] FAISS indexing + flush in {time.time() - faiss_start:.2f}s", flush=True)
 
+        # If competitor has custom text description or uploaded document details, inject into raw_pages
+        if competitor_obj and competitor_obj.description_text and competitor_obj.description_text.strip():
+            doc_page = {
+                "url": f"Uploaded Document / Notes ({competitor_obj.name})",
+                "raw_content": competitor_obj.description_text,
+                "clean_text": competitor_obj.description_text,
+                "content_hash": "competitor_doc_hash",
+                "is_stale": False,
+                "stale_reason": None,
+                "status_code": 200,
+                "content_type": "text",
+                "scraped_by": "user_upload",
+                "metadata": {"title": f"Competitor Document / Notes: {competitor_obj.name}"},
+                "headings": [],
+                "social_links": {},
+                "cta_signals": [],
+                "markdown_tables": [],
+                "faqs": [],
+                "tech_stack": [],
+            }
+            raw_pages.append(doc_page)
+            print(f"[Researcher Node] Added competitor document/text intelligence block ({len(competitor_obj.description_text)} chars).", flush=True)
+
     finally:
         db.close()
 

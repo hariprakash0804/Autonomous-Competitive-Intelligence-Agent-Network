@@ -26,6 +26,7 @@ class Competitor(Base):
     domain: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     review_urls: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     news_keywords: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
+    description_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

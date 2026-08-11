@@ -37,6 +37,7 @@ def on_startup():
                 conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_onboarded BOOLEAN DEFAULT FALSE;"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS company_url TEXT;"))
                 conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS domain VARCHAR(255);"))
+                conn.execute(text("ALTER TABLE competitors ADD COLUMN IF NOT EXISTS description_text TEXT;"))
                 conn.execute(text("ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS execution_logs JSON;"))
                 conn.execute(text("ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS pages_visited JSON;"))
                 # Purge legacy corrupted PriceChange records ($650 / $750 regex artifacts from earlier tests)

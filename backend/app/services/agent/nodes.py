@@ -325,6 +325,30 @@ def researcher_node(state: AgentState) -> AgentState:
             raw_pages.append(doc_page)
             print(f"[Researcher Node] Added competitor document/text intelligence block ({len(competitor_obj.description_text)} chars).", flush=True)
 
+        # Flexible Data Sourcing for User's Own Company: inject user company document/text intelligence
+        if competitor_obj and competitor_obj.user and competitor_obj.user.company_description and competitor_obj.user.company_description.strip():
+            user_comp_name = competitor_obj.user.company_name or "Our Company"
+            user_doc_page = {
+                "url": competitor_obj.user.company_url or f"Onboarded Document / Profile ({user_comp_name})",
+                "raw_content": competitor_obj.user.company_description,
+                "clean_text": competitor_obj.user.company_description,
+                "content_hash": "user_doc_hash",
+                "is_stale": False,
+                "stale_reason": None,
+                "status_code": 200,
+                "content_type": "text",
+                "scraped_by": "user_upload",
+                "metadata": {"title": f"Our Company Document / Profile: {user_comp_name}"},
+                "headings": [],
+                "social_links": {},
+                "cta_signals": [],
+                "markdown_tables": [],
+                "faqs": [],
+                "tech_stack": [],
+            }
+            raw_pages.append(user_doc_page)
+            print(f"[Researcher Node] Added user company document/text intelligence block ({len(competitor_obj.user.company_description)} chars).", flush=True)
+
     finally:
         db.close()
 

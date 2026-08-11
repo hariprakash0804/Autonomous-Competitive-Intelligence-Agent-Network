@@ -170,10 +170,11 @@ def _build_rich_context(
         ctas = p.get("cta_signals", [])
         content = p.get("clean_text", "")
 
-        # Determine if this is the user's own company page
-        is_user_page = bool(user_company_url and (
-            user_company_url.rstrip("/") in url or url in user_company_url
-        ))
+        # Determine if this is the user's own company page (URL match or Document/Profile match)
+        is_user_page = bool(
+            (user_company_url and (user_company_url.rstrip("/") in url or url in user_company_url)) or
+            ("Onboarded Document" in url or "Our Company Document" in url or user_company_name.lower() in url.lower())
+        )
         label = f"[YOUR COMPANY PAGE]" if is_user_page else "[COMPETITOR PAGE]"
 
         page_ctx = f"--- Page {idx} {label}: {url} ---\n"

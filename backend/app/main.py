@@ -14,6 +14,24 @@ app = FastAPI(
 )
 
 
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "Autonomous Competitive Intelligence Agent Network API",
+        "version": "0.1.0",
+        "documentation": "/docs",
+    }
+
+
+@app.get("/health")
+def health_check():
+    return {
+        "status": "ok",
+        "service": "Autonomous Competitive Intelligence Agent Network API",
+    }
+
+
 @app.on_event("startup")
 def on_startup():
     """Starts background initialization tasks so Uvicorn binds port socket immediately (<0.001s)."""

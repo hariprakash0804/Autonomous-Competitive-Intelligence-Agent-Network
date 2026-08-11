@@ -53,19 +53,19 @@ export default function ProfilePage() {
   // Add Competitor Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addName, setAddName] = useState('');
-  const [addCompanyUrl, setAddCompanyUrl] = useState(user?.company_url || localStorage.getItem('ci_saved_company_url') || '');
-  const [useSavedAddUrl, setUseSavedAddUrl] = useState(Boolean(user?.company_url || localStorage.getItem('ci_saved_company_url')));
+  const [addCompanyUrl, setAddCompanyUrl] = useState(user?.company_url || '');
+  const [useSavedAddUrl, setUseSavedAddUrl] = useState(Boolean(user?.company_url));
   const [addPricingUrl, setAddPricingUrl] = useState('');
   const [addingComp, setAddingComp] = useState(false);
   const [addError, setAddError] = useState('');
 
-  const savedCompanyUrl = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+  const savedCompanyUrl = user?.company_url || '';
 
   const handleOpenAddModal = () => {
     setAddError('');
     setAddName('');
     setAddPricingUrl('');
-    const currentSaved = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    const currentSaved = user?.company_url || '';
     setAddCompanyUrl(currentSaved);
     setUseSavedAddUrl(Boolean(currentSaved));
     setShowAddModal(true);
@@ -177,7 +177,6 @@ export default function ProfilePage() {
             company_name: companyName,
             company_url: effectiveCompanyUrl,
           });
-          localStorage.setItem('ci_saved_company_url', effectiveCompanyUrl);
         } catch (profileErr) {
           console.error('Failed to auto-update profile company URL:', profileErr);
         }

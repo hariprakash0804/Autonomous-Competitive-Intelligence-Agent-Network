@@ -56,6 +56,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('ci_saved_company_url');
     setToken(null);
     setUser(null);
   }, []);

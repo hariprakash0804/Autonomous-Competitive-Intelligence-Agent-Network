@@ -62,8 +62,8 @@ export default function DashboardPage() {
 
   // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
-  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || localStorage.getItem('ci_saved_company_url') || '');
-  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url || localStorage.getItem('ci_saved_company_url')));
+  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || '');
+  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url));
   const [newPricingUrl, setNewPricingUrl] = useState('');
   const [addError, setAddError] = useState('');
   const [submittingAdd, setSubmittingAdd] = useState(false);
@@ -79,7 +79,7 @@ export default function DashboardPage() {
   const [editError, setEditError] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  const savedCompanyUrl = user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+  const savedCompanyUrl = user?.company_url || '';
 
   const fetchCompetitors = useCallback(async () => {
     try {
@@ -200,7 +200,7 @@ export default function DashboardPage() {
     setAddError('');
     setNewCompName('');
     setNewPricingUrl('');
-    const currentSaved = overrideUrl || user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    const currentSaved = overrideUrl || user?.company_url || '';
     setNewCompanyUrl(currentSaved);
     setUseSavedUrl(Boolean(currentSaved));
     setShowAddModal(true);
@@ -208,11 +208,13 @@ export default function DashboardPage() {
 
   const handleOnboardingComplete = async (updatedUserData) => {
     await fetchCompetitors();
-    const effectiveCompanyUrl = updatedUserData?.company_url || user?.company_url || localStorage.getItem('ci_saved_company_url') || '';
+    const effectiveCompanyUrl = updatedUserData?.company_url || user?.company_url || '';
     if (effectiveCompanyUrl) {
       setNewCompanyUrl(effectiveCompanyUrl);
       setUseSavedUrl(true);
-      localStorage.setItem('ci_saved_company_url', effectiveCompanyUrl);
+    } else {
+      setNewCompanyUrl('');
+      setUseSavedUrl(false);
     }
     toast.info('Fetching your onboarded company details for competitor comparison...', 'Onboarding Auto-Sync');
     handleOpenAddModal(effectiveCompanyUrl);
@@ -244,7 +246,6 @@ export default function DashboardPage() {
             company_name: user?.company_name,
             company_url: effectiveCompanyUrl,
           });
-          localStorage.setItem('ci_saved_company_url', effectiveCompanyUrl);
         } catch (profileErr) {
           console.error('Failed to auto-update profile company URL:', profileErr);
         }

@@ -85,7 +85,7 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
     client = _get_cached_client(api_key)
 
     models_to_try = [
-        "openrouter/free",
+        "openrouter/free"
     ]
     
     last_exception = None
@@ -95,7 +95,7 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
         _enforce_proactive_rate_limit()
 
         try:
-            print(f"[OpenRouter Request] Attempting model '{model}' with 45s HTTP timeout guard (max_tokens={max_tokens})...")
+            print(f"[OpenRouter Request] Attempting model '{model}' with 45s HTTP timeout guard (max_tokens={max_tokens})...", flush=True)
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
@@ -119,19 +119,22 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
             
             # Fast-fail if account daily quota is exceeded (no free model will work until reset/credits added)
             if "free-models-per-day" in err_msg.lower() or "daily limit" in err_msg.lower():
-                print(f"[OpenRouter Daily Limit] Daily free request quota exceeded. Fast-failing to regex/rule fallbacks.", flush=True)
+                print(f"[OpenRouter Daily Limit] Daily free request quota exceeded. Fast-failing to structured report generator.", flush=True)
                 raise exc
 
             is_429 = isinstance(exc, RateLimitError) or "429" in err_msg or "rate limit" in err_msg.lower()
             is_404 = getattr(exc, "status_code", None) == 404 or "404" in err_msg or "unavailable for free" in err_msg.lower()
+            is_json_err = "expecting value" in err_msg.lower() or "json" in err_msg.lower()
 
             if is_429:
-                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 1s...")
+                print(f"[OpenRouter 429 Rate Limit] Model '{model}' rate-limited. Retrying next candidate in 1s...", flush=True)
                 time.sleep(1.0)
             elif is_404:
-                print(f"[OpenRouter 404 Deprecated/Paid] Model '{model}' unavailable for free. Trying fallback candidate...")
+                print(f"[OpenRouter 404] Model '{model}' unavailable for free. Trying next candidate...", flush=True)
+            elif is_json_err:
+                print(f"[OpenRouter JSON Parse Error] Model '{model}' returned invalid JSON/HTML response: {exc}. Retrying next candidate...", flush=True)
             else:
-                print(f"[OpenRouter Error/Timeout] Model '{model}' failed: {exc}. Retrying next candidate...")
+                print(f"[OpenRouter Error/Timeout] Model '{model}' failed: {exc}. Retrying next candidate...", flush=True)
 
     raise last_exception if last_exception else RuntimeError("All OpenRouter candidate models failed.")
 

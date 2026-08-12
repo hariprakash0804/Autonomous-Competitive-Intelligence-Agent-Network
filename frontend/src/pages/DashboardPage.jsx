@@ -16,7 +16,7 @@ import OnboardingModal from '../components/OnboardingModal';
 import AgentRunLogModal from '../components/AgentRunLogModal';
 
 import {
-  LogOut, Plus, Sparkles, Building2,
+  LogOut, Plus, Sparkles, Building2, Play,
   AlertCircle, LayoutDashboard, Globe, FileText, Activity,
   DollarSign, Clock, CheckCircle2, Menu, Zap
 } from 'lucide-react';
@@ -59,6 +59,7 @@ export default function DashboardPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logModalData, setLogModalData] = useState(null); // { runId, competitorName }
+  const [triggeringAll, setTriggeringAll] = useState(false);
 
   // Dual URL competitor form state
   const [newCompName, setNewCompName] = useState('');
@@ -184,6 +185,27 @@ export default function DashboardPage() {
     }
     const comp = competitors.find((c) => c.id === compId);
     toast.success(`Agent pipeline for ${comp?.name || 'Competitor'} completed!`, 'Pipeline Finished');
+  };
+
+  const handleTriggerAllPipelines = async () => {
+    if (!competitors || competitors.length === 0) {
+      toast.info('Please add at least one competitor target first.', 'No Targets');
+      return;
+    }
+    setTriggeringAll(true);
+    try {
+      const res = await api.post('/pipeline/trigger-all');
+      toast.success(
+        res.data?.message || `Queued pipeline analysis for ${res.data?.total_triggered || competitors.length} targets.`,
+        'All Pipelines Queued'
+      );
+      await fetchCompetitors();
+    } catch (err) {
+      console.error('Failed to trigger all pipelines:', err);
+      toast.error(err.response?.data?.detail || 'Failed to trigger pipelines for all targets.');
+    } finally {
+      setTriggeringAll(false);
+    }
   };
 
   const handleDeleteCompetitor = async (compId) => {
@@ -441,13 +463,24 @@ export default function DashboardPage() {
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">Your competitive intelligence overview at a glance</p>
                 </div>
-                <button
-                  onClick={handleOpenAddModal}
-                  className="flex items-center gap-2 btn-gradient px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-indigo-600/20"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Competitor
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleTriggerAllPipelines}
+                    disabled={triggeringAll || competitors.length === 0}
+                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/20 transition-all duration-200 disabled:opacity-50"
+                    title="Trigger analysis pipeline for all competitor targets"
+                  >
+                    <Play className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />
+                    <span>{triggeringAll ? 'Queuing...' : 'Run All Pipelines'}</span>
+                  </button>
+                  <button
+                    onClick={handleOpenAddModal}
+                    className="flex items-center gap-2 btn-gradient px-4 py-2.5 rounded-xl text-xs shadow-lg shadow-indigo-600/20 font-semibold"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Competitor
+                  </button>
+                </div>
               </div>
 
               {/* KPI Cards */}

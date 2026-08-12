@@ -499,6 +499,80 @@ def start_pipeline_run(
     }
 
 
+@router.post("/trigger-all")
+def trigger_all_pipelines(
+    background_tasks: BackgroundTasks,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user_or_api_key)],
+):
+    """
+    Triggers background agent pipelines for ALL competitor targets owned by the current user.
+    Executes sequentially under memory queue control (Render 512 MB optimization).
+    """
+    competitors = db.scalars(
+        select(Competitor).where(Competitor.user_id == current_user.id)
+    ).all()
+
+    if not competitors:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No competitor targets found for your account. Please add a competitor target first."
+        )
+
+    runs_created = []
+    for competitor in competitors:
+        try:
+            urls = []
+            def _add_url(u: str):
+                if u and isinstance(u, str):
+                    clean = u.strip()
+                    if clean and clean not in urls:
+                        urls.append(clean)
+
+            if current_user.company_url:
+                _add_url(current_user.company_url.strip())
+            if competitor.company_url:
+                _add_url(competitor.company_url.strip())
+            if competitor.pricing_url:
+                _add_url(competitor.pricing_url.strip())
+
+            if not urls and not (competitor.description_text and competitor.description_text.strip()):
+                continue
+
+            agent_run = AgentRun(
+                competitor_id=competitor.id,
+                status="RUNNING",
+                started_at=datetime.now(timezone.utc),
+                reflection_triggered=False,
+            )
+            db.add(agent_run)
+            db.commit()
+            db.refresh(agent_run)
+
+            background_tasks.add_task(
+                run_agent_pipeline_task,
+                str(agent_run.id),
+                str(competitor.id),
+                urls,
+            )
+
+            runs_created.append({
+                "agent_run_id": str(agent_run.id),
+                "competitor_id": str(competitor.id),
+                "competitor_name": competitor.name,
+                "status": "RUNNING",
+            })
+        except Exception as e:
+            print(f"[Trigger All Error] Failed to trigger run for competitor {competitor.name}: {e}")
+
+    return {
+        "status": "QUEUED",
+        "total_triggered": len(runs_created),
+        "message": f"Queued pipeline analysis for {len(runs_created)} competitor target(s). Executes sequentially to maintain low RAM footprint.",
+        "runs": runs_created,
+    }
+
+
 @router.get("/status/{agent_run_id}")
 def get_pipeline_status(
     agent_run_id: uuid.UUID,

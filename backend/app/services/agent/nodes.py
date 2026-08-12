@@ -1,5 +1,6 @@
 import uuid
 import time
+import gc
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, List, Optional
@@ -157,7 +158,8 @@ def researcher_node(state: AgentState) -> AgentState:
         raw_pages = []
 
         if urls:
-            with ThreadPoolExecutor(max_workers=min(len(urls), 10)) as executor:
+            pass1_workers = min(len(urls), int(os.getenv("SCRAPER_MAX_WORKERS", "3")))
+            with ThreadPoolExecutor(max_workers=pass1_workers) as executor:
                 pass1_results = list(executor.map(scrape_url, urls))
             for res in pass1_results:
                 raw_pages.append(res)
@@ -247,7 +249,8 @@ def researcher_node(state: AgentState) -> AgentState:
         if discovered_urls:
             print(f"[Researcher Node] Discovered {len(discovered_urls)} key sub-page URLs: {discovered_urls}", flush=True)
             pass2_start = time.time()
-            with ThreadPoolExecutor(max_workers=min(len(discovered_urls), 5)) as executor:
+            pass2_workers = min(len(discovered_urls), int(os.getenv("SCRAPER_MAX_WORKERS_PASS2", "2")))
+            with ThreadPoolExecutor(max_workers=pass2_workers) as executor:
                 pass2_results = list(executor.map(scrape_url, discovered_urls))
             for res in pass2_results:
                 raw_pages.append(res)
@@ -370,6 +373,7 @@ def researcher_node(state: AgentState) -> AgentState:
         pages_info=pages_info,
     )
     print(f"[Researcher Node] TOTAL: {time.time() - node_start:.2f}s (Analyzed {len(raw_pages)} total pages)", flush=True)
+    gc.collect()
     return state
 
 
@@ -911,6 +915,7 @@ def parallel_analysis_node(state: AgentState) -> AgentState:
         sa_future.result()
 
     print(f"[Parallel Analysis] TOTAL: {time.time() - node_start:.2f}s", flush=True)
+    gc.collect()
     return state
 
 

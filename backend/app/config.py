@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # Pipeline Execution Timeout (in seconds)
     PIPELINE_TIMEOUT_SECONDS: float = 600.0
 
+    # Memory & Concurrency Optimization (Render 512 MB Free Tier)
+    MAX_CONCURRENT_PIPELINES: int = 1
+    SCRAPER_MAX_WORKERS: int = 3
+    SCRAPER_MAX_WORKERS_PASS2: int = 2
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

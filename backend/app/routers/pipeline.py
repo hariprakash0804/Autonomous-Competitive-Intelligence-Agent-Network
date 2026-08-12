@@ -29,6 +29,13 @@ from app.services.reports_service import (
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 
 
+import threading
+import gc
+
+# 512 MB RAM Memory Guard: Restrict concurrent active pipelines on low-memory tiers (e.g. Render free plan)
+MAX_CONCURRENT_PIPELINES = int(os.getenv("MAX_CONCURRENT_PIPELINES", "1"))
+_pipeline_semaphore = threading.Semaphore(MAX_CONCURRENT_PIPELINES)
+
 # Global registry to track requested cancellations for active pipeline runs
 _cancelled_runs: set = set()
 
@@ -53,187 +60,195 @@ def _execute_graph_with_timeout(initial_state: AgentState) -> AgentState:
 
 
 def run_agent_pipeline_task(agent_run_id_str: str, competitor_id_str: str, urls: List[str]):
-    """Background worker function executing the LangGraph agent pipeline with cancellation & timeout guards."""
+    """Background worker function executing the LangGraph agent pipeline with cancellation, memory queuing & timeout guards."""
     import time as _time
-    pipeline_start = _time.time()
-    print(f"[Pipeline Task] Background worker started for AgentRun: {agent_run_id_str}", flush=True)
-    db: Session = SessionLocal()
-    agent_run = None
-    try:
-        agent_run_id = uuid.UUID(agent_run_id_str)
-        agent_run = db.get(AgentRun, agent_run_id)
+    print(f"[Pipeline Task] Task queued for AgentRun {agent_run_id_str}. Waiting for execution slot...", flush=True)
 
-        # 1. Early Cancellation Check
-        if is_run_cancelled(agent_run_id_str):
-            print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED before start.", flush=True)
-            if agent_run:
-                agent_run.status = "CANCELLED"
-                agent_run.completed_at = datetime.now(timezone.utc)
-                db.commit()
-            return
+    with _pipeline_semaphore:
+        pipeline_start = _time.time()
+        print(f"[Pipeline Task] Slot acquired! Starting pipeline execution for AgentRun: {agent_run_id_str}", flush=True)
+        db: Session = SessionLocal()
+        agent_run = None
+        try:
+            agent_run_id = uuid.UUID(agent_run_id_str)
+            agent_run = db.get(AgentRun, agent_run_id)
 
-        initial_state: AgentState = {
-            "competitor_id": competitor_id_str,
-            "competitor_name": "",
-            "urls": urls,
-            "raw_pages": [],
-            "prev_snapshot": None,
-            "diffs": [],
-            "feature_diffs": [],
-            "sentiment_results": [],
-            "report_draft": "",
-            "model_used": None,
-            "retry_count": 0,
-            "reflection_triggered": False,
-            "is_incomplete": False,
-            "agent_run_id": agent_run_id_str,
-            "status": "RUNNING",
-        }
-
-        print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
-
-        # Run pipeline with configurable timeout & cancellation monitoring
-        timeout_limit = float(getattr(settings, "PIPELINE_TIMEOUT_SECONDS", 600.0))
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_execute_graph_with_timeout, initial_state)
-            try:
-                # Poll periodically for user-triggered cancellation while task executes
-                poll_start = _time.time()
-                while not future.done():
-                    if is_run_cancelled(agent_run_id_str):
-                        print(f"[Pipeline Task] AgentRun {agent_run_id_str} CANCELLED by user mid-execution. Aborting.", flush=True)
-                        if agent_run:
-                            agent_run.status = "CANCELLED"
-                            agent_run.completed_at = datetime.now(timezone.utc)
-                            db.commit()
-                        return
-                    _time.sleep(0.5)
-                    if _time.time() - poll_start > timeout_limit:
-                        raise TimeoutError()
-
-                final_state = future.result()
-            except TimeoutError:
-                elapsed = _time.time() - pipeline_start
-                print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s ({timeout_limit:.0f}s limit)!", flush=True)
-                final_state = {"reflection_triggered": False}
+            # 1. Early Cancellation Check
+            if is_run_cancelled(agent_run_id_str):
+                print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED before start.", flush=True)
                 if agent_run:
-                    agent_run.status = "FAILED"
+                    agent_run.status = "CANCELLED"
                     agent_run.completed_at = datetime.now(timezone.utc)
                     db.commit()
                 return
 
-        # 2. Final Cancellation Check before updating completion status
-        if is_run_cancelled(agent_run_id_str):
-            print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED. Skipping report delivery.", flush=True)
+            initial_state: AgentState = {
+                "competitor_id": competitor_id_str,
+                "competitor_name": "",
+                "urls": urls,
+                "raw_pages": [],
+                "prev_snapshot": None,
+                "diffs": [],
+                "feature_diffs": [],
+                "sentiment_results": [],
+                "report_draft": "",
+                "model_used": None,
+                "retry_count": 0,
+                "reflection_triggered": False,
+                "is_incomplete": False,
+                "agent_run_id": agent_run_id_str,
+                "status": "RUNNING",
+            }
+
+            print(f"[Pipeline Task] Invoking LangGraph graph pipeline for {len(urls)} URLs (recursion_limit=6)...", flush=True)
+
+            # Run pipeline with configurable timeout & cancellation monitoring
+            timeout_limit = float(getattr(settings, "PIPELINE_TIMEOUT_SECONDS", 600.0))
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_execute_graph_with_timeout, initial_state)
+                try:
+                    # Poll periodically for user-triggered cancellation while task executes
+                    poll_start = _time.time()
+                    while not future.done():
+                        if is_run_cancelled(agent_run_id_str):
+                            print(f"[Pipeline Task] AgentRun {agent_run_id_str} CANCELLED by user mid-execution. Aborting.", flush=True)
+                            if agent_run:
+                                agent_run.status = "CANCELLED"
+                                agent_run.completed_at = datetime.now(timezone.utc)
+                                db.commit()
+                            return
+                        _time.sleep(0.5)
+                        if _time.time() - poll_start > timeout_limit:
+                            raise TimeoutError()
+
+                    final_state = future.result()
+                except TimeoutError:
+                    elapsed = _time.time() - pipeline_start
+                    print(f"[Pipeline Task Error] AgentRun {agent_run_id_str} timed out after {elapsed:.1f}s ({timeout_limit:.0f}s limit)!", flush=True)
+                    final_state = {"reflection_triggered": False}
+                    if agent_run:
+                        agent_run.status = "FAILED"
+                        agent_run.completed_at = datetime.now(timezone.utc)
+                        db.commit()
+                    return
+
+            # 2. Final Cancellation Check before updating completion status
+            if is_run_cancelled(agent_run_id_str):
+                print(f"[Pipeline Task] AgentRun {agent_run_id_str} was CANCELLED. Skipping report delivery.", flush=True)
+                if agent_run:
+                    agent_run.status = "CANCELLED"
+                    agent_run.completed_at = datetime.now(timezone.utc)
+                    db.commit()
+                return
+
+            # Update AgentRun in PostgreSQL
             if agent_run:
-                agent_run.status = "CANCELLED"
+                agent_run.status = "COMPLETED"
                 agent_run.completed_at = datetime.now(timezone.utc)
-                db.commit()
-            return
-
-        # Update AgentRun in PostgreSQL
-        if agent_run:
-            agent_run.status = "COMPLETED"
-            agent_run.completed_at = datetime.now(timezone.utc)
-            agent_run.reflection_triggered = final_state.get("reflection_triggered", False)
-            agent_run.langsmith_trace_url = (
-                f"https://smith.langchain.com/o/default/projects/p/{agent_run_id}"
-                if os.environ.get("LANGCHAIN_TRACING_V2") == "true"
-                else None
-            )
-            db.commit()
-            elapsed = _time.time() - pipeline_start
-            print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED in {elapsed:.1f}s!", flush=True)
-
-            # Automated Multi-Channel Report Delivery on Pipeline Completion
-            try:
-                latest_report = (
-                    db.query(Report)
-                    .filter(Report.competitor_id == uuid.UUID(competitor_id_str))
-                    .order_by(Report.generated_at.desc())
-                    .first()
+                agent_run.reflection_triggered = final_state.get("reflection_triggered", False)
+                agent_run.langsmith_trace_url = (
+                    f"https://smith.langchain.com/o/default/projects/p/{agent_run_id}"
+                    if os.environ.get("LANGCHAIN_TRACING_V2") == "true"
+                    else None
                 )
-                if latest_report:
-                    comp = db.get(Competitor, uuid.UUID(competitor_id_str))
-                    comp_name = comp.name if comp else "Competitor"
-                    user_obj = comp.user if comp else None
+                db.commit()
+                elapsed = _time.time() - pipeline_start
+                print(f"[Pipeline Task] AgentRun {agent_run_id_str} COMPLETED in {elapsed:.1f}s!", flush=True)
 
-                    # 1. Render HTML report file
-                    try:
-                        render_html_report(str(latest_report.id), comp_name, latest_report.summary or "")
-                        print(f"[Auto-Deliver] HTML report generated for {latest_report.id}", flush=True)
-                    except Exception as e_html:
-                        print(f"[Auto-Deliver Note] HTML render exception: {e_html}", flush=True)
+                # Automated Multi-Channel Report Delivery on Pipeline Completion
+                try:
+                    latest_report = (
+                        db.query(Report)
+                        .filter(Report.competitor_id == uuid.UUID(competitor_id_str))
+                        .order_by(Report.generated_at.desc())
+                        .first()
+                    )
+                    if latest_report:
+                        comp = db.get(Competitor, uuid.UUID(competitor_id_str))
+                        comp_name = comp.name if comp else "Competitor"
+                        user_obj = comp.user if comp else None
 
-                    # 2. Render PDF report file
-                    try:
-                        render_pdf_report(str(latest_report.id), comp_name, latest_report.summary or "")
-                        print(f"[Auto-Deliver] PDF report generated for {latest_report.id}", flush=True)
-                    except Exception as e_pdf:
-                        print(f"[Auto-Deliver Note] PDF render exception: {e_pdf}", flush=True)
+                        # 1. Render HTML report file
+                        try:
+                            render_html_report(str(latest_report.id), comp_name, latest_report.summary or "")
+                            print(f"[Auto-Deliver] HTML report generated for {latest_report.id}", flush=True)
+                        except Exception as e_html:
+                            print(f"[Auto-Deliver Note] HTML render exception: {e_html}", flush=True)
 
-                    # 3. Deliver Slack / Webhook notifications (dual-webhook: user profile + system env)
-                    try:
-                        from app.routers.reports import get_public_backend_url
-                        backend_url = get_public_backend_url()
-                        html_url = f"{backend_url}/reports/{latest_report.id}/html"
+                        # 2. Render PDF report file
+                        try:
+                            render_pdf_report(str(latest_report.id), comp_name, latest_report.summary or "")
+                            print(f"[Auto-Deliver] PDF report generated for {latest_report.id}", flush=True)
+                        except Exception as e_pdf:
+                            print(f"[Auto-Deliver Note] PDF render exception: {e_pdf}", flush=True)
 
-                        user_webhook = (user_obj.slack_webhook_url or "").strip() if user_obj and getattr(user_obj, "slack_webhook_url", None) else None
-                        env_webhook = (
-                            os.getenv("SLACK_WEBHOOK_URL")
-                            or os.getenv("WEBHOOK_URL")
-                            or getattr(settings, "SLACK_WEBHOOK_URL", None)
-                            or getattr(settings, "WEBHOOK_URL", None)
-                            or ""
-                        ).strip() or None
-
-                        target_webhooks = []
-                        if user_webhook and user_webhook.startswith("http"):
-                            target_webhooks.append(user_webhook)
-                        if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
-                            target_webhooks.append(env_webhook)
-
-                        for w_url in target_webhooks:
-                            send_slack_notification(
-                                webhook_url=w_url,
-                                competitor_name=comp_name,
-                                report_summary=latest_report.summary or "",
-                                html_report_url=html_url,
-                            )
-                        if target_webhooks:
-                            print(f"[Auto-Deliver] Slack notifications sent to {len(target_webhooks)} webhooks.", flush=True)
-                    except Exception as e_slack:
-                        print(f"[Auto-Deliver Note] Slack delivery exception: {e_slack}", flush=True)
-
-                    # 4. Deliver Email notification if user email exists
-                    if user_obj and user_obj.email:
+                        # 3. Deliver Slack / Webhook notifications (dual-webhook: user profile + system env)
                         try:
                             from app.routers.reports import get_public_backend_url
                             backend_url = get_public_backend_url()
                             html_url = f"{backend_url}/reports/{latest_report.id}/html"
-                            send_email_notification(
-                                recipient_email=user_obj.email,
-                                competitor_name=comp_name,
-                                markdown_report=latest_report.summary or "",
-                                html_report_url=html_url,
-                            )
-                            print(f"[Auto-Deliver] Email report dispatched to {user_obj.email}.", flush=True)
-                        except Exception as e_email:
-                            print(f"[Auto-Deliver Note] Email delivery note: {e_email}", flush=True)
-            except Exception as e_auto:
-                print(f"[Auto-Deliver Error] Automated delivery task exception: {e_auto}", flush=True)
 
-    except Exception as exc:
-        elapsed = _time.time() - pipeline_start
-        print(f"[Pipeline Task Error] Agent pipeline failed after {elapsed:.1f}s: {exc}", flush=True)
-        traceback.print_exc(file=sys.stdout)
-        if agent_run:
-            agent_run.status = "FAILED"
-            agent_run.completed_at = datetime.now(timezone.utc)
-            db.commit()
-    finally:
-        flush_langsmith_tracers()
-        db.close()
+                            user_webhook = (user_obj.slack_webhook_url or "").strip() if user_obj and getattr(user_obj, "slack_webhook_url", None) else None
+                            env_webhook = (
+                                os.getenv("SLACK_WEBHOOK_URL")
+                                or os.getenv("WEBHOOK_URL")
+                                or getattr(settings, "SLACK_WEBHOOK_URL", None)
+                                or getattr(settings, "WEBHOOK_URL", None)
+                                or ""
+                            ).strip() or None
+
+                            target_webhooks = []
+                            if user_webhook and user_webhook.startswith("http"):
+                                target_webhooks.append(user_webhook)
+                            if env_webhook and env_webhook.startswith("http") and env_webhook not in target_webhooks:
+                                target_webhooks.append(env_webhook)
+
+                            for w_url in target_webhooks:
+                                send_slack_notification(
+                                    webhook_url=w_url,
+                                    competitor_name=comp_name,
+                                    report_summary=latest_report.summary or "",
+                                    html_report_url=html_url,
+                                )
+                            if target_webhooks:
+                                print(f"[Auto-Deliver] Slack notifications sent to {len(target_webhooks)} webhooks.", flush=True)
+                        except Exception as e_slack:
+                            print(f"[Auto-Deliver Note] Slack delivery exception: {e_slack}", flush=True)
+
+                        # 4. Deliver Email notification if user email exists
+                        if user_obj and user_obj.email:
+                            try:
+                                from app.routers.reports import get_public_backend_url
+                                backend_url = get_public_backend_url()
+                                html_url = f"{backend_url}/reports/{latest_report.id}/html"
+                                send_email_notification(
+                                    recipient_email=user_obj.email,
+                                    competitor_name=comp_name,
+                                    markdown_report=latest_report.summary or "",
+                                    html_report_url=html_url,
+                                )
+                                print(f"[Auto-Deliver] Email report dispatched to {user_obj.email}.", flush=True)
+                            except Exception as e_email:
+                                print(f"[Auto-Deliver Note] Email delivery note: {e_email}", flush=True)
+                except Exception as e_auto:
+                    print(f"[Auto-Deliver Error] Automated delivery task exception: {e_auto}", flush=True)
+
+        except Exception as exc:
+            elapsed = _time.time() - pipeline_start
+            print(f"[Pipeline Task Error] Agent pipeline failed after {elapsed:.1f}s: {exc}", flush=True)
+            traceback.print_exc(file=sys.stdout)
+            if agent_run:
+                agent_run.status = "FAILED"
+                agent_run.completed_at = datetime.now(timezone.utc)
+                db.commit()
+        finally:
+            flush_langsmith_tracers()
+            try:
+                db.close()
+            except Exception:
+                pass
+            gc.collect()
+            print(f"[Pipeline Task] Cleaned up DB session & released RAM for AgentRun {agent_run_id_str}.", flush=True)
 
 
 @router.get("/runs")

@@ -85,7 +85,7 @@ def call_openrouter(prompt: str, api_key: str, max_tokens: int = 6000) -> Tuple[
     client = _get_cached_client(api_key)
 
     models_to_try = [
-        "openrouter/free"
+        "nvidia/nemotron-3-super-120b-a12b:free"
     ]
     
     last_exception = None

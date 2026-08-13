@@ -679,9 +679,12 @@ def change_detector_node(state: AgentState) -> AgentState:
                 if _user_domain_for_pricing.startswith("www."):
                     _user_domain_for_pricing = _user_domain_for_pricing[4:]
 
-            # Pricing page detection keywords
-            _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "cost", "tier", "price", "prices", "rates", "buy", "fees", "upgrade")
-            _pricing_text_kw = ("$/mo", "per month", "per user", "free plan", "billed annually", "billed monthly", "per million", "/mo", "/month", "/year", "per seat", "starting at", "contact sales", "get quote", "custom pricing")
+            # Pricing page detection keywords — TIGHT to avoid false positives.
+            # Only match URLs/content that are genuinely pricing pages.
+            # Removed: "tier", "buy", "fees", "upgrade", "cost", "rates" — too generic,
+            # these appear in feature pages, docs, and about pages.
+            _pricing_url_kw = ("pricing", "plans", "packages", "subscription", "billing", "price", "prices")
+            _pricing_text_kw = ("$/mo", "per month", "per user", "free plan", "billed annually", "billed monthly", "per million", "/mo", "/month", "/year", "per seat", "starting at $", "contact sales", "custom pricing")
 
             for p in valid_pages:
                 page_url = p.get("url", "").lower()
@@ -690,12 +693,13 @@ def change_detector_node(state: AgentState) -> AgentState:
                 # Domain-based detection: check if the page's domain matches the user's company domain
                 is_user_page = bool(_user_domain_for_pricing and _user_domain_for_pricing in page_url)
 
-                # Only extract pricing from pages that are actually pricing pages
-                is_pricing_page = (
-                    any(kw in page_url for kw in _pricing_url_kw)
-                    or any(kw in clean_lower for kw in _pricing_text_kw)
-                    or is_user_page  # Always try user's own company page
-                )
+                # Only extract pricing from pages that are actually pricing pages.
+                # User company pages must ALSO pass the pricing check — extracting from
+                # homepage/about pages produces phantom tiers from feature descriptions.
+                has_pricing_url_signal = any(kw in page_url for kw in _pricing_url_kw)
+                has_pricing_text_signal = any(kw in clean_lower for kw in _pricing_text_kw)
+                is_pricing_page = has_pricing_url_signal or has_pricing_text_signal
+
                 if not is_pricing_page:
                     continue
 

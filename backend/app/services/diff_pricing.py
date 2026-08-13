@@ -4,7 +4,11 @@ from typing import List, Dict, Any, Optional
 
 from app.config import settings
 
-# Core plan tier names commonly used in software/SaaS pricing pages
+# Core plan tier names commonly used in software/SaaS pricing pages.
+# IMPORTANT: Only include names that are EXCLUSIVELY used as pricing tier names.
+# Generic words like "API", "Individual", "Education", "Scale", "Advanced", "Custom"
+# appear frequently in non-pricing content (feature descriptions, about pages,
+# navigation menus) and cause false-positive tier detection on non-pricing pages.
 TARGET_TIERS = [
     "Free",
     "Starter",
@@ -15,31 +19,19 @@ TARGET_TIERS = [
     "Team",
     "Business",
     "Enterprise",
-    "Developer",
     "Growth",
     "Premium",
-    "Ultra",
     "Lite",
-    "Flex",
-    "Pay-As-You-Go",
-    "API",
-    # Extended coverage for modern SaaS pricing
     "Hobby",
-    "Personal",
-    "Individual",
     "Professional",
-    "Advanced",
-    "Scale",
     "Essentials",
-    "Unlimited",
     "Organization",
-    "Education",
-    "Startup",
-    "Solo",
     "Creator",
-    "Agency",
-    "Custom",
 ]
+
+# Maximum number of tiers to extract per page to prevent chart pollution.
+# Real pricing pages rarely have more than 5-6 tiers.
+MAX_TIERS_PER_PAGE = 8
 
 # Regex patterns to detect price values following a tier header
 PRICE_PATTERNS = [
@@ -76,8 +68,25 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
     for tier in TARGET_TIERS:
         if tier.lower() in seen_tiers:
             continue
+        _AMBIGUOUS_WORDS = {"basic", "plus", "growth", "essentials", "team"}
         tier_pattern = re.compile(r"\b" + re.escape(tier) + r"\b", re.IGNORECASE)
-        matches = list(tier_pattern.finditer(text))
+        raw_matches = list(tier_pattern.finditer(text))
+        if not raw_matches:
+            continue
+
+        # Filter out sentence-embedded generic English words for ambiguous tier names
+        matches = []
+        for m in raw_matches:
+            matched_raw = text[m.start():m.end()]
+            if tier.lower() in _AMBIGUOUS_WORDS:
+                # Accept if TitleCase (e.g. "Basic", "Plus") or if surrounding context contains plan/tier keywords
+                is_capitalized = matched_raw[0].isupper() if matched_raw else False
+                surrounding = text[max(0, m.start() - 20) : min(len(text), m.end() + 20)].lower()
+                has_tier_context = any(kw in surrounding for kw in ["plan", "tier", "package", "subscri", "edition", "level", "license", "$", "€", "£"])
+                if not (is_capitalized or has_tier_context):
+                    continue
+            matches.append(m)
+
         if not matches:
             continue
 
@@ -101,10 +110,23 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
                 start_pos = match.start()
                 end_pos = match.end()
 
-                # ── Forward scan: look 150 chars ahead (within same line) ──
+                # ── Forward scan: look 150 chars ahead ──
+                # Truncate at section breaks or next tier name, but allow single newlines
                 raw_window = text[start_pos : min(len(text), start_pos + 150)]
-                newline_idx = raw_window.find("\n")
-                forward_window = raw_window[:newline_idx] if newline_idx != -1 else raw_window
+                
+                # Truncate at double newlines or markdown section dividers
+                sec_break = re.search(r"(\n\s*\n|---|===|#{1,6}\s)", raw_window)
+                if sec_break and sec_break.start() > 0:
+                    forward_window = raw_window[:sec_break.start()]
+                else:
+                    forward_window = raw_window
+
+                # Truncate if another TARGET_TIER appears after our match
+                for other_tier in TARGET_TIERS:
+                    if other_tier.lower() != tier.lower():
+                        ot_match = re.search(r"\b" + re.escape(other_tier) + r"\b", forward_window[len(tier):], re.IGNORECASE)
+                        if ot_match:
+                            forward_window = forward_window[:len(tier) + ot_match.start()]
 
                 forward_lower = forward_window[:50].lower()
                 if any(phrase in forward_lower for phrase in _NAV_CONTEXT_PHRASES):
@@ -138,14 +160,16 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
                         except ValueError:
                             continue
 
-                # ── Backward scan: look 100 chars before (within same line) ──
+                # ── Backward scan: look 100 chars before ──
                 # Catches "$20/mo - Pro Plan" patterns
                 if not found_forward and not best_candidate:
                     back_start = max(0, start_pos - 100)
                     backward_raw = text[back_start:end_pos]
-                    # Only look at the same line
-                    last_newline = backward_raw.rfind("\n")
-                    backward_window = backward_raw[last_newline + 1:] if last_newline != -1 else backward_raw
+                    sec_break_back = re.search(r"(\n\s*\n|---|===|#{1,6}\s)", backward_raw)
+                    if sec_break_back:
+                        backward_window = backward_raw[sec_break_back.end():]
+                    else:
+                        backward_window = backward_raw
 
                     for pattern in PRICE_PATTERNS:
                         price_match = re.search(pattern, backward_window, re.IGNORECASE)
@@ -168,7 +192,14 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
             if best_candidate is None:
                 for match in matches:
                     raw_window = text[match.start() : min(len(text), match.start() + 150)]
-                    if any(w in raw_window.lower() for w in ["contact", "custom", "enterprise", "talk to sales", "get a quote"]):
+                    raw_lower = raw_window.lower()
+                    # Require STRONG contact-sales signals, not just generic words like "contact" or "enterprise"
+                    _CONTACT_SALES_PHRASES = [
+                        "contact sales", "contact us", "talk to sales", "get a quote",
+                        "request pricing", "request a quote", "custom pricing",
+                        "book a call", "schedule a demo",
+                    ]
+                    if any(phrase in raw_lower for phrase in _CONTACT_SALES_PHRASES):
                         best_candidate = {
                             "tier_name": tier.capitalize(),
                             "price": None,
@@ -181,7 +212,8 @@ def extract_plan_prices(text: str) -> List[Dict[str, Any]]:
             results.append(best_candidate)
             seen_tiers.add(tier.lower())
 
-    return results
+    # Cap total extracted tiers to prevent chart pollution from noisy pages
+    return results[:MAX_TIERS_PER_PAGE]
 
 
 def _regex_diff_pricing(old_text: str, new_text: str) -> List[Dict[str, Any]]:

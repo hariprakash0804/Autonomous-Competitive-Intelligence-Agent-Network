@@ -186,12 +186,21 @@ def _parse_html(html_content: str) -> Optional[BeautifulSoup]:
             return None
 
 
+# ── Cookie / consent / GDPR banner detection patterns ────────────────────────
+_COOKIE_BANNER_PATTERNS = re.compile(
+    r"(cookie|consent|gdpr|privacy-banner|cookie-banner|cookie-notice|"
+    r"cookie-consent|cookie-policy|cc-banner|cc-window|cc-compliance|"
+    r"onetrust|cookiebot|klaro|tarteaucitron|osano|quantcast-choice)",
+    re.IGNORECASE,
+)
+
+
 def clean_html(html_content: str) -> str:
     """
-    Extracts visible text content from HTML while preserving text from
-    structural elements (header, footer, nav, buttons) that carry company
-    identity, contact info, and CTA signals.
-    Only strips elements that never contain useful readable text.
+    Extracts visible text content from HTML with aggressive boilerplate removal.
+    Strips navigation menus, cookie banners, footers, and repetitive UI elements
+    that produce generic/noisy text. Prefers <main>, <article>, <section> content
+    when available; falls back to full <body> only if main content areas are empty.
     """
     if not html_content:
         return ""
@@ -199,10 +208,7 @@ def clean_html(html_content: str) -> str:
     if soup is None:
         return ""
 
-    # Strip elements that NEVER contain useful readable text.
-    # Keep: header, footer, nav (company name, tagline, contact, social links)
-    # Keep: button (CTA text like "Start Free Trial", "Book a Demo")
-    # Keep: form labels (contact form fields reveal product capabilities)
+    # ── Phase 1: Strip elements that NEVER contain useful readable text ──
     for tag in soup([
         "script", "style", "noscript", "svg", "iframe", "template",
         "code", "pre", "symbol", "canvas", "object", "embed",
@@ -210,13 +216,90 @@ def clean_html(html_content: str) -> str:
     ]):
         tag.decompose()
 
-    text = soup.get_text(separator=" ", strip=True)
+    # ── Phase 2: Strip boilerplate structural elements ──
+    # Navigation menus produce massive amounts of repetitive link text
+    for tag in soup.find_all("nav"):
+        tag.decompose()
 
-    # Strip residual inline JSON, JS variable declarations, and CSS rules
+    # Cookie consent banners / GDPR dialogs (detected by class/id patterns)
+    # Collect targets first to avoid mutating tree during iteration
+    cookie_tags_to_remove = []
+    for tag in soup.find_all(True):
+        if tag.attrs is None:
+            continue
+        tag_classes = " ".join(tag.get("class", []) or [])
+        tag_id = tag.get("id", "") or ""
+        tag_role = tag.get("role", "") or ""
+        combined_attrs = f"{tag_classes} {tag_id} {tag_role}".lower()
+        if _COOKIE_BANNER_PATTERNS.search(combined_attrs):
+            cookie_tags_to_remove.append(tag)
+    for tag in cookie_tags_to_remove:
+        tag.decompose()
+
+    # Strip <footer> elements (repetitive site-wide links, legal text, social icons)
+    for tag in soup.find_all("footer"):
+        tag.decompose()
+
+    # Strip duplicate <header> content ONLY if main/article content exists
+    # (headers contain company name/tagline but also repetitive nav links)
+    main_content = soup.find(["main", "article"])
+    if main_content:
+        for tag in soup.find_all("header"):
+            tag.decompose()
+
+    # ── Phase 3: Prefer main content areas over full body ──
+    # Modern sites wrap meaningful content in <main>, <article>, or role="main"
+    content_source = None
+    for selector in ["main", "[role='main']", "article"]:
+        found = soup.select_one(selector) if "[" in selector else soup.find(selector)
+        if found:
+            candidate_text = found.get_text(separator=" ", strip=True)
+            # Only use if it has substantial content (not just a wrapper)
+            if len(candidate_text) > 200:
+                content_source = found
+                break
+
+    # Fallback: try <section> elements combined, then full body
+    if not content_source:
+        sections = soup.find_all("section")
+        if sections:
+            combined_section_text = " ".join(
+                s.get_text(separator=" ", strip=True) for s in sections
+            )
+            if len(combined_section_text) > 200:
+                # Use full soup but sections will dominate since nav/footer are removed
+                content_source = soup
+        if not content_source:
+            content_source = soup
+
+    text = content_source.get_text(separator=" ", strip=True)
+
+    # ── Phase 4: Strip residual inline JS/JSON/CSS artifacts ──
     text = re.sub(r"\{\s*\"[^\"]+\"\s*:\s*[^}]+\}", " ", text)
     text = re.sub(r"\b(?:var|const|let)\s+[a-zA-Z0-9_$]+\s*=\s*[^;]+;", " ", text)
     text = re.sub(r"\bfunction\s*\([^)]*\)\s*\{[^}]*\}", " ", text)
     text = re.sub(r"\.[a-zA-Z0-9_-]+\s*\{[^}]*\}", " ", text)
+
+    # ── Phase 5: Deduplicate repeated phrases (nav items that survived) ──
+    # Split into sentences/phrases and remove exact duplicates while preserving order
+    words = text.split()
+    if len(words) > 50:
+        # Sliding window dedup: remove repeated 3+ word sequences
+        seen_trigrams = set()
+        deduped_words = []
+        i = 0
+        while i < len(words):
+            if i + 2 < len(words):
+                trigram = f"{words[i]} {words[i+1]} {words[i+2]}".lower()
+                if trigram in seen_trigrams:
+                    # Skip this word (part of repeated sequence)
+                    i += 1
+                    continue
+                seen_trigrams.add(trigram)
+            deduped_words.append(words[i])
+            i += 1
+        text = " ".join(deduped_words)
+
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -937,10 +1020,103 @@ def compute_content_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+# ── Google domain detection ──────────────────────────────────────────────────
+_GOOGLE_DOMAINS = {
+    "google.com/search",
+    "www.google.com/search",
+    "news.google.com",
+}
+
+
+def _is_google_url(url: str) -> bool:
+    """Returns True if the URL is a Google Search or Google News URL that will likely be blocked."""
+    url_lower = url.lower()
+    return any(domain in url_lower for domain in _GOOGLE_DOMAINS)
+
+
+def validate_content_relevance(
+    clean_text: str,
+    url: str,
+    company_name: str = "",
+    company_domain: str = "",
+) -> tuple:
+    """
+    Validates whether scraped content is actually relevant to the target company.
+    Returns (is_relevant: bool, reason: str | None).
+
+    Rules:
+    - For the company's OWN domain pages: at least 1 mention of company name or
+      domain in the first 3000 chars (very lenient — their own site should mention themselves)
+    - For THIRD-PARTY pages (reviews, news, search results): at least 3 mentions
+      of the company name in the content (ensures it's actually about them)
+    - Skip validation for user-uploaded documents and very short pages
+    """
+    if not clean_text or len(clean_text) < 100:
+        return True, None  # Too short to validate meaningfully
+
+    if not company_name and not company_domain:
+        return True, None  # No company info to validate against
+
+    text_lower = clean_text[:5000].lower()
+    url_lower = url.lower()
+
+    # Normalize company identifiers for matching
+    name_lower = company_name.lower().strip() if company_name else ""
+    domain_lower = company_domain.lower().strip() if company_domain else ""
+    if domain_lower.startswith("www."):
+        domain_lower = domain_lower[4:]
+    # Extract the brand name from domain (e.g., "anthropic" from "anthropic.com")
+    domain_brand = domain_lower.split(".")[0] if domain_lower else ""
+
+    # Build search terms — the company name words and domain brand
+    search_terms = []
+    if name_lower and len(name_lower) >= 2:
+        search_terms.append(name_lower)
+    if domain_brand and len(domain_brand) >= 3 and domain_brand != name_lower:
+        search_terms.append(domain_brand)
+
+    if not search_terms:
+        return True, None  # Can't validate without identifiers
+
+    # Count mentions of any search term
+    mention_count = 0
+    for term in search_terms:
+        mention_count += text_lower.count(term)
+
+    # Determine if this is the company's own domain page
+    is_own_domain = False
+    if domain_lower and domain_lower in url_lower:
+        is_own_domain = True
+
+    # Also check if it's a known review/search site about the company
+    _THIRD_PARTY_DOMAINS = {
+        "trustpilot.com", "g2.com", "capterra.com", "trustradius.com",
+        "google.com", "news.google.com", "producthunt.com",
+        "gartner.com", "softwareadvice.com",
+    }
+    is_third_party = any(tp in url_lower for tp in _THIRD_PARTY_DOMAINS)
+
+    if is_own_domain:
+        # Very lenient: their own site should mention themselves at least once
+        if mention_count < 1:
+            return False, f"Company's own domain page has 0 mentions of '{search_terms[0]}' — likely a generic error or redirect page"
+        return True, None
+    elif is_third_party:
+        # Third-party pages need stronger signal to confirm relevance
+        if mention_count < 3:
+            return False, f"Third-party page has only {mention_count} mention(s) of '{search_terms[0]}' — content may not be about the target company"
+        return True, None
+    else:
+        # Unknown domain — moderate threshold
+        if mention_count < 1:
+            return False, f"Page has 0 mentions of '{search_terms[0]}' — content not relevant to target company"
+        return True, None
+
+
 def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, Optional[str]]:
     """
     Evaluates whether the scraped content is empty, a JS-render shell,
-    binary corrupted data, or blocked by bot detection.
+    binary corrupted data, blocked by bot detection, or a Google CAPTCHA page.
     """
     # Accept any 2xx status code, not just exactly 200
     if status_code < 200 or status_code >= 400:
@@ -957,6 +1133,29 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
     lower_text = clean_text.lower()
     lower_html = html.lower() if html else ""
 
+    # ── Google CAPTCHA / bot-block detection ──────────────────────────────
+    # Google returns a minimal page saying "having trouble accessing" when it
+    # detects automated requests. These are always useless.
+    _GOOGLE_BLOCK_PATTERNS = [
+        r"if you're having trouble accessing google search",
+        r"having trouble accessing google search",
+        r"unusual traffic from your computer network",
+        r"our systems have detected unusual traffic",
+        r"please click here.*or send feedback",
+        r"this page checks to see if it's really you",
+    ]
+    for gp in _GOOGLE_BLOCK_PATTERNS:
+        if re.search(gp, lower_text, re.IGNORECASE):
+            return True, f"Google bot-detection/CAPTCHA block detected"
+
+    # ── Cookie-consent-only pages ────────────────────────────────────────
+    # Some pages return only a cookie consent dialog with no real content
+    if len(clean_text) < 800:
+        cookie_terms = ["cookie", "consent", "gdpr", "privacy policy", "accept all", "reject all", "cookie settings"]
+        cookie_mentions = sum(1 for ct in cookie_terms if ct in lower_text)
+        if cookie_mentions >= 3:
+            return True, "Page contains only cookie consent dialog — no meaningful content"
+
     # Detect 404 / Page Not Found / Broken URL pages
     # Only flag as 404 on SHORT pages (<1500 chars) — long pages that mention '404'
     # in docs/FAQs are legitimate content, not error pages.
@@ -969,7 +1168,8 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
             r"\b404\s*not\s*found\b",
             r"\bthis\s*page\s*does\s*not\s*exist\b",
             r"\bthe\s*page\s*you\s*are\s*looking\s*for\s*could\s*not\s*be\s*found\b",
-            r"\b404:\s*page\s*not\s*found\b"
+            r"\b404:\s*page\s*not\s*found\b",
+            r"\ba\s*404\s*poem\b",
         ]
 
         for nf_pat in not_found_patterns:
@@ -985,10 +1185,44 @@ def check_is_stale(html: str, clean_text: str, status_code: int) -> Tuple[bool, 
     return False, None
 
 
+def sanitize_text_content(text: str) -> str:
+    """
+    Sanitizes raw string content to eliminate binary noise, gzip compression artifacts,
+    null bytes, and un-decoded control codes. Returns clean readable text.
+    """
+    if not text:
+        return ""
+
+    # 1. If text starts with GZIP header bytes (\x1f\x8b), attempt decompression
+    if text.startswith("\x1f\x8b") or (len(text) > 2 and ord(text[0]) == 0x1f and ord(text[1]) == 0x8b):
+        try:
+            import gzip
+            raw_bytes = text.encode("iso-8859-1", errors="ignore")
+            decompressed = gzip.decompress(raw_bytes)
+            text = decompressed.decode("utf-8", errors="ignore")
+        except Exception:
+            return "[Non-text binary content skipped]"
+
+    # 2. Strip non-printable control characters (\x00-\x08, \x0b-\x0c, \x0e-\x1f, \x7f-\x9f)
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
+
+    if not cleaned.strip():
+        return ""
+
+    # 3. Check for high density of unprintable / replacement unicode symbols (\ufffd) or non-ASCII noise
+    sample = cleaned[:1000]
+    garbled_char_count = sum(
+        1 for c in sample if ord(c) > 127 and not c.isalnum() and c not in " \n\r\t.,!?-()[]{}:;\"'/$%&@#+=*<>_~"
+    )
+    if garbled_char_count / max(len(sample), 1) > 0.2:
+        return "[Binary file content - Asset skipped for text analysis]"
+
+    return cleaned.strip()
+
+
 def _extract_text_by_content_type(response: httpx.Response, content_type: str) -> str:
     """Extracts clean text from a response based on its detected content type, safely handling gzip and binary streams."""
     if content_type == "binary":
-        # Check if it is GZIP compressed data that can be safely decompressed into text
         try:
             if response.content.startswith(b"\x1f\x8b"):
                 import gzip
@@ -1006,8 +1240,8 @@ def _extract_text_by_content_type(response: httpx.Response, content_type: str) -
     except Exception:
         raw_text = response.content.decode("utf-8", errors="ignore")
 
-    # Sanity check: filter out garbled binary characters (\ufffd) or un-rendered gzip
-    if "\ufffd" in raw_text[:200] or raw_text.startswith("\x1f\x8b"):
+    raw_text = sanitize_text_content(raw_text)
+    if not raw_text or raw_text.startswith("[Binary"):
         return "[Non-text binary content skipped]"
 
     if content_type == "html":
@@ -1017,7 +1251,6 @@ def _extract_text_by_content_type(response: httpx.Response, content_type: str) -
     elif content_type == "xml":
         return clean_xml_content(raw_text)
     else:
-        # Plain text — clean up whitespace
         return re.sub(r"\s+", " ", raw_text).strip()[:10000]
 
 
@@ -1232,8 +1465,9 @@ def _run_concurrent_fallbacks(url: str, use_playwright: bool = True) -> Optional
 def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_playwright: bool = True) -> Dict[str, Any]:
     """
     High-Performance Multi-Engine Hybrid Scraper:
-    1. Fast-Path HTTPX Scraper (sub-second performance).
-    2. Concurrent Jina + Playwright Fallback (parallel for max speed).
+    1. Google URL Fast-Path: Skip HTTPX (always blocked) → direct Jina Reader.
+    2. Fast-Path HTTPX Scraper (sub-second performance).
+    3. Concurrent Jina + Playwright Fallback (parallel for max speed).
     """
     _empty_structured = {
         "metadata": {
@@ -1269,6 +1503,27 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
             **_empty_structured,
         }
     url = url_or_error
+
+    # 1.5. Google URLs: Skip HTTPX entirely (Google always blocks automated requests)
+    #      Route directly to Jina Reader which can bypass Google's bot detection.
+    if _is_google_url(url):
+        print(f"[Scraper] Google URL detected — skipping HTTPX, routing directly to Jina Reader: {url}", flush=True)
+        jina_result = scrape_with_jina_reader(url, timeout_sec=6.0)
+        if jina_result and not jina_result.get("is_stale"):
+            return jina_result
+        # If Jina also fails, return stale result rather than wasting time on HTTPX
+        return jina_result or {
+            "url": url,
+            "raw_content": "",
+            "clean_text": "",
+            "content_hash": "",
+            "is_stale": True,
+            "stale_reason": "Google URL: both direct scraping and Jina Reader failed (bot detection)",
+            "status_code": 0,
+            "content_type": "",
+            "scraped_by": "none",
+            **_empty_structured,
+        }
 
     # 2. Fast-Path Engine: HTTPX Client (sub-second performance)
     last_error = None
@@ -1315,6 +1570,9 @@ def scrape_url(url: str, timeout_sec: float = 3.5, max_retries: int = 1, use_pla
                 content_type = _detect_content_type(response)
                 clean_text = _extract_text_by_content_type(response, content_type)
                 raw_content = clean_text if content_type == "binary" else response.text
+
+                raw_content = sanitize_text_content(raw_content)
+                clean_text = sanitize_text_content(clean_text)
 
                 if content_type == "html":
                     structured = extract_all_structured_data(raw_content, url)

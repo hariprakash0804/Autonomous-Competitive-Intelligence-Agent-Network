@@ -95,11 +95,13 @@ def ingest_url_for_competitor(
             "url": url,
         }
 
-    # Create new snapshot record — store enriched text for better retrieval
+    from app.services.scraper import sanitize_text_content
+    raw_content_safe = sanitize_text_content(enriched_text if enriched_text else scrape_res.get("raw_content", ""))
+
     snapshot = Snapshot(
         competitor_id=competitor.id,
         source_type=source_type,
-        raw_content=enriched_text if enriched_text else scrape_res.get("raw_content", ""),
+        raw_content=raw_content_safe,
         content_hash=content_hash,
         is_stale=is_stale,
         fetched_at=datetime.now(timezone.utc),
@@ -224,13 +226,13 @@ def ingest_competitor_urls(db: Session, competitor_id: uuid.UUID) -> List[Dict[s
                     _trustpilot_domain = _host
                     break
 
-        c_slug = urllib.parse.quote(_re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-"))
+        # Direct review platform URLs (no Google Search — it always blocks with CAPTCHAs)
         if _trustpilot_domain:
             review_targets.append(f"https://www.trustpilot.com/review/{urllib.parse.quote(_trustpilot_domain)}")
+        # Direct G2 product URL (slug format: lowercase, hyphenated name)
+        c_slug = _re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-")
         if c_slug:
-            review_targets.append(f"https://www.g2.com/products/{c_slug}/reviews")
-        g_query = urllib.parse.quote_plus(f"{competitor.name} customer reviews and ratings")
-        review_targets.append(f"https://www.google.com/search?q={g_query}")
+            review_targets.append(f"https://www.g2.com/products/{urllib.parse.quote(c_slug)}/reviews")
 
     for rev_url in review_targets[:3]:
         try:

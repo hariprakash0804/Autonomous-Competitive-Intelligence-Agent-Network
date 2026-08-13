@@ -347,17 +347,14 @@ def start_pipeline_run(
         except Exception:
             return ""
 
-    # Common pricing subpath probe endpoints (probed symmetrically for both companies)
+    # Common pricing subpath probe endpoints (probed symmetrically for both companies).
+    # Only the 2 most universally valid paths are probed here to avoid 404 noise.
+    # Deeper pricing URL discovery (e.g., /api/pricing, /product/pricing, /enterprise/pricing)
+    # happens in the researcher node's Pass 2 via generate_pricing_probe_urls() after
+    # homepage link analysis confirms which paths actually exist.
     PRICING_PROBE_PATHS = [
-        "/pricing",
+        "/pricings",
         "/plans",
-        "/business/pricing",
-        "/enterprise/pricing",
-        "/api/pricing",
-        "/product/pricing",
-        "/pricing/plans",
-        "/rates",
-        "/prices",
     ]
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -379,14 +376,17 @@ def start_pipeline_run(
                 _add_url(f"{u_base}{probe_path}")
 
         if user_domain:
-            # C. User Customer Review Sources (Trustpilot, G2, Google Review Search)
+            # C. User Customer Review Sources (Trustpilot, G2 direct links)
+            # NOTE: Google Search URLs are removed because Google always blocks automated
+            # requests with CAPTCHAs. Direct Trustpilot/G2 links are far more effective.
             _add_url(f"https://www.trustpilot.com/review/{quote(user_domain)}")
-            g2_user_q = quote_plus(f"site:g2.com {user_company_name} reviews")
-            _add_url(f"https://www.google.com/search?q={g2_user_q}")
-            g_user_q = quote_plus(f"{user_company_name} customer reviews and ratings")
-            _add_url(f"https://www.google.com/search?q={g_user_q}")
+            # Direct G2 product URL (slug format: lowercase, hyphenated company name)
+            import re as _re
+            g2_user_slug = _re.sub(r"[^\w\s-]", "", user_company_name.lower()).strip().replace(" ", "-")
+            if g2_user_slug:
+                _add_url(f"https://www.g2.com/products/{quote(g2_user_slug)}/reviews")
 
-            # D. User Company Market News Search
+            # D. User Company Market News Search (routed through Jina Reader automatically)
             news_user_q = quote_plus(user_company_name)
             _add_url(f"https://news.google.com/search?q={news_user_q}&hl=en-US")
 
@@ -431,17 +431,20 @@ def start_pipeline_run(
     if competitor.pricing_url:
         _add_url(competitor.pricing_url.strip())
 
-    # C. Competitor Customer Review Sources (Trustpilot, G2, Google Review Search)
+    # C. Competitor Customer Review Sources (Trustpilot, G2 direct links)
+    # NOTE: Google Search URLs are removed — Google always blocks with CAPTCHAs.
+    # Direct Trustpilot/G2 product URLs are far more reliable for review collection.
     review_sources = list(competitor.review_urls) if competitor.review_urls else []
     if not review_sources:
         from urllib.parse import quote, quote_plus
+        import re as _re
 
         if comp_domain:
             review_sources.append(f"https://www.trustpilot.com/review/{quote(comp_domain)}")
-        g2_query = quote_plus(f"site:g2.com {competitor.name} reviews")
-        review_sources.append(f"https://www.google.com/search?q={g2_query}")
-        g_query = quote_plus(f"{competitor.name} customer reviews and ratings")
-        review_sources.append(f"https://www.google.com/search?q={g_query}")
+        # Direct G2 product URL (slug format: lowercase, hyphenated name)
+        g2_slug = _re.sub(r"[^\w\s-]", "", competitor.name.lower()).strip().replace(" ", "-")
+        if g2_slug:
+            review_sources.append(f"https://www.g2.com/products/{quote(g2_slug)}/reviews")
 
     for ru in review_sources[:3]:
         if ru:

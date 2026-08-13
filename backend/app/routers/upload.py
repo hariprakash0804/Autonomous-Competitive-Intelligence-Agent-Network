@@ -227,10 +227,13 @@ async def upload_document(
         import hashlib
         content_hash = hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
 
+        from app.services.scraper import sanitize_text_content
+        extracted_text_safe = sanitize_text_content(extracted_text)
+
         snapshot = Snapshot(
             competitor_id=competitor.id,
             source_type=snap_source,
-            raw_content=extracted_text,
+            raw_content=extracted_text_safe,
             content_hash=content_hash,
             is_stale=False,
             fetched_at=datetime.now(timezone.utc),

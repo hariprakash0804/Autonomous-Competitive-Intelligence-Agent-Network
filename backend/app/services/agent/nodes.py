@@ -261,6 +261,26 @@ def researcher_node(state: AgentState) -> AgentState:
         # Record snapshots in DB & FAISS if valid — batched commits
         db_start = time.time()
         snapshots_to_index = []
+
+        # Import content relevance validator to reject pages with irrelevant content
+        from app.services.scraper import sanitize_text_content, validate_content_relevance
+
+        # Resolve competitor domain for relevance validation
+        _comp_domain = ""
+        if competitor:
+            if competitor.domain:
+                _comp_domain = competitor.domain.lower().split(":")[0]
+                if _comp_domain.startswith("www."):
+                    _comp_domain = _comp_domain[4:]
+            elif competitor.company_url:
+                _cd_comp = competitor.company_url.strip()
+                if not _cd_comp.startswith(("http://", "https://")):
+                    _cd_comp = "https://" + _cd_comp
+                _cd_parsed = urlparse(_cd_comp)
+                _comp_domain = (_cd_parsed.netloc or "").lower().split(":")[0]
+                if _comp_domain.startswith("www."):
+                    _comp_domain = _comp_domain[4:]
+
         for scrape_res in raw_pages:
             url = scrape_res.get("url", "")
             if competitor and not scrape_res["is_stale"] and scrape_res["clean_text"]:
@@ -270,13 +290,31 @@ def researcher_node(state: AgentState) -> AgentState:
                     print(f"[Researcher Node] Skipping snapshot for user company page: {url}", flush=True)
                     continue
 
+                # Validate content relevance: reject pages that aren't about the target company.
+                # This prevents storing Trustpilot pages for wrong companies, Google News generic
+                # feeds, or other irrelevant content as competitor snapshots.
+                is_relevant, relevance_reason = validate_content_relevance(
+                    clean_text=scrape_res.get("clean_text", ""),
+                    url=url,
+                    company_name=competitor.name,
+                    company_domain=_comp_domain,
+                )
+                if not is_relevant:
+                    print(f"[Researcher Node] Skipping irrelevant content: {url} — {relevance_reason}", flush=True)
+                    # Mark as stale so it's excluded from downstream analysis
+                    scrape_res["is_stale"] = True
+                    scrape_res["stale_reason"] = relevance_reason
+                    continue
+
                 source_type = _detect_source_type(scrape_res)
+
+                clean_text_safe = sanitize_text_content(scrape_res.get("clean_text") or scrape_res.get("raw_content") or "")
 
                 snapshot = Snapshot(
                     competitor_id=competitor.id,
                     source_type=source_type,
-                    raw_content=scrape_res["clean_text"],
-                    content_hash=scrape_res["content_hash"],
+                    raw_content=clean_text_safe,
+                    content_hash=scrape_res.get("content_hash", ""),
                     source_url=scrape_res.get("url", "")[:2048] or None,
                     is_stale=False,
                     fetched_at=datetime.now(timezone.utc),
@@ -284,7 +322,7 @@ def researcher_node(state: AgentState) -> AgentState:
                 db.add(snapshot)
                 db.flush()  # Get snapshot.id without committing — batched
 
-                snapshots_to_index.append((snapshot, source_type, scrape_res["clean_text"]))
+                snapshots_to_index.append((snapshot, source_type, clean_text_safe))
 
         # Single batch commit for all snapshots
         if snapshots_to_index:

@@ -31,6 +31,8 @@ def get_competitor_snapshots(
         .order_by(Snapshot.fetched_at.desc())
     ).all()
 
+    from app.services.scraper import sanitize_text_content
+
     return [
         {
             "id": str(s.id),
@@ -39,7 +41,7 @@ def get_competitor_snapshots(
             "content_hash": s.content_hash,
             "is_stale": s.is_stale,
             "fetched_at": s.fetched_at.isoformat(),
-            "raw_content_preview": s.raw_content[:200] if s.raw_content else "",
+            "raw_content_preview": sanitize_text_content(s.raw_content or "")[:200],
         }
         for s in snapshots
     ]

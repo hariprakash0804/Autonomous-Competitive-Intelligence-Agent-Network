@@ -345,12 +345,15 @@ def get_competitor_intelligence(
         for t in extract_tech_stack(s.raw_content):
             tech_stack.add(t)
 
+        from app.services.scraper import sanitize_text_content
+        safe_text = sanitize_text_content(s.raw_content or "")
+
         page_summaries.append({
             "snapshot_id": str(s.id),
             "source_type": s.source_type.value if hasattr(s.source_type, "value") else str(s.source_type),
             "fetched_at": s.fetched_at.isoformat(),
-            "content_length": len(s.raw_content),
-            "snippet": s.raw_content[:200] + "...",
+            "content_length": len(safe_text),
+            "snippet": safe_text[:200] + "...",
         })
 
     return {

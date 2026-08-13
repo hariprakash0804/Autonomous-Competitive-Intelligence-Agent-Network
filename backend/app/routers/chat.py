@@ -90,7 +90,10 @@ def chat_query(
             if snapshots:
                 for s in snapshots[:2]:
                     if s.raw_content:
-                        fallback_texts.append(f"Snapshot ({s.source_type.value if hasattr(s.source_type, 'value') else s.source_type} fetched {s.fetched_at}) for {comp.name}:\n{s.raw_content[:1200]}")
+                        from app.services.scraper import sanitize_text_content
+                        safe_content = sanitize_text_content(s.raw_content)
+                        if safe_content and not safe_content.startswith("[Binary"):
+                            fallback_texts.append(f"Snapshot ({s.source_type.value if hasattr(s.source_type, 'value') else s.source_type} fetched {s.fetched_at}) for {comp.name}:\n{safe_content[:1200]}")
 
             if not reports and not snapshots:
                 fallback_texts.append(

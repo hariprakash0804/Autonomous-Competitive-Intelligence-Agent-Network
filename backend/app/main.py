@@ -106,26 +106,22 @@ static_dir = Path(__file__).resolve().parent.parent / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# CORS configuration — parse configured origins with local development support
-from app.config import settings
-
-origins = [orig.strip() for orig in (settings.ALLOWED_ORIGINS or "").split(",") if orig.strip()]
-if not origins:
-    origins = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]
-
+# CORS — allow all valid HTTP/HTTPS web origins dynamically with credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     """Enforces enterprise HTTP security headers across all API responses."""
+    if request.method == "OPTIONS":
+        return await call_next(request)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"

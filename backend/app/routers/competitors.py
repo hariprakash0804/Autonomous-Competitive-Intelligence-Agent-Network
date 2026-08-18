@@ -243,7 +243,7 @@ def get_competitor_details(
     return {
         "id": str(competitor.id),
         "name": competitor.name,
-        "company_url": competitor.company_url or current_user.company_url,
+        "company_url": competitor.company_url,
         "pricing_url": competitor.pricing_url,
         "domain": competitor.domain,
         "description_text": competitor.description_text or "",
@@ -361,7 +361,7 @@ def get_competitor_intelligence(
         "name": competitor.name,
         "domain": competitor.domain,
         "pricing_url": competitor.pricing_url,
-        "company_url": competitor.company_url or current_user.company_url,
+        "company_url": competitor.company_url,
         "technographics": sorted(list(tech_stack)),
         "snapshot_count": len(snapshots),
         "analyzed_pages": page_summaries[:10],

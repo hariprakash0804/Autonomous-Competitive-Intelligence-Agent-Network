@@ -61,10 +61,9 @@ export default function DashboardPage() {
   const [logModalData, setLogModalData] = useState(null); // { runId, competitorName }
   const [triggeringAll, setTriggeringAll] = useState(false);
 
-  // Dual URL competitor form state
+  // Add Competitor form state
   const [newCompName, setNewCompName] = useState('');
-  const [newCompanyUrl, setNewCompanyUrl] = useState(user?.company_url || '');
-  const [useSavedUrl, setUseSavedUrl] = useState(Boolean(user?.company_url));
+  const [newCompanyUrl, setNewCompanyUrl] = useState('');
   const [newPricingUrl, setNewPricingUrl] = useState('');
   const [newCompDescriptionText, setNewCompDescriptionText] = useState('');
   const [newCompDocFile, setNewCompDocFile] = useState(null);
@@ -82,18 +81,13 @@ export default function DashboardPage() {
   const [editError, setEditError] = useState('');
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
-  const savedCompanyUrl = (typeof user?.company_url === 'string' && user.company_url.trim()) ? user.company_url.trim() : '';
-
-  const handleOpenAddModal = (overrideUrl) => {
+  const handleOpenAddModal = () => {
     setAddError('');
     setNewCompName('');
+    setNewCompanyUrl('');
     setNewPricingUrl('');
     setNewCompDescriptionText('');
     setNewCompDocFile(null);
-    const validOverride = (typeof overrideUrl === 'string' && overrideUrl.trim()) ? overrideUrl.trim() : null;
-    const currentSaved = validOverride || savedCompanyUrl;
-    setNewCompanyUrl(currentSaved);
-    setUseSavedUrl(Boolean(currentSaved));
     setShowAddModal(true);
   };
 
@@ -233,19 +227,10 @@ export default function DashboardPage() {
     }
   };
 
-  const handleOnboardingComplete = async (updatedUserData) => {
+  const handleOnboardingComplete = async () => {
     await fetchCompetitors();
-    const rawUrl = updatedUserData?.company_url || user?.company_url;
-    const effectiveCompanyUrl = (typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : '';
-    if (effectiveCompanyUrl) {
-      setNewCompanyUrl(effectiveCompanyUrl);
-      setUseSavedUrl(true);
-    } else {
-      setNewCompanyUrl('');
-      setUseSavedUrl(false);
-    }
-    toast.info('Fetching your onboarded company details for competitor comparison...', 'Onboarding Auto-Sync');
-    handleOpenAddModal(effectiveCompanyUrl);
+    toast.info('Your company profile is configured! Add your first competitor target below.', 'Onboarding Completed');
+    handleOpenAddModal();
   };
 
   const handleAddCompetitorSubmit = async (e) => {
@@ -254,12 +239,10 @@ export default function DashboardPage() {
     setSubmittingAdd(true);
     setAddError('');
 
-    const effectiveCompanyUrl = (useSavedUrl && savedCompanyUrl) ? savedCompanyUrl : newCompanyUrl;
-
     try {
       const payload = {
         name: newCompName.trim(),
-        company_url: effectiveCompanyUrl || null,
+        company_url: newCompanyUrl ? newCompanyUrl.trim() : null,
         pricing_url: newPricingUrl ? newPricingUrl.trim() : null,
         description_text: newCompDescriptionText ? newCompDescriptionText.trim() : null,
         review_urls: [],
@@ -279,32 +262,21 @@ export default function DashboardPage() {
         }
       }
 
-      // Auto-save new company URL to user profile if user changed/entered a new URL
-      if (effectiveCompanyUrl && effectiveCompanyUrl !== user?.company_url) {
-        try {
-          await api.put('/auth/profile', {
-            name: user?.name,
-            company_name: user?.company_name,
-            company_url: effectiveCompanyUrl,
-          });
-        } catch (profileErr) {
-          console.error('Failed to auto-update profile company URL:', profileErr);
-        }
-      }
-
       setShowAddModal(false);
       setNewCompName('');
+      setNewCompanyUrl('');
       setNewPricingUrl('');
       setNewCompDescriptionText('');
       setNewCompDocFile(null);
       await fetchCompetitors();
       setSelectedCompId(res.data.id);
+      toast.success(`Competitor "${newCompName.trim()}" added successfully.`, 'Target Added');
     } catch (err) {
       console.error('Failed to add competitor:', err);
       if (err.response?.status === 409) {
         setAddError(err.response.data.detail || 'A competitor with this domain already exists in your account.');
       } else {
-        setAddError('Failed to add competitor.');
+        setAddError('Failed to add competitor. Please check inputs.');
       }
     } finally {
       setSubmittingAdd(false);
@@ -684,64 +656,27 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 uppercase tracking-wider text-[10px]">
-                  URL 1: Your Company URL
+                <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
+                  Competitor Website / Homepage (e.g. https://stripe.com)
                 </label>
-
-                {useSavedUrl && savedCompanyUrl ? (
-                  <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between gap-3 animate-scale-in">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Using Saved Company URL</span>
-                      </div>
-                      <p className="text-xs font-mono text-slate-200 truncate mt-0.5">{savedCompanyUrl}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUseSavedUrl(false);
-                        setNewCompanyUrl(savedCompanyUrl);
-                      }}
-                      className="px-2.5 py-1 text-[11px] bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 rounded-lg transition-colors font-medium shrink-0"
-                    >
-                      Change URL
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 animate-scale-in">
-                    <input
-                      type="url"
-                      value={newCompanyUrl}
-                      onChange={(e) => setNewCompanyUrl(e.target.value)}
-                      placeholder="https://mycompany.com"
-                      className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
-                    />
-                    {savedCompanyUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseSavedUrl(true);
-                          setNewCompanyUrl(savedCompanyUrl);
-                        }}
-                        className="text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 transition-colors"
-                      >
-                        ← Revert to saved URL ({savedCompanyUrl})
-                      </button>
-                    )}
-                  </div>
-                )}
+                <input
+                  type="url"
+                  value={newCompanyUrl}
+                  onChange={(e) => setNewCompanyUrl(e.target.value)}
+                  placeholder="https://competitor.com"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
               </div>
 
               <div>
                 <label className="block text-slate-400 font-semibold mb-1 uppercase tracking-wider text-[10px]">
-                  Competitor URL (Optional if document/text provided)
+                  Competitor Pricing URL (Optional if same as website)
                 </label>
                 <input
                   type="url"
                   value={newPricingUrl}
                   onChange={(e) => setNewPricingUrl(e.target.value)}
-                  placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
+                  placeholder="https://competitor.com/pricing"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
                 />
               </div>

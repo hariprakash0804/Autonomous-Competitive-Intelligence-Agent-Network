@@ -49,7 +49,12 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == user_id).first()
+    try:
+        user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    except (ValueError, AttributeError):
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == user_uuid).first()
     if user is None:
         raise credentials_exception
     return user
@@ -66,11 +71,14 @@ async def get_current_user_or_api_key(
     3. Otherwise → raises 401.
     """
     import os
+    import secrets
+
     api_key = request.headers.get("x-internal-api-key", "").strip()
-    expected_key = (settings.INTERNAL_API_KEY or os.getenv("INTERNAL_API_KEY") or "18fcbd6c74339fd18a3ffba43e3f1629").strip()
+    configured_key = (settings.INTERNAL_API_KEY or os.getenv("INTERNAL_API_KEY") or "").strip()
 
     if api_key:
-        if not expected_key or api_key == expected_key or len(api_key) >= 8:
+        # Require a non-empty configured key and constant-time comparison to prevent timing attacks & backdoors
+        if configured_key and secrets.compare_digest(api_key, configured_key):
             service_user = db.query(User).first()
             if not service_user:
                 service_user = User(
@@ -80,6 +88,11 @@ async def get_current_user_or_api_key(
                     hashed_password="N/A",
                 )
             return service_user
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid X-Internal-Api-Key provided.",
+            )
 
     # Fall back to JWT Bearer token auth
     auth_header = request.headers.get("authorization", "").strip()

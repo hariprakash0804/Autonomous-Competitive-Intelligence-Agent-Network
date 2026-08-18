@@ -10,7 +10,6 @@ import {
   AlertCircle,
   Loader2,
   Layers,
-  FileText,
   Search,
   ExternalLink,
   ShieldCheck

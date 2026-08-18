@@ -57,9 +57,9 @@ export default function ComparativeMatrix({ selectedCompetitor, userProfile, lat
   }
 
   const companyName = userProfile?.company_name || 'Your Company';
-  const companyUrl = userProfile?.company_url || selectedCompetitor.company_url || 'https://mycompany.com';
+  const companyUrl = userProfile?.company_url || 'https://mycompany.com';
   const competitorName = selectedCompetitor.name || 'Competitor';
-  const competitorUrl = selectedCompetitor.pricing_url || selectedCompetitor.domain || 'N/A';
+  const competitorUrl = selectedCompetitor.pricing_url || selectedCompetitor.company_url || selectedCompetitor.domain || 'N/A';
 
   const reportSummary = latestReport?.summary || '';
   const technographics = intelligenceData?.technographics || [];

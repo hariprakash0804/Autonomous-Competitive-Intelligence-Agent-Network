@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import api from '../api/client';
 import Sidebar from '../components/Sidebar';
 import AgentRunLogModal from '../components/AgentRunLogModal';
@@ -28,7 +27,6 @@ import {
    Agent Pipeline Logs Page
    ──────────────────────────────────────────── */
 export default function LogsPage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [runs, setRuns] = useState([]);

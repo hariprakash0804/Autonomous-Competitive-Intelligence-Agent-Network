@@ -106,10 +106,17 @@ static_dir = Path(__file__).resolve().parent.parent / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# CORS — secure origin regex matching with credentials
+# CORS configuration — parse configured origins with local development support
+from app.config import settings
+
+origins = [orig.strip() for orig in (settings.ALLOWED_ORIGINS or "").split(",") if orig.strip()]
+if not origins:
+    origins = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -135,11 +142,6 @@ app.include_router(reports.router)
 app.include_router(chat.router)
 app.include_router(pipeline.router)
 app.include_router(upload.router)
-
-
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
 
 
 @app.get("/faiss-status")

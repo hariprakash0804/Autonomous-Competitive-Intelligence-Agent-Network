@@ -16606,5 +16606,37 @@
     "source_type": "news",
     "fetched_at": "2026-07-24T09:30:37.026509+00:00",
     "chunk_text": "he companies and engineering teams that build with GitHub. Learn more GitHub Universe 2026 Join us October 28-29 in San Francisco or online for GitHub Universe, our flagship developer event uniting people, agents, and the world\u2019s code. Register now Notifications"
+  },
+  {
+    "chunk_id": "e2b8862c-2d64-479c-b9e2-b2756e2c69f1",
+    "snapshot_id": "dc5b857b-beb9-4f69-83a8-a948f0918094",
+    "competitor_id": "286a8b62-ba8b-43e4-a57e-0157ec87acac",
+    "source_type": "PRICING",
+    "fetched_at": "2026-08-18T00:00:00Z",
+    "chunk_text": "Stripe payments processing enterprise billing tier $29 monthly"
+  },
+  {
+    "chunk_id": "83fe42c6-2129-40e0-9c04-6a6f00359177",
+    "snapshot_id": "4e3e8494-a4a7-4cbf-8898-49759fc9044c",
+    "competitor_id": "82428b87-a983-4dbb-9c13-003146c93bce",
+    "source_type": "NEWS",
+    "fetched_at": "2026-08-18T00:00:00Z",
+    "chunk_text": "Linear launches project management updates and keyboard shortcuts"
+  },
+  {
+    "chunk_id": "a99a3b7d-6259-4ff0-8542-f9f5a1eb3f01",
+    "snapshot_id": "3c774074-a6f4-4930-9aff-62b414bed8dc",
+    "competitor_id": "dd4f8e04-721e-4b7c-bbe8-48cdb5ac4d62",
+    "source_type": "PRICING",
+    "fetched_at": "2026-08-18T00:00:00Z",
+    "chunk_text": "Stripe payments processing enterprise billing tier $29 monthly"
+  },
+  {
+    "chunk_id": "6c8d208e-c111-4318-83b5-e9a5394b31cd",
+    "snapshot_id": "506b1f40-bcdf-458a-b2a7-eab33a9d2479",
+    "competitor_id": "cd3d72d6-5387-499b-914e-3837f42e06ac",
+    "source_type": "NEWS",
+    "fetched_at": "2026-08-18T00:00:00Z",
+    "chunk_text": "Linear launches project management updates and keyboard shortcuts"
   }
 ]

@@ -65,25 +65,20 @@ export default function ProfilePage() {
   // Add Competitor Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addName, setAddName] = useState('');
-  const [addCompanyUrl, setAddCompanyUrl] = useState(user?.company_url || '');
-  const [useSavedAddUrl, setUseSavedAddUrl] = useState(Boolean(user?.company_url));
+  const [addCompanyUrl, setAddCompanyUrl] = useState('');
   const [addPricingUrl, setAddPricingUrl] = useState('');
   const [addDescriptionText, setAddDescriptionText] = useState('');
   const [addDocFile, setAddDocFile] = useState(null);
   const [addingComp, setAddingComp] = useState(false);
   const [addError, setAddError] = useState('');
 
-  const savedCompanyUrl = (typeof user?.company_url === 'string' && user.company_url.trim()) ? user.company_url.trim() : '';
-
   const handleOpenAddModal = () => {
     setAddError('');
     setAddName('');
+    setAddCompanyUrl('');
     setAddPricingUrl('');
     setAddDescriptionText('');
     setAddDocFile(null);
-    const currentSaved = savedCompanyUrl;
-    setAddCompanyUrl(currentSaved);
-    setUseSavedAddUrl(Boolean(currentSaved));
     setShowAddModal(true);
   };
 
@@ -219,12 +214,10 @@ export default function ProfilePage() {
     setAddingComp(true);
     setAddError('');
 
-    const effectiveCompanyUrl = (useSavedAddUrl && savedCompanyUrl) ? savedCompanyUrl : addCompanyUrl;
-
     try {
       const res = await api.post('/competitors/', {
         name: addName.trim(),
-        company_url: effectiveCompanyUrl || null,
+        company_url: addCompanyUrl ? addCompanyUrl.trim() : null,
         pricing_url: addPricingUrl ? addPricingUrl.trim() : null,
         description_text: addDescriptionText ? addDescriptionText.trim() : null,
         review_urls: [],
@@ -243,24 +236,14 @@ export default function ProfilePage() {
         }
       }
 
-      if (effectiveCompanyUrl && effectiveCompanyUrl !== user?.company_url) {
-        try {
-          await api.put('/auth/profile', {
-            name,
-            company_name: companyName,
-            company_url: effectiveCompanyUrl,
-          });
-        } catch (profileErr) {
-          console.error('Failed to auto-update profile company URL:', profileErr);
-        }
-      }
-
       setShowAddModal(false);
       setAddName('');
+      setAddCompanyUrl('');
       setAddPricingUrl('');
       setAddDescriptionText('');
       setAddDocFile(null);
       await fetchCompetitors();
+      toast.success(`Competitor "${addName.trim()}" added.`, 'Target Added');
     } catch (err) {
       console.error('Failed to add competitor:', err);
       if (err.response?.status === 409) {
@@ -759,12 +742,12 @@ export default function ProfilePage() {
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300" />
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Your Company URL</label>
-                <input type="url" value={editCompanyUrl} onChange={(e) => setEditCompanyUrl(e.target.value)} placeholder="https://mycompany.com"
+                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Competitor Website / Homepage (e.g. https://stripe.com)</label>
+                <input type="url" value={editCompanyUrl} onChange={(e) => setEditCompanyUrl(e.target.value)} placeholder="https://competitor.com"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300" />
               </div>
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Competitor URL (Optional if document/text provided)</label>
+                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">Competitor Pricing URL (Optional if same as website)</label>
                 <input type="url" value={editPricingUrl} onChange={(e) => setEditPricingUrl(e.target.value)} placeholder="https://competitor.com/pricing"
                   className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 input-glow transition-all duration-300" />
               </div>
@@ -819,56 +802,27 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-slate-400 font-semibold mb-1.5 text-[10px] uppercase tracking-wider">URL 1: Your Company URL</label>
-                {useSavedAddUrl && savedCompanyUrl ? (
-                  <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between gap-3 animate-scale-in">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 text-[10px] text-indigo-300 font-semibold uppercase tracking-wider">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Using Saved Company URL</span>
-                      </div>
-                      <p className="text-xs font-mono text-slate-200 truncate mt-0.5">{savedCompanyUrl}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUseSavedAddUrl(false);
-                        setAddCompanyUrl(savedCompanyUrl);
-                      }}
-                      className="px-2.5 py-1 text-[11px] bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 rounded-lg transition-colors font-medium shrink-0"
-                    >
-                      Change URL
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 animate-scale-in">
-                    <input
-                      type="url"
-                      value={addCompanyUrl}
-                      onChange={(e) => setAddCompanyUrl(e.target.value)}
-                      placeholder="https://mycompany.com"
-                      className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
-                    />
-                    {savedCompanyUrl && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUseSavedAddUrl(true);
-                          setAddCompanyUrl(savedCompanyUrl);
-                        }}
-                        className="text-[10px] text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 transition-colors"
-                      >
-                        ← Revert to saved URL ({savedCompanyUrl})
-                      </button>
-                    )}
-                  </div>
-                )}
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor Website / Homepage (e.g. https://stripe.com)</label>
+                <input
+                  type="url"
+                  value={addCompanyUrl}
+                  onChange={(e) => setAddCompanyUrl(e.target.value)}
+                  placeholder="https://competitor.com"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
               </div>
+
               <div>
-                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor URL (Optional if document/text provided)</label>
-                <input type="url" value={addPricingUrl} onChange={(e) => setAddPricingUrl(e.target.value)} placeholder="https://competitor.com (e.g. https://groq.com, https://stripe.com)"
-                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300" />
+                <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor Pricing URL (Optional if same as website)</label>
+                <input
+                  type="url"
+                  value={addPricingUrl}
+                  onChange={(e) => setAddPricingUrl(e.target.value)}
+                  placeholder="https://competitor.com/pricing"
+                  className="w-full bg-white/[0.03] rounded-xl px-3.5 py-2.5 text-slate-100 placeholder-slate-600 input-glow transition-all duration-300"
+                />
               </div>
+
               <div>
                 <label className="block text-slate-400 font-semibold mb-1 text-[10px] uppercase tracking-wider">Competitor Notes / Text Details (Optional)</label>
                 <textarea rows={2} value={addDescriptionText} onChange={(e) => setAddDescriptionText(e.target.value)} placeholder="Type competitor pricing, features, specifications..."

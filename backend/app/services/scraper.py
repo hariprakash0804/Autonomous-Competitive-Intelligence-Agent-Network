@@ -97,10 +97,12 @@ def _validate_url(url: str) -> Tuple[bool, str]:
     if not url or not url.strip():
         return False, "Empty URL"
 
-    url = url.strip()
-
-    # Add scheme if missing
-    if not url.startswith(("http://", "https://")):
+    # Check for unsupported explicit schemes before auto-prepending https://
+    if "://" in url:
+        parsed_scheme = urlparse(url).scheme
+        if parsed_scheme not in ("http", "https"):
+            return False, f"Unsupported scheme: {parsed_scheme}"
+    elif not url.startswith(("http://", "https://")):
         url = "https://" + url
 
     try:
